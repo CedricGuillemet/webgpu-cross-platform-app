@@ -234,20 +234,22 @@ jobs:
             quickjs) engine=QuickJS ;;
             jsc)     engine=JSC ;;
           esac
+          # Use Ninja instead of Xcode: single-config, no per-platform
+          # Release-iphoneos subdir that breaks Dawn's static lib lookup.
+          # CMAKE_SYSTEM_NAME=iOS + CMAKE_OSX_SYSROOT=iphoneos selects the
+          # iPhoneOS toolchain via clang's -isysroot.
           cmake -S . -B build \
-            -G Xcode \
+            -G Ninja \
             -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
             -DCMAKE_BUILD_TYPE=Release \
             -DJS_ENGINE=$engine \
-            -DGRAPHICS_API=Metal \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO
+            -DGRAPHICS_API=Metal
 
       - name: Build
-        run: cmake --build build --config Release --target app -- CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=""
+        run: cmake --build build --target app
 
       - name: Locate executable
         id: locate
@@ -360,7 +362,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [quickjs]
+        engine: [quickjs, v8]
         graphics: [vulkan, opengles]
     steps:
       - name: Checkout (no submodule recursion)
@@ -386,6 +388,12 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Set up Node (for V8 npm package fetch)
+        if: matrix.engine == 'v8'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Set up Android SDK + NDK
         uses: android-actions/setup-android@v3
         with:
@@ -400,6 +408,11 @@ jobs:
         if: matrix.graphics == 'opengles'
         run: |
           sed -i 's|"-DGRAPHICS_API=Vulkan"|"-DGRAPHICS_API=OpenGLES"|' Android/app/build.gradle.kts
+
+      - name: Patch JS_ENGINE in app/build.gradle.kts
+        if: matrix.engine == 'v8'
+        run: |
+          sed -i 's|"-DJS_ENGINE=QuickJS"|"-DJS_ENGINE=V8"|' Android/app/build.gradle.kts
 
       - name: Build APK
         working-directory: Android

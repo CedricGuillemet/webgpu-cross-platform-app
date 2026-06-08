@@ -381,23 +381,41 @@ elseif(JS_ENGINE STREQUAL "QuickJS")
   endif()
 elseif(JS_ENGINE STREQUAL "V8")
   target_compile_definitions(app PRIVATE JS_ENGINE_V8=1)
-  if(NOT WIN32)
-    message(FATAL_ERROR "V8 backend is Windows-only in this fork (NuGet v8-v143-x64)")
-  endif()
-  target_link_libraries(app PRIVATE
-    webgpu_dawn v8
-    winhttp user32 gdi32
-    windowscodecs ole32
-  )
-  if(MSVC)
-    target_link_options(app PRIVATE /STACK:16777216)
-  endif()
-  # Copy v8 runtime DLLs + ICU data next to app.exe
-  foreach(_v8file ${V8_REDIST_DLLS})
+  if(ANDROID)
+    target_link_libraries(app PRIVATE
+      webgpu_dawn v8
+      android log jnigraphics
+    )
+    if(TARGET SPIRV-Tools-shared)
+      set_target_properties(SPIRV-Tools-shared PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    endif()
+    # The libv8android.so is an IMPORTED SHARED library; AGP only packages
+    # .so files that live next to the build output directory or that the
+    # gradle project explicitly puts under jniLibs/. Stage it next to our
+    # own libdawntest.so so AGP's mergeNativeLibs sees it.
     add_custom_command(TARGET app POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${_v8file}" "$<TARGET_FILE_DIR:app>/")
-  endforeach()
+        "${V8_SO_PATH}" "$<TARGET_FILE_DIR:app>/libv8android.so"
+      COMMENT "Stage libv8android.so next to libdawntest.so"
+    )
+  elseif(WIN32)
+    target_link_libraries(app PRIVATE
+      webgpu_dawn v8
+      winhttp user32 gdi32
+      windowscodecs ole32
+    )
+    if(MSVC)
+      target_link_options(app PRIVATE /STACK:16777216)
+    endif()
+    # Copy v8 runtime DLLs + ICU data next to app.exe
+    foreach(_v8file ${V8_REDIST_DLLS})
+      add_custom_command(TARGET app POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${_v8file}" "$<TARGET_FILE_DIR:app>/")
+    endforeach()
+  else()
+    message(FATAL_ERROR "V8 backend not wired for this OS (only Windows + Android in this fork)")
+  endif()
 elseif(JS_ENGINE STREQUAL "Hermes")
   target_compile_definitions(app PRIVATE JS_ENGINE_HERMES=1)
   if(NOT WIN32)
