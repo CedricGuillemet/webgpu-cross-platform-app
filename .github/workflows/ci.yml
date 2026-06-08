@@ -76,27 +76,8 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Cache ChakraCore NuGet
-        if: matrix.engine == 'chakra'
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/chakracore
-          key: chakracore-1.11.24
-
-      - name: Download ChakraCore NuGet
-        if: matrix.engine == 'chakra'
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "${{ github.workspace }}/chakracore/build/native/include/ChakraCore.h")) {
-            New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/chakracore" | Out-Null
-            $url = "https://www.nuget.org/api/v2/package/Microsoft.ChakraCore/1.11.24"
-            $zip = "${{ github.workspace }}/chakracore.nupkg"
-            Invoke-WebRequest -Uri $url -OutFile $zip
-            Expand-Archive -Path $zip -DestinationPath "${{ github.workspace }}/chakracore" -Force
-          }
-          if (-not (Test-Path "${{ github.workspace }}/chakracore/build/native/include/ChakraCore.h")) {
-            throw "ChakraCore NuGet did not extract the expected layout"
-          }
+      # Chakra: linked against the legacy jsrt.h / Chakrart.lib that ship
+      # with the Windows SDK on every windows-latest runner. No NuGet needed.
 
       - name: Configure
         shell: pwsh

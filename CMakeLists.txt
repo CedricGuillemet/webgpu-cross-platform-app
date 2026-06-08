@@ -142,15 +142,15 @@ add_subdirectory("dawn" EXCLUDE_FROM_ALL)
 
 # ---- JavaScript engine: Chakra or QuickJS ----
 if(JS_ENGINE STREQUAL "Chakra")
-  set(CHAKRACORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../chakracore" CACHE PATH "Path to ChakraCore NuGet root")
-  if(NOT EXISTS "${CHAKRACORE_DIR}/build/native/include/ChakraCore.h")
-    message(FATAL_ERROR "ChakraCore not found at ${CHAKRACORE_DIR}")
-  endif()
-  add_library(chakracore SHARED IMPORTED)
+  # Use the legacy Chakra runtime shipped with the Windows SDK:
+  #   header: <jsrt.h> from <SDK>/Include/<ver>/um
+  #   import lib: Chakrart.lib (auto-located by MSBuild via the SDK
+  #               LIB env var when the Visual Studio generator is used)
+  #   runtime: chakrart.dll is in C:\Windows\System32, no deployment needed
+  # No NuGet, no third-party download.
+  add_library(chakracore INTERFACE IMPORTED GLOBAL)
   set_target_properties(chakracore PROPERTIES
-    IMPORTED_IMPLIB "${CHAKRACORE_DIR}/lib/native/v140/x64/release/ChakraCore.lib"
-    IMPORTED_LOCATION "${CHAKRACORE_DIR}/lib/native/v140/x64/release/ChakraCore.dll"
-    INTERFACE_INCLUDE_DIRECTORIES "${CHAKRACORE_DIR}/build/native/include"
+    INTERFACE_LINK_LIBRARIES "Chakrart"
   )
 elseif(JS_ENGINE STREQUAL "QuickJS")
   include(FetchContent)
@@ -330,11 +330,8 @@ if(JS_ENGINE STREQUAL "Chakra")
     winhttp user32 gdi32
     windowscodecs ole32
   )
-  add_custom_command(TARGET app POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${CHAKRACORE_DIR}/lib/native/v140/x64/release/ChakraCore.dll"
-      "$<TARGET_FILE_DIR:app>/ChakraCore.dll"
-  )
+  # chakrart.dll lives in C:\Windows\System32 on every Windows machine;
+  # nothing to deploy alongside app.exe.
 elseif(JS_ENGINE STREQUAL "QuickJS")
   target_compile_definitions(app PRIVATE JS_ENGINE_QUICKJS=1)
   if(ANDROID)

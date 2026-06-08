@@ -1,7 +1,7 @@
 #pragma once
 
 #define USE_EDGEMODE_JSRT 0
-#include <ChakraCore.h>
+#include <jsrt.h>
 
 #include <functional>
 #include <optional>
