@@ -314,7 +314,6 @@ target_compile_definitions(app PRIVATE
   $<$<STREQUAL:${GRAPHICS_API},D3D11>:DAWNTEST_BACKEND_D3D11=1>
   $<$<STREQUAL:${GRAPHICS_API},Metal>:DAWNTEST_BACKEND_METAL=1>
 )
-)
 if(ANDROID)
   target_include_directories(app PRIVATE
     "src/platform/android"
