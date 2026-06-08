@@ -15,12 +15,12 @@ endif()
 message(STATUS "JavaScript engine: ${JS_ENGINE}")
 
 # ---- Graphics API (Dawn backend) selection ----
-set(GRAPHICS_API "D3D12" CACHE STRING "Dawn backend to use: D3D12, D3D11, Vulkan, OpenGLES or Metal")
-set_property(CACHE GRAPHICS_API PROPERTY STRINGS D3D12 D3D11 Vulkan OpenGLES Metal)
+set(GRAPHICS_API "D3D12" CACHE STRING "Dawn backend to use: D3D12, D3D11, Vulkan, OpenGL, OpenGLES or Metal")
+set_property(CACHE GRAPHICS_API PROPERTY STRINGS D3D12 D3D11 Vulkan OpenGL OpenGLES Metal)
 if(NOT GRAPHICS_API STREQUAL "D3D12" AND NOT GRAPHICS_API STREQUAL "D3D11"
-   AND NOT GRAPHICS_API STREQUAL "Vulkan" AND NOT GRAPHICS_API STREQUAL "OpenGLES"
-   AND NOT GRAPHICS_API STREQUAL "Metal")
-  message(FATAL_ERROR "GRAPHICS_API must be D3D12, D3D11, Vulkan, OpenGLES or Metal, got: ${GRAPHICS_API}")
+   AND NOT GRAPHICS_API STREQUAL "Vulkan" AND NOT GRAPHICS_API STREQUAL "OpenGL"
+   AND NOT GRAPHICS_API STREQUAL "OpenGLES" AND NOT GRAPHICS_API STREQUAL "Metal")
+  message(FATAL_ERROR "GRAPHICS_API must be D3D12, D3D11, Vulkan, OpenGL, OpenGLES or Metal, got: ${GRAPHICS_API}")
 endif()
 message(STATUS "Graphics API: ${GRAPHICS_API}")
 
@@ -41,7 +41,13 @@ endif()
 set(DAWN_FETCH_DEPENDENCIES ON)
 
 if(ANDROID)
-  # Android: D3D doesn't exist. Allow Vulkan or OpenGLES; default Vulkan.
+  # Android: D3D and desktop GL don't exist. Allow Vulkan or OpenGLES; default
+  # Vulkan. Treat "OpenGL" as an alias for OpenGLES on Android so the matrix
+  # cell name lines up with the other OSes.
+  if(GRAPHICS_API STREQUAL "OpenGL")
+    message(STATUS "Android target: remapping GRAPHICS_API OpenGL -> OpenGLES (desktop GL not available)")
+    set(GRAPHICS_API OpenGLES)
+  endif()
   if(NOT GRAPHICS_API STREQUAL "Vulkan" AND NOT GRAPHICS_API STREQUAL "OpenGLES")
     message(STATUS "Android target: overriding GRAPHICS_API to Vulkan (was ${GRAPHICS_API})")
     set(GRAPHICS_API Vulkan)
@@ -74,6 +80,14 @@ elseif(GRAPHICS_API STREQUAL "OpenGLES")
   set(DAWN_ENABLE_VULKAN   OFF CACHE BOOL "" FORCE)
   set(DAWN_ENABLE_OPENGLES ON  CACHE BOOL "" FORCE)
   set(DAWN_ENABLE_METAL    OFF CACHE BOOL "" FORCE)
+elseif(GRAPHICS_API STREQUAL "OpenGL")
+  # Desktop GL: Dawn shares the GL backend between Desktop and ES, gated by
+  # DAWN_ENABLE_DESKTOP_GL vs DAWN_ENABLE_OPENGLES.
+  set(DAWN_ENABLE_D3D11    OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_D3D12    OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_VULKAN   OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_OPENGLES OFF CACHE BOOL "" FORCE)
+  set(DAWN_ENABLE_METAL    OFF CACHE BOOL "" FORCE)
 elseif(GRAPHICS_API STREQUAL "Metal")
   set(DAWN_ENABLE_D3D11    OFF CACHE BOOL "" FORCE)
   set(DAWN_ENABLE_D3D12    OFF CACHE BOOL "" FORCE)
@@ -88,7 +102,12 @@ else()  # Vulkan
   set(DAWN_ENABLE_METAL    OFF CACHE BOOL "" FORCE)
 endif()
 set(DAWN_ENABLE_NULL    OFF CACHE BOOL "" FORCE)
-set(DAWN_ENABLE_DESKTOP_GL  OFF CACHE BOOL "" FORCE)
+# Desktop GL on by default only for the explicit "OpenGL" cell.
+if(GRAPHICS_API STREQUAL "OpenGL")
+  set(DAWN_ENABLE_DESKTOP_GL  ON  CACHE BOOL "" FORCE)
+else()
+  set(DAWN_ENABLE_DESKTOP_GL  OFF CACHE BOOL "" FORCE)
+endif()
 # OPENGLES and METAL are set above (per-platform)
 set(DAWN_ENABLE_WEBGPU_ON_WEBGPU OFF CACHE BOOL "" FORCE)
 set(DAWN_ENABLE_SPIRV_VALIDATION OFF CACHE BOOL "" FORCE)
@@ -125,9 +144,8 @@ set(TINT_BUILD_SYNTAX_TREE_WRITER OFF CACHE BOOL "" FORCE)
 if(GRAPHICS_API STREQUAL "Vulkan")
   set(TINT_BUILD_HLSL_WRITER OFF CACHE BOOL "" FORCE)
   set(TINT_BUILD_SPV_WRITER  ON  CACHE BOOL "" FORCE)
-elseif(GRAPHICS_API STREQUAL "OpenGLES")
-  # Dawn's OpenGL ES backend consumes GLSL. Re-enable the GLSL writer +
-  # validator (off by default in this project).
+elseif(GRAPHICS_API STREQUAL "OpenGLES" OR GRAPHICS_API STREQUAL "OpenGL")
+  # Dawn's OpenGL / GLES backends both consume GLSL via Tint.
   set(TINT_BUILD_HLSL_WRITER OFF CACHE BOOL "" FORCE)
   set(TINT_BUILD_SPV_WRITER  OFF CACHE BOOL "" FORCE)
   set(TINT_BUILD_GLSL_WRITER ON  CACHE BOOL "" FORCE)
@@ -319,6 +337,7 @@ target_include_directories(app PRIVATE
 target_compile_definitions(app PRIVATE
   $<$<STREQUAL:${GRAPHICS_API},Vulkan>:DAWNTEST_BACKEND_VULKAN=1>
   $<$<STREQUAL:${GRAPHICS_API},OpenGLES>:DAWNTEST_BACKEND_OPENGLES=1>
+  $<$<STREQUAL:${GRAPHICS_API},OpenGL>:DAWNTEST_BACKEND_OPENGL=1>
   $<$<STREQUAL:${GRAPHICS_API},D3D12>:DAWNTEST_BACKEND_D3D12=1>
   $<$<STREQUAL:${GRAPHICS_API},D3D11>:DAWNTEST_BACKEND_D3D11=1>
   $<$<STREQUAL:${GRAPHICS_API},Metal>:DAWNTEST_BACKEND_METAL=1>

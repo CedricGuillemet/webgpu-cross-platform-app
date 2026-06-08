@@ -52,7 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         engine: [chakra, quickjs, v8, hermes]
-        graphics: [d3d11, d3d12, vulkan]
+        graphics: [d3d11, d3d12, vulkan, opengl]
     steps:
       - name: Enable Git long paths (Windows MAX_PATH workaround)
         shell: pwsh
@@ -92,6 +92,7 @@ jobs:
             'd3d11'  = 'D3D11'
             'd3d12'  = 'D3D12'
             'vulkan' = 'Vulkan'
+            'opengl' = 'OpenGL'
           }
           $engine = $engineMap['${{ matrix.engine }}']
           $gfx    = $gfxMap['${{ matrix.graphics }}']
@@ -286,7 +287,7 @@ jobs:
       fail-fast: false
       matrix:
         engine: [quickjs, jsc, hermes]
-        graphics: [vulkan]
+        graphics: [vulkan, opengl]
     steps:
       - name: Checkout (no submodule recursion)
         uses: actions/checkout@v4
@@ -326,11 +327,16 @@ jobs:
             jsc)     engine=JSC ;;
             hermes)  engine=Hermes ;;
           esac
+          gfx="${{ matrix.graphics }}"
+          case "$gfx" in
+            vulkan) gfx=Vulkan ;;
+            opengl) gfx=OpenGL ;;
+          esac
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DJS_ENGINE=$engine \
-            -DGRAPHICS_API=Vulkan
+            -DGRAPHICS_API=$gfx
 
       - name: Build
         run: cmake --build build --target app
@@ -365,7 +371,7 @@ jobs:
       fail-fast: false
       matrix:
         engine: [quickjs, v8, hermes]
-        graphics: [vulkan, opengles]
+        graphics: [vulkan, opengles, opengl]
     steps:
       - name: Checkout (no submodule recursion)
         uses: actions/checkout@v4
@@ -407,9 +413,16 @@ jobs:
           gradle-version: "8.13"
 
       - name: Patch GRAPHICS_API in app/build.gradle.kts
-        if: matrix.graphics == 'opengles'
+        if: matrix.graphics != 'vulkan'
         run: |
-          sed -i 's|"-DGRAPHICS_API=Vulkan"|"-DGRAPHICS_API=OpenGLES"|' Android/app/build.gradle.kts
+          # On Android, "opengl" is an alias for OpenGLES (desktop GL doesn't exist);
+          # we pass OpenGL through to CMake anyway and the root CMakeLists silently
+          # remaps it so the matrix cell name lines up with the other OSes.
+          case "${{ matrix.graphics }}" in
+            opengles) newGfx=OpenGLES ;;
+            opengl)   newGfx=OpenGL   ;;
+          esac
+          sed -i "s|\"-DGRAPHICS_API=Vulkan\"|\"-DGRAPHICS_API=$newGfx\"|" Android/app/build.gradle.kts
 
       - name: Patch JS_ENGINE in app/build.gradle.kts
         if: matrix.engine != 'quickjs'

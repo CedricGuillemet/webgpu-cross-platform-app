@@ -21,7 +21,11 @@ set(HERMES_UNICODE_LITE          ON  CACHE BOOL "" FORCE)
 set(JSI_UNSTABLE                 ON  CACHE BOOL "" FORCE)
 
 if(ANDROID)
-    set(HERMES_IS_ANDROID        ON  CACHE BOOL "" FORCE)
+    # NB: do NOT set HERMES_IS_ANDROID — that flag tells Hermes to build the
+    # React-Native fbjni JNI bridge, which we don't link against. Leaving it
+    # OFF gives us a plain Hermes VM static lib that exposes only the JSI C++
+    # surface — which is exactly what our chakra_host translation layer wants.
+    set(HERMES_IS_ANDROID        OFF CACHE BOOL "" FORCE)
     # hermesc is a host tool that must run on the build machine; cross-compiling
     # it as an NDK target fails. Hermes' build system uses an "imported"
     # hermesc binary when IMPORT_HERMESC is set to a host-built one. For CI

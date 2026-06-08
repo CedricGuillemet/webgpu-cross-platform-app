@@ -260,6 +260,11 @@ WGPU_OP(gpu_requestAdapter, "gpu.requestAdapter") {
     // returns an empty list and adapter creation fails with
     // "No supported adapters".
     opts.featureLevel = wgpu::FeatureLevel::Compatibility;
+#elif defined(DAWNTEST_BACKEND_OPENGL)
+    opts.backendType = wgpu::BackendType::OpenGL;
+    // Same Compat-only constraint as GLES — Dawn's desktop GL backend is also
+    // a Compatibility adapter.
+    opts.featureLevel = wgpu::FeatureLevel::Compatibility;
 #elif defined(DAWNTEST_BACKEND_VULKAN)
     opts.backendType = wgpu::BackendType::Vulkan;
 #elif defined(DAWNTEST_BACKEND_D3D11)
@@ -420,7 +425,7 @@ WGPU_OP(device_createTexture, "device.createTexture") {
     std::string label = propStr(desc, "label");
     if (!label.empty()) td.label = label.c_str();
 
-#if defined(DAWNTEST_BACKEND_OPENGLES)
+#if defined(DAWNTEST_BACKEND_OPENGLES) || defined(DAWNTEST_BACKEND_OPENGL)
     // ---- Compatibility mode: textureBindingViewDimension ----
     // Dawn's OpenGL ES backend runs in compat mode where the texture binding
     // view dimension must be declared up-front (it maps to a fixed GLES

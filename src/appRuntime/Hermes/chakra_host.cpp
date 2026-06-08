@@ -41,11 +41,32 @@ namespace {
     std::string stripEsModuleSyntax(const std::string& src) {
         std::string s = src;
         try {
-            // 1. Drop `import 'x';` and `import X from 'y';`
-            s = std::regex_replace(s, std::regex(R"(^\s*import\b[^;\n]*;\s*$)", std::regex::multiline), "");
-            // 2. `export default expr;` -> `globalThis.__bundleDefault = expr;`
-            s = std::regex_replace(s, std::regex(R"(^\s*export\s+default\s+)", std::regex::multiline),
-                                   "globalThis.__bundleDefault = ");
+            // 1. + 2. are line-anchored. MSVC's <regex> doesn't reliably expose
+            // std::regex::multiline, so process line by line and apply non-multiline
+            // patterns that just anchor on whole-string ^/$.
+            {
+                std::regex importLine(R"(^\s*import\b[^;]*;\s*$)");
+                std::regex exportDefault(R"(^(\s*)export\s+default\s+)");
+                std::string rebuilt;
+                rebuilt.reserve(s.size());
+                size_t lineStart = 0;
+                for (size_t i = 0; i <= s.size(); ++i) {
+                    if (i == s.size() || s[i] == '\n') {
+                        std::string line = s.substr(lineStart, i - lineStart);
+                        if (std::regex_match(line, importLine)) {
+                            // Drop the line (preserve the newline so source maps still align).
+                            line.clear();
+                        } else {
+                            line = std::regex_replace(line, exportDefault,
+                                                      "$1globalThis.__bundleDefault = ");
+                        }
+                        rebuilt += line;
+                        if (i < s.size()) rebuilt += '\n';
+                        lineStart = i + 1;
+                    }
+                }
+                s.swap(rebuilt);
+            }
             // 3. `export { A, B as C, D };` (single line or multi-line) -> namespace assignment.
             //    Capture the body between { and }, parse "X" or "X as Y" pairs.
             std::regex exportBlock(R"(export\s*\{([^}]*)\}\s*;?)");
