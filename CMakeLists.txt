@@ -176,30 +176,25 @@ endif()
 
 # ---- Framework: OS-specific primitives (image decode, window, http, fs) ----
 if(ANDROID)
-  set(FRAMEWORK_SOURCES
-    "src/framework/android/image_decoder.cpp"
-    "src/framework/android/image_decoder.h"
-    "src/framework/android/native_window.cpp"
-    "src/framework/android/native_window.h"
-    "src/framework/android/http_fetcher.cpp"
-    "src/framework/android/http_fetcher.h"
-    "src/framework/android/fs_loader.cpp"
-    "src/framework/android/fs_loader.h"
-  )
-  set(FRAMEWORK_INCLUDE_DIR "src/framework/android")
-else()
-  set(FRAMEWORK_SOURCES
-    "src/framework/win32/image_decoder.cpp"
-    "src/framework/win32/image_decoder.h"
-    "src/framework/win32/native_window.cpp"
-    "src/framework/win32/native_window.h"
-    "src/framework/win32/http_fetcher.cpp"
-    "src/framework/win32/http_fetcher.h"
-    "src/framework/win32/fs_loader.cpp"
-    "src/framework/win32/fs_loader.h"
-  )
-  set(FRAMEWORK_INCLUDE_DIR "src/framework/win32")
+  set(_FW_DIR "src/framework/android")
+elseif(APPLE)
+  set(_FW_DIR "src/framework/apple")
+elseif(WIN32)
+  set(_FW_DIR "src/framework/win32")
+else()  # Linux + other UNIX
+  set(_FW_DIR "src/framework/linux")
 endif()
+set(FRAMEWORK_SOURCES
+  "${_FW_DIR}/image_decoder.cpp"
+  "${_FW_DIR}/image_decoder.h"
+  "${_FW_DIR}/native_window.cpp"
+  "${_FW_DIR}/native_window.h"
+  "${_FW_DIR}/http_fetcher.cpp"
+  "${_FW_DIR}/http_fetcher.h"
+  "${_FW_DIR}/fs_loader.cpp"
+  "${_FW_DIR}/fs_loader.h"
+)
+set(FRAMEWORK_INCLUDE_DIR "${_FW_DIR}")
 
 # ---- Shared appRuntime: engine-agnostic application layer ----
 # These files use only the cx::Host facade + the Chakra-style Js* C API
@@ -298,6 +293,16 @@ if(ANDROID)
                          -Wl,--exclude-libs,ALL>)
 else()
   add_executable(app ${APP_SOURCES})
+  if(APPLE)
+    set_target_properties(app PROPERTIES
+      MACOSX_BUNDLE FALSE
+      XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.dawntest.app"
+    )
+    target_link_libraries(app PRIVATE "-framework Foundation")
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+      target_link_libraries(app PRIVATE "-framework AppKit")
+    endif()
+  endif()
 endif()
 target_include_directories(app PRIVATE
   "src"
@@ -348,17 +353,33 @@ elseif(JS_ENGINE STREQUAL "QuickJS")
       set_target_properties(SPIRV-Tools-shared PROPERTIES EXCLUDE_FROM_ALL TRUE)
     endif()
   else()
-    target_link_libraries(app PRIVATE
-      webgpu_dawn qjs
-      winhttp user32 gdi32
-      windowscodecs ole32
-    )
-    if(MSVC)
-      target_link_options(app PRIVATE /STACK:16777216)
+    if(WIN32)
+      target_link_libraries(app PRIVATE
+        webgpu_dawn qjs
+        winhttp user32 gdi32
+        windowscodecs ole32
+      )
+      if(MSVC)
+        target_link_options(app PRIVATE /STACK:16777216)
+      endif()
+    elseif(APPLE)
+      target_link_libraries(app PRIVATE
+        webgpu_dawn qjs
+        "-framework Foundation"
+        "-framework CoreFoundation"
+      )
+    else()  # Linux + other UNIX
+      target_link_libraries(app PRIVATE
+        webgpu_dawn qjs
+        pthread dl m
+      )
     endif()
   endif()
 elseif(JS_ENGINE STREQUAL "V8")
   target_compile_definitions(app PRIVATE JS_ENGINE_V8=1)
+  if(NOT WIN32)
+    message(FATAL_ERROR "V8 backend is Windows-only in this fork (NuGet v8-v143-x64)")
+  endif()
   target_link_libraries(app PRIVATE
     webgpu_dawn v8
     winhttp user32 gdi32
@@ -375,6 +396,9 @@ elseif(JS_ENGINE STREQUAL "V8")
   endforeach()
 elseif(JS_ENGINE STREQUAL "Hermes")
   target_compile_definitions(app PRIVATE JS_ENGINE_HERMES=1)
+  if(NOT WIN32)
+    message(FATAL_ERROR "Hermes backend is Windows-only in this fork")
+  endif()
   # hermesvm_a is the STATIC aggregate; hermesvm is the SHARED .dll wrapper.
   # Use the static one so app.exe has no Hermes DLL dependency.
   target_link_libraries(app PRIVATE
@@ -406,17 +430,21 @@ elseif(JS_ENGINE STREQUAL "JSC")
 endif()
 
 if(NOT ANDROID)
-  # Make js/ and assets/ available next to the binary. On Android the assets
-  # are bundled via the AAR/APK packaging step (Gradle copies them into
-  # app/src/main/assets/) so this step is skipped.
-  add_custom_command(TARGET app POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-      "${CMAKE_CURRENT_SOURCE_DIR}/js"
-      "$<TARGET_FILE_DIR:app>/js"
-  )
-  add_custom_command(TARGET app POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-      "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-      "$<TARGET_FILE_DIR:app>/assets"
-  )
+  # Make js/ and assets/ available next to the binary IF those source dirs
+  # exist. On CI we build with --target app only, and assets/ isn't checked
+  # in (it's regenerated from Babylon-Lite); skip silently.
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/js")
+    add_custom_command(TARGET app POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/js"
+        "$<TARGET_FILE_DIR:app>/js"
+    )
+  endif()
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    add_custom_command(TARGET app POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:app>/assets"
+    )
+  endif()
 endif()

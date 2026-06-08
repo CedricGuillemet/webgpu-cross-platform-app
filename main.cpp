@@ -15,8 +15,10 @@
 
 #include <webgpu/webgpu_cpp.h>
 
+#if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#endif
 
 #include <chrono>
 #include <cstdio>
@@ -38,13 +40,24 @@ double monotonicMs() {
     return std::chrono::duration<double, std::milli>(clock::now() - t0).count();
 }
 
-wgpu::Surface createSurfaceForHwnd(wgpu::Instance instance, HWND hwnd, HINSTANCE hinstance) {
+wgpu::Surface createSurfaceForWindow(wgpu::Instance instance,
+                                     void* hwnd, void* hinstance) {
+#if defined(_WIN32)
     wgpu::SurfaceSourceWindowsHWND chained{};
     chained.hwnd = hwnd;
     chained.hinstance = hinstance;
     wgpu::SurfaceDescriptor desc{};
     desc.nextInChain = &chained;
     return instance.CreateSurface(&desc);
+#else
+    // Linux / Apple: framework/* stubs return nullptr handles in this
+    // unified entry point. The real wiring lives in src/platform/* per OS
+    // (Android already there); macOS/iOS surface descriptors will be added
+    // once those platforms ship a real native_window.
+    (void)hwnd; (void)hinstance;
+    std::fprintf(stderr, "[main] non-Win32 main.cpp path: no surface created.\n");
+    return nullptr;
+#endif
 }
 
 std::string resolveBundlePath(const std::string& arg) {
@@ -106,6 +119,7 @@ int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::fprintf(stderr, "[main] starting...\n");
 
+#if defined(_WIN32)
     // Dawn's d3dcompiler_47.dll load uses LOAD_LIBRARY_SEARCH_SYSTEM32 which
     // fails with ERROR_INVALID_PARAMETER on some Windows setups unless the
     // process default DLL dirs include SYSTEM32. Preload the DLL to be safe.
@@ -113,6 +127,7 @@ int main(int argc, char** argv) {
     if (!LoadLibraryW(L"d3dcompiler_47.dll")) {
         std::fprintf(stderr, "[main] could not preload d3dcompiler_47.dll (%lu)\n", GetLastError());
     }
+#endif
 
     // Initialise WIC + COM up front so the first image decode doesn't pay it.
     image_decoder::initialize();
@@ -146,7 +161,7 @@ int main(int argc, char** argv) {
     wgpu::Instance instance = wgpu::CreateInstance(&instDesc);
     if (!instance) { std::fprintf(stderr, "[main] CreateInstance failed\n"); return 1; }
 
-    wgpu::Surface surface = createSurfaceForHwnd(instance, (HWND)window.hwnd(), (HINSTANCE)window.hinstance());
+    wgpu::Surface surface = createSurfaceForWindow(instance, window.hwnd(), window.hinstance());
     if (!surface) { std::fprintf(stderr, "[main] CreateSurface failed\n"); return 1; }
 
     // 3. Init Chakra host

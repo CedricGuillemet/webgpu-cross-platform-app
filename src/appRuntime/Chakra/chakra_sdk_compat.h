@@ -4,23 +4,25 @@
 // %WindowsSdkDir%\Include\<sdk>\um and Lib\<sdk>\um\x64).
 //
 // The shared layer (wgpu_bridge / dom_shim / worker_shim) uses the
-// ChakraCore-flavoured Js* C API:
-//   - UTF-8 string create/copy: JsCreateString, JsCopyString
-//   - UTF-8 property ids:       JsCreatePropertyId
-//   - Promise creation:         JsCreatePromise
-//   - Script execution:         JsRun(JsValueRef src, ...) overload
-//   - ES Module loading:        JsInitializeModuleRecord, JsParseModuleSource,
-//                               JsModuleEvaluation, JsGetModuleNamespace,
-//                               JsSetModuleHostInfo
-// The SDK header (chakrart.h) exposes only the older Edge-mode subset:
-// wide-char string APIs, JsRunScript (wchar_t*), and no module APIs.
+// ChakraCore-flavoured Js* C API. The SDK ships the "edge-mode" subset:
+//   - wide-char strings (JsPointerToString / JsStringToPointer)
+//   - JsRunScript (wchar_t source)
+//   - no ES module APIs (JsInitializeModuleRecord etc.)
+//   - no JsCreateString / JsCopyString UTF-8 variants
+//   - no JsCreatePromise (we fake it with an eval'd thunk)
+//   - no JsParseScriptAttributes enum
 //
-// This header makes the missing surface available either as static
-// inline wrappers (UTF-8/Promise/JsRun) or as no-op stubs (module APIs
-// — chakra_host.cpp on SDK Chakra runs the entry as a script and routes
-// dynamic imports through the global `__import` shim).
+// This header provides static inline wrappers that close the gap so the
+// existing call sites compile, and no-op stubs for the modules surface.
 
-#include <chakrart.h>
+#include <windows.h>
+
+// Must be defined BEFORE <jsrt.h> so the SDK header pulls in chakrart.h
+// (edge-mode Chakra) instead of the deprecated jsrt9.h.
+#ifndef USE_EDGEMODE_JSRT
+#define USE_EDGEMODE_JSRT
+#endif
+#include <jsrt.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -33,6 +35,13 @@ typedef unsigned char BYTE;
 #endif
 
 // ---- Missing enums (kept here so existing call sites still compile) ----------
+
+// Chakra edge-mode in the SDK doesn't expose JsParseScriptAttributes; our
+// shared call sites pass JsParseScriptAttributeNone which we just map to 0.
+typedef unsigned JsParseScriptAttributes;
+#ifndef JsParseScriptAttributeNone
+#define JsParseScriptAttributeNone ((JsParseScriptAttributes)0)
+#endif
 
 typedef enum _JsParseModuleSourceFlags {
     JsParseModuleSourceFlags_DataIsUTF16LE = 0x00000000,
@@ -56,26 +65,26 @@ typedef void* JsModuleRecord;
 
 namespace chakra_sdk_compat {
 
-inline std::wstring wide(std::string_view s) {
-    if (s.empty()) return {};
-    int n = ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
-                                  nullptr, 0);
-    std::wstring w(n, L'\0');
-    if (n > 0) {
-        ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
-                              w.data(), n);
+inline std::wstring wide(const char* s, size_t n) {
+    if (!s || n == 0) return {};
+    int needed = ::MultiByteToWideChar(CP_UTF8, 0, s, static_cast<int>(n),
+                                       nullptr, 0);
+    std::wstring w(needed, L'\0');
+    if (needed > 0) {
+        ::MultiByteToWideChar(CP_UTF8, 0, s, static_cast<int>(n),
+                              w.data(), needed);
     }
     return w;
 }
 
 inline std::string narrow(const wchar_t* w, size_t len) {
     if (!w || len == 0) return {};
-    int n = ::WideCharToMultiByte(CP_UTF8, 0, w, static_cast<int>(len),
-                                  nullptr, 0, nullptr, nullptr);
-    std::string s(n, '\0');
-    if (n > 0) {
+    int needed = ::WideCharToMultiByte(CP_UTF8, 0, w, static_cast<int>(len),
+                                       nullptr, 0, nullptr, nullptr);
+    std::string s(needed, '\0');
+    if (needed > 0) {
         ::WideCharToMultiByte(CP_UTF8, 0, w, static_cast<int>(len),
-                              s.data(), n, nullptr, nullptr);
+                              s.data(), needed, nullptr, nullptr);
     }
     return s;
 }
@@ -85,7 +94,7 @@ inline std::string narrow(const wchar_t* w, size_t len) {
 // ---- UTF-8 Js* wrappers -----------------------------------------------------
 
 inline JsErrorCode JsCreateString(const char* s, size_t len, JsValueRef* out) {
-    std::wstring w = chakra_sdk_compat::wide({s, len});
+    std::wstring w = chakra_sdk_compat::wide(s, len);
     return JsPointerToString(w.c_str(), w.size(), out);
 }
 
@@ -110,7 +119,7 @@ inline JsErrorCode JsCopyString(JsValueRef v, char* buf, size_t bufLen,
 
 inline JsErrorCode JsCreatePropertyId(const char* name, size_t len,
                                       JsPropertyIdRef* out) {
-    std::wstring w = chakra_sdk_compat::wide({name, len});
+    std::wstring w = chakra_sdk_compat::wide(name, len);
     return JsGetPropertyIdFromName(w.c_str(), out);
 }
 
@@ -144,25 +153,13 @@ inline JsErrorCode JsCreatePromise(JsValueRef* promise, JsValueRef* resolve,
         if (reject)  *reject  = nullptr;
         return rc;
     }
-    JsValueRef idx0 = nullptr, idx1 = nullptr, idx2 = nullptr;
     JsValueRef i0 = nullptr, i1 = nullptr, i2 = nullptr;
     JsIntToNumber(0, &i0); JsIntToNumber(1, &i1); JsIntToNumber(2, &i2);
-    JsGetIndexedProperty(triple, i0, &idx0);
-    JsGetIndexedProperty(triple, i1, &idx1);
-    JsGetIndexedProperty(triple, i2, &idx2);
-    if (promise) *promise = idx0;
-    if (resolve) *resolve = idx1;
-    if (reject)  *reject  = idx2;
+    if (promise) JsGetIndexedProperty(triple, i0, promise);
+    if (resolve) JsGetIndexedProperty(triple, i1, resolve);
+    if (reject)  JsGetIndexedProperty(triple, i2, reject);
     return JsNoError;
 }
-
-// JsSetPromiseContinuationCallback is in modern ChakraCore; SDK Chakra (Edge)
-// has it too via JsSetPromiseContinuationCallback. If absent at link time
-// MSBuild will tell us — for now declare a typedef so callers compile.
-#ifndef CHAKRA_API
-// The SDK header redefines CHAKRA_API on each header include; harmless dup.
-#define CHAKRA_API STDAPI_(JsErrorCode)
-#endif
 
 // JsGetAndClearExceptionWithMetadata is ChakraCore-only. Fall back to plain.
 inline JsErrorCode JsGetAndClearExceptionWithMetadata(JsValueRef* out) {

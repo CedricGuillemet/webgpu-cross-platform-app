@@ -1,6 +1,5 @@
 #pragma once
 
-#define USE_EDGEMODE_JSRT 0
 #include "chakra_sdk_compat.h"
 
 #include <functional>
