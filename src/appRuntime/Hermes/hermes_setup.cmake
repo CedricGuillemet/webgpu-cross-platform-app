@@ -6,6 +6,9 @@ set(HERMES_BUILD_APPLE_FRAMEWORK OFF CACHE BOOL "" FORCE)
 set(HERMES_BUILD_APPLE_TESTS     OFF CACHE BOOL "" FORCE)
 set(HERMES_ENABLE_DEBUGGER       OFF CACHE BOOL "" FORCE)
 # Tools (incl. hermesc) MUST be ON — internal JS bytecode generation needs it.
+# On Android cross-builds CMake refuses to add an x86_64 host tool target to
+# an arm64 NDK build, so we'll set this OFF below for ANDROID and use a
+# pre-built hermesc via an external var if available.
 set(HERMES_ENABLE_TOOLS          ON  CACHE BOOL "" FORCE)
 set(HERMES_ENABLE_TEST_SUITE     OFF CACHE BOOL "" FORCE)
 set(HERMES_ENABLE_INTL           OFF CACHE BOOL "" FORCE)
@@ -13,10 +16,26 @@ set(HERMES_ENABLE_NAPI           OFF CACHE BOOL "" FORCE)
 set(HERMES_BUILD_NODE_HERMES     OFF CACHE BOOL "" FORCE)
 set(HERMES_BUILD_SHARED_JSI      OFF CACHE BOOL "" FORCE)
 set(HERMES_USE_STATIC_ICU        OFF CACHE BOOL "" FORCE)
-set(HERMES_IS_ANDROID            OFF CACHE BOOL "" FORCE)
 set(HERMES_ENABLE_CONTRIB_EXTENSIONS OFF CACHE BOOL "" FORCE)
 set(HERMES_UNICODE_LITE          ON  CACHE BOOL "" FORCE)
 set(JSI_UNSTABLE                 ON  CACHE BOOL "" FORCE)
+
+if(ANDROID)
+    set(HERMES_IS_ANDROID        ON  CACHE BOOL "" FORCE)
+    # hermesc is a host tool that must run on the build machine; cross-compiling
+    # it as an NDK target fails. Hermes' build system uses an "imported"
+    # hermesc binary when IMPORT_HERMESC is set to a host-built one. For CI
+    # we point it at the runner's system hermesc via a separate build step.
+    if(DEFINED IMPORT_HERMESC AND EXISTS "${IMPORT_HERMESC}")
+        message(STATUS "Using pre-built hermesc: ${IMPORT_HERMESC}")
+    else()
+        message(WARNING
+            "ANDROID Hermes build needs a host hermesc; pass -DIMPORT_HERMESC=<path> "
+            "or build hermes-tools natively first")
+    endif()
+else()
+    set(HERMES_IS_ANDROID        OFF CACHE BOOL "" FORCE)
+endif()
 
 FetchContent_Declare(
   hermes

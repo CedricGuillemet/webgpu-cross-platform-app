@@ -418,20 +418,44 @@ elseif(JS_ENGINE STREQUAL "V8")
   endif()
 elseif(JS_ENGINE STREQUAL "Hermes")
   target_compile_definitions(app PRIVATE JS_ENGINE_HERMES=1)
-  if(NOT WIN32)
-    message(FATAL_ERROR "Hermes backend is Windows-only in this fork")
-  endif()
   # hermesvm_a is the STATIC aggregate; hermesvm is the SHARED .dll wrapper.
-  # Use the static one so app.exe has no Hermes DLL dependency.
-  target_link_libraries(app PRIVATE
-    webgpu_dawn
-    hermesvm_a
-    jsi
-    winhttp user32 gdi32
-    windowscodecs ole32
-  )
-  if(MSVC)
-    target_link_options(app PRIVATE /STACK:16777216)
+  # Use the static one so the binary has no Hermes DLL/SO dependency.
+  if(ANDROID)
+    target_link_libraries(app PRIVATE
+      webgpu_dawn
+      hermesvm_a
+      jsi
+      android log jnigraphics
+    )
+    if(TARGET SPIRV-Tools-shared)
+      set_target_properties(SPIRV-Tools-shared PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    endif()
+  elseif(WIN32)
+    target_link_libraries(app PRIVATE
+      webgpu_dawn
+      hermesvm_a
+      jsi
+      winhttp user32 gdi32
+      windowscodecs ole32
+    )
+    if(MSVC)
+      target_link_options(app PRIVATE /STACK:16777216)
+    endif()
+  elseif(APPLE)
+    target_link_libraries(app PRIVATE
+      webgpu_dawn
+      hermesvm_a
+      jsi
+      "-framework Foundation"
+      "-framework CoreFoundation"
+    )
+  else()  # Linux + other UNIX
+    target_link_libraries(app PRIVATE
+      webgpu_dawn
+      hermesvm_a
+      jsi
+      pthread dl m
+    )
   endif()
 elseif(JS_ENGINE STREQUAL "JSC")
   target_compile_definitions(app PRIVATE JS_ENGINE_JSC=1)

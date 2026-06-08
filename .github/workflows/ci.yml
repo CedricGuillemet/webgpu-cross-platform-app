@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [chakra, quickjs, v8]
+        engine: [chakra, quickjs, v8, hermes]
         graphics: [d3d11, d3d12, vulkan]
     steps:
       - name: Enable Git long paths (Windows MAX_PATH workaround)
@@ -86,6 +86,7 @@ jobs:
             'chakra'  = 'Chakra'
             'v8'      = 'V8'
             'quickjs' = 'QuickJS'
+            'hermes'  = 'Hermes'
           }
           $gfxMap = @{
             'd3d11'  = 'D3D11'
@@ -284,7 +285,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [quickjs, jsc]
+        engine: [quickjs, jsc, hermes]
         graphics: [vulkan]
     steps:
       - name: Checkout (no submodule recursion)
@@ -323,6 +324,7 @@ jobs:
           case "$engine" in
             quickjs) engine=QuickJS ;;
             jsc)     engine=JSC ;;
+            hermes)  engine=Hermes ;;
           esac
           cmake -S . -B build \
             -G Ninja \
@@ -362,7 +364,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [quickjs, v8]
+        engine: [quickjs, v8, hermes]
         graphics: [vulkan, opengles]
     steps:
       - name: Checkout (no submodule recursion)
@@ -410,9 +412,37 @@ jobs:
           sed -i 's|"-DGRAPHICS_API=Vulkan"|"-DGRAPHICS_API=OpenGLES"|' Android/app/build.gradle.kts
 
       - name: Patch JS_ENGINE in app/build.gradle.kts
-        if: matrix.engine == 'v8'
+        if: matrix.engine != 'quickjs'
         run: |
-          sed -i 's|"-DJS_ENGINE=QuickJS"|"-DJS_ENGINE=V8"|' Android/app/build.gradle.kts
+          case "${{ matrix.engine }}" in
+            v8)     newEngine=V8     ;;
+            hermes) newEngine=Hermes ;;
+          esac
+          sed -i "s|\"-DJS_ENGINE=QuickJS\"|\"-DJS_ENGINE=$newEngine\"|" Android/app/build.gradle.kts
+
+      - name: Build host hermesc (Hermes only)
+        if: matrix.engine == 'hermes'
+        run: |
+          # The Android NDK cross-build can't produce a runnable hermesc binary
+          # (host x86_64 vs target arm64/x86_64-android). Build a native one
+          # first, then pass its path to the Android CMake configure via
+          # -DIMPORT_HERMESC.
+          mkdir -p hermes-host && cd hermes-host
+          git clone --depth 1 --branch static_h https://github.com/facebook/hermes.git
+          cmake -S hermes -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DHERMES_ENABLE_TOOLS=ON \
+            -DHERMES_ENABLE_TEST_SUITE=OFF \
+            -DHERMES_ENABLE_INTL=OFF \
+            -DHERMES_ENABLE_DEBUGGER=OFF
+          cmake --build build --target hermesc
+          echo "HERMESC_HOST=$(pwd)/build/bin/hermesc" >> "$GITHUB_ENV"
+
+      - name: Pass hermesc path into Android Gradle (Hermes only)
+        if: matrix.engine == 'hermes'
+        run: |
+          sed -i "s|\"-DJS_ENGINE=Hermes\"|\"-DJS_ENGINE=Hermes\", \"-DIMPORT_HERMESC=${HERMESC_HOST}\"|" Android/app/build.gradle.kts
 
       - name: Build APK
         working-directory: Android
@@ -420,15 +450,18 @@ jobs:
           gradle --version
           gradle :app:assembleRelease --no-daemon --console=plain
 
-      - name: Locate APK
+      - name: Locate native .so (.apk gets reported separately)
         id: locate
         run: |
-          apk=$(find Android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)
-          if [ -z "$apk" ]; then echo "apk not found"; exit 1; fi
-          bytes=$(stat -c%s "$apk")
-          echo "exe=$apk" >> "$GITHUB_OUTPUT"
+          # For the size summary we want the actual native lib size, not
+          # the whole APK (which can be dominated by V8's 18 MB libv8android.so
+          # — interesting but not what we built).
+          so=$(find Android/app/build/intermediates/stripped_native_libs/release -type f -name 'libdawntest.so' | grep arm64-v8a | head -1)
+          if [ -z "$so" ]; then echo "libdawntest.so not found"; exit 1; fi
+          bytes=$(stat -c%s "$so")
+          echo "exe=$so" >> "$GITHUB_OUTPUT"
           echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
-          printf "size: %s bytes (%.2f MB)\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
+          printf "size: %s bytes (%.2f MB) — arm64-v8a stripped libdawntest.so\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
