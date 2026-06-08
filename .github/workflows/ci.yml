@@ -247,7 +247,7 @@ jobs:
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO
 
       - name: Build
-        run: cmake --build build --config Release --target app CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=""
+        run: cmake --build build --config Release --target app -- CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=""
 
       - name: Locate executable
         id: locate
@@ -389,7 +389,7 @@ jobs:
       - name: Set up Android SDK + NDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358"
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358 cmake;3.22.1"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3

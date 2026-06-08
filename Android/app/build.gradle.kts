@@ -62,7 +62,10 @@ android {
             // Point at the *root* CMakeLists.txt of the project so we share
             // sources with the Win32 build.
             path = file("../../CMakeLists.txt")
-            version = "3.30.3"
+            // 3.22.1 is the SDK-bundled minimum and is what CI installs.
+            // Local builds with a newer cmake (3.30+) still work fine because
+            // CMakeLists.txt requires >=3.22.
+            version = "3.22.1"
         }
     }
 
