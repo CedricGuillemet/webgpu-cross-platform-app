@@ -1,0 +1,22 @@
+{
+  "name": "webgpu-cross-platform-app",
+  "version": "1.0.0",
+  "description": "![image](https://github.com/beaufortfrancois/webgpu-cross-platform-app/assets/634478/81579516-7390-4198-bb18-68e7f4cb34c3)",
+  "main": "index.js",
+  "scripts": {
+    "transform-bundles": "babel assets/bundle --out-dir assets/bundle --keep-file-extension --no-comments --no-babelrc --config-file ./babel.config.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/cli": "^7.24.0",
+    "@babel/core": "^7.24.0",
+    "@babel/plugin-transform-class-properties": "^7.24.0",
+    "@babel/plugin-transform-logical-assignment-operators": "^7.24.0",
+    "@babel/plugin-transform-nullish-coalescing-operator": "^7.24.0",
+    "@babel/plugin-transform-object-rest-spread": "^7.29.7",
+    "@babel/plugin-transform-optional-catch-binding": "^7.24.0",
+    "@babel/plugin-transform-optional-chaining": "^7.24.0"
+  }
+}

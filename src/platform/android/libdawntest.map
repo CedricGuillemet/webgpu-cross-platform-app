@@ -1,0 +1,21 @@
+/* libdawntest.so version script.
+ *
+ * The library is dlopen'd by the JVM via System.loadLibrary("dawntest")
+ * and only needs to expose:
+ *   - JNI_OnLoad / JNI_OnUnload (JNI lifecycle)
+ *   - Java_com_dawntest_*       (registered native methods)
+ *
+ * Everything else (Dawn's WGPU C API, Tint's IR helpers, QuickJS's JS_*
+ * entry points, our internal C++ namespaces, etc.) is INTERNAL and never
+ * resolved from outside the .so. Hiding all of it shrinks .dynsym /
+ * .dynstr / .gnu.hash dramatically (~500 KB on this build) and lets the
+ * linker drop additional code via --gc-sections that was only kept alive
+ * because of the export.
+ */
+{
+    global:
+        JNI_OnLoad;
+        Java_com_dawntest_*;
+    local:
+        *;
+};
