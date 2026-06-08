@@ -1,0 +1,343 @@
+name: CI
+
+# Cross-platform build matrix:
+#   OSes:      win32, macos, android, ubuntu
+#   Engines:   v8, jsc, chakra, quickjs
+#   Graphics:  d3d11, opengles, vulkan, metal
+#
+# Each surviving matrix cell builds the `app` executable (or `libdawntest.so`
+# on Android), then uploads it as a workflow artifact named
+# `app-<os>-<engine>-<graphics>`. A final `summary` job downloads every
+# artifact and prints a size table.
+#
+# Exclusions reflect what's actually plumbed in this fork today:
+#   * jsc — not implemented anywhere (no JavaScriptCore shim in this fork yet)
+#   * chakra — ChakraCore NuGet is Windows-only
+#   * v8 — uses Windows-x64 NuGet; non-Windows V8 sources not wired
+#   * d3d11 — Windows-only graphics API
+#   * metal — Apple-only graphics API
+#   * vulkan + macos — no MoltenVK wired
+#   * opengles + win32/macos — Dawn supports via ANGLE but not configured here
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # Windows: cmake + MSBuild. Engines: chakra, quickjs, v8.
+  # Graphics: d3d11, vulkan.
+  # ============================================================
+  build-win32:
+    name: win32 / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chakra, quickjs, v8]
+        graphics: [d3d11, vulkan]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python (Dawn build needs it)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache ChakraCore NuGet
+        if: matrix.engine == 'chakra'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/chakracore
+          key: chakracore-1.11.24
+
+      - name: Download ChakraCore NuGet
+        if: matrix.engine == 'chakra'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${{ github.workspace }}/chakracore/build/native/include/ChakraCore.h")) {
+            New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/chakracore" | Out-Null
+            $url = "https://www.nuget.org/api/v2/package/Microsoft.ChakraCore/1.11.24"
+            $zip = "${{ github.workspace }}/chakracore.nupkg"
+            Invoke-WebRequest -Uri $url -OutFile $zip
+            Expand-Archive -Path $zip -DestinationPath "${{ github.workspace }}/chakracore" -Force
+          }
+          if (-not (Test-Path "${{ github.workspace }}/chakracore/build/native/include/ChakraCore.h")) {
+            throw "ChakraCore NuGet did not extract the expected layout"
+          }
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" -A x64 `
+            -DJS_ENGINE=${{ matrix.engine == 'chakra' && 'Chakra' || (matrix.engine == 'v8' && 'V8' || 'QuickJS') }} `
+            -DGRAPHICS_API=${{ matrix.graphics == 'd3d11' && 'D3D11' || 'Vulkan' }}
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release --target app -- /m
+
+      - name: Locate executable
+        id: locate
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem build -Recurse -Filter app.exe | Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $exe) { throw "app.exe not found under build/" }
+          $bytes = (Get-Item $exe.FullName).Length
+          "exe=$($exe.FullName)" | Out-File -Append $env:GITHUB_OUTPUT
+          "size_bytes=$bytes" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host ("size: {0} bytes ({1:N2} MB)" -f $bytes, ($bytes/1MB))
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ============================================================
+  # macOS: cmake + Ninja. Engines: quickjs only (others not wired).
+  # Graphics: metal.
+  # ============================================================
+  # NOTE: this fork currently has no src/framework/macos/, so the link
+  # step is expected to fail (main.cpp + framework headers are Windows-only).
+  # Job kept (continue-on-error) so the matrix demonstrates the intended
+  # surface area; sizes for successful builds appear in the summary.
+  build-macos:
+    name: macos / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: macos-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [quickjs]
+        graphics: [metal]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python (Dawn build needs it)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DJS_ENGINE=QuickJS \
+            -DGRAPHICS_API=Metal
+
+      - name: Build
+        run: cmake --build build --target app
+
+      - name: Locate executable
+        id: locate
+        run: |
+          exe=$(find build -type f -name app | head -1)
+          if [ -z "$exe" ]; then echo "app not found"; exit 1; fi
+          bytes=$(stat -f%z "$exe")
+          echo "exe=$exe" >> "$GITHUB_OUTPUT"
+          echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
+          printf "size: %s bytes (%.2f MB)\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-macos-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ============================================================
+  # Ubuntu: cmake + Ninja. Engines: quickjs only (others not wired).
+  # Graphics: vulkan, opengles.
+  # ============================================================
+  # NOTE: this fork currently has no src/framework/linux/, so the link
+  # step is expected to fail. Kept with continue-on-error so the matrix
+  # is honest about what builds end-to-end on each OS.
+  build-ubuntu:
+    name: ubuntu / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [quickjs]
+        graphics: [vulkan, opengles]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python (Dawn build needs it)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake \
+            libx11-xcb-dev libxcb1-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libgl1-mesa-dev libwayland-dev mesa-common-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DJS_ENGINE=QuickJS \
+            -DGRAPHICS_API=${{ matrix.graphics == 'vulkan' && 'Vulkan' || 'OpenGLES' }}
+
+      - name: Build
+        run: cmake --build build --target app
+
+      - name: Locate executable
+        id: locate
+        run: |
+          exe=$(find build -type f -name app -executable | head -1)
+          if [ -z "$exe" ]; then echo "app not found"; exit 1; fi
+          bytes=$(stat -c%s "$exe")
+          echo "exe=$exe" >> "$GITHUB_OUTPUT"
+          echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
+          printf "size: %s bytes (%.2f MB)\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ubuntu-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ============================================================
+  # Android: Gradle :app:assembleRelease via the Android/ project.
+  # Engines: quickjs only (V8 build for Android not wired in this fork).
+  # Graphics: vulkan, opengles.
+  # ============================================================
+  build-android:
+    name: android / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [quickjs]
+        graphics: [vulkan, opengles]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Python (Dawn build needs it)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.13"
+
+      - name: Patch GRAPHICS_API in app/build.gradle.kts
+        if: matrix.graphics == 'opengles'
+        run: |
+          sed -i 's|"-DGRAPHICS_API=Vulkan"|"-DGRAPHICS_API=OpenGLES"|' Android/app/build.gradle.kts
+
+      - name: Build APK
+        working-directory: Android
+        run: |
+          gradle --version
+          gradle :app:assembleRelease --no-daemon --console=plain
+
+      - name: Locate APK
+        id: locate
+        run: |
+          apk=$(find Android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)
+          if [ -z "$apk" ]; then echo "apk not found"; exit 1; fi
+          bytes=$(stat -c%s "$apk")
+          echo "exe=$apk" >> "$GITHUB_OUTPUT"
+          echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
+          printf "size: %s bytes (%.2f MB)\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-android-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ============================================================
+  # Aggregate all artifact sizes into a single Markdown summary.
+  # ============================================================
+  summary:
+    name: summary
+    needs: [build-win32, build-macos, build-ubuntu, build-android]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Build size summary
+        run: |
+          set -e
+          {
+            echo "# Build artifact sizes"
+            echo
+            echo "Each row is one cell of the matrix that produced a downloadable artifact."
+            echo
+            echo "| OS | Engine | Graphics | Artifact | Size (bytes) | Size |"
+            echo "|----|--------|----------|----------|-------------:|-----:|"
+            shopt -s nullglob
+            for dir in artifacts/app-*; do
+              name=$(basename "$dir")
+              IFS='-' read -r _ os engine graphics <<< "$name"
+              file=$(find "$dir" -type f | head -1)
+              if [ -n "$file" ]; then
+                bytes=$(stat -c%s "$file")
+                mb=$(awk "BEGIN { printf \"%.2f\", $bytes/1048576 }")
+                base=$(basename "$file")
+                printf "| %s | %s | %s | \`%s\` | %d | %s MB |\n" "$os" "$engine" "$graphics" "$base" "$bytes" "$mb"
+              fi
+            done | sort
+            echo
+            echo "_Build run: ${{ github.run_id }} • commit ${{ github.sha }}_"
+          } | tee "$GITHUB_STEP_SUMMARY"
