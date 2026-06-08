@@ -264,6 +264,8 @@ WGPU_OP(gpu_requestAdapter, "gpu.requestAdapter") {
     opts.backendType = wgpu::BackendType::Vulkan;
 #elif defined(DAWNTEST_BACKEND_D3D11)
     opts.backendType = wgpu::BackendType::D3D11;
+#elif defined(DAWNTEST_BACKEND_METAL)
+    opts.backendType = wgpu::BackendType::Metal;
 #elif defined(DAWNTEST_BACKEND_D3D12) || defined(_WIN32)
     opts.backendType = wgpu::BackendType::D3D12;
 #else

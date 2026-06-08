@@ -5,11 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- JavaScript engine selection ----
-set(JS_ENGINE "Chakra" CACHE STRING "JavaScript engine to use: Chakra, QuickJS, V8 or Hermes")
-set_property(CACHE JS_ENGINE PROPERTY STRINGS Chakra QuickJS V8 Hermes)
+set(JS_ENGINE "Chakra" CACHE STRING "JavaScript engine to use: Chakra, QuickJS, V8, Hermes or JSC")
+set_property(CACHE JS_ENGINE PROPERTY STRINGS Chakra QuickJS V8 Hermes JSC)
 if(NOT JS_ENGINE STREQUAL "Chakra" AND NOT JS_ENGINE STREQUAL "QuickJS"
-   AND NOT JS_ENGINE STREQUAL "V8"     AND NOT JS_ENGINE STREQUAL "Hermes")
-  message(FATAL_ERROR "JS_ENGINE must be Chakra, QuickJS, V8, or Hermes, got: ${JS_ENGINE}")
+   AND NOT JS_ENGINE STREQUAL "V8"     AND NOT JS_ENGINE STREQUAL "Hermes"
+   AND NOT JS_ENGINE STREQUAL "JSC")
+  message(FATAL_ERROR "JS_ENGINE must be Chakra, QuickJS, V8, Hermes or JSC, got: ${JS_ENGINE}")
 endif()
 message(STATUS "JavaScript engine: ${JS_ENGINE}")
 
@@ -169,6 +170,8 @@ elseif(JS_ENGINE STREQUAL "V8")
   include("${CMAKE_CURRENT_SOURCE_DIR}/src/appRuntime/V8/v8_setup.cmake")
 elseif(JS_ENGINE STREQUAL "Hermes")
   include("${CMAKE_CURRENT_SOURCE_DIR}/src/appRuntime/Hermes/hermes_setup.cmake")
+elseif(JS_ENGINE STREQUAL "JSC")
+  include("${CMAKE_CURRENT_SOURCE_DIR}/src/appRuntime/JSC/jsc_setup.cmake")
 endif()
 
 # ---- Framework: OS-specific primitives (image decode, window, http, fs) ----
@@ -243,6 +246,14 @@ elseif(JS_ENGINE STREQUAL "Hermes")
     "${APPRUNTIME_DIR}/chakra_host.cpp"
     "${APPRUNTIME_DIR}/chakra_host.h"
   )
+elseif(JS_ENGINE STREQUAL "JSC")
+  set(APPRUNTIME_DIR "src/appRuntime/JSC")
+  set(APPRUNTIME_SOURCES
+    "${APPRUNTIME_DIR}/chakra_compat.cpp"
+    "${APPRUNTIME_DIR}/chakra_compat.h"
+    "${APPRUNTIME_DIR}/chakra_host.cpp"
+    "${APPRUNTIME_DIR}/chakra_host.h"
+  )
 endif()
 
 if(ANDROID)
@@ -301,6 +312,8 @@ target_compile_definitions(app PRIVATE
   $<$<STREQUAL:${GRAPHICS_API},OpenGLES>:DAWNTEST_BACKEND_OPENGLES=1>
   $<$<STREQUAL:${GRAPHICS_API},D3D12>:DAWNTEST_BACKEND_D3D12=1>
   $<$<STREQUAL:${GRAPHICS_API},D3D11>:DAWNTEST_BACKEND_D3D11=1>
+  $<$<STREQUAL:${GRAPHICS_API},Metal>:DAWNTEST_BACKEND_METAL=1>
+)
 )
 if(ANDROID)
   target_include_directories(app PRIVATE
@@ -377,6 +390,22 @@ elseif(JS_ENGINE STREQUAL "Hermes")
   )
   if(MSVC)
     target_link_options(app PRIVATE /STACK:16777216)
+  endif()
+elseif(JS_ENGINE STREQUAL "JSC")
+  target_compile_definitions(app PRIVATE JS_ENGINE_JSC=1)
+  if(WIN32 OR ANDROID)
+    message(FATAL_ERROR "JSC backend is not wired for Windows/Android in this fork")
+  endif()
+  target_link_libraries(app PRIVATE
+    webgpu_dawn
+    jsc
+  )
+  if(APPLE)
+    # CoreFoundation/Foundation are pulled in transitively by
+    # JavaScriptCore.framework; nothing extra to link.
+  elseif(UNIX)
+    # libjavascriptcoregtk on Linux brings glib/dl etc. via pkg-config.
+    target_link_libraries(app PRIVATE pthread dl m)
   endif()
 endif()
 
