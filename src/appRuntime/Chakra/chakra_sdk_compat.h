@@ -36,11 +36,15 @@ typedef unsigned char BYTE;
 
 // ---- Missing enums (kept here so existing call sites still compile) ----------
 
-// Chakra edge-mode in the SDK doesn't expose JsParseScriptAttributes; our
-// shared call sites pass JsParseScriptAttributeNone which we just map to 0.
+// JsParseScriptAttributes (ChakraCore-only typedef + value alias)
 typedef unsigned JsParseScriptAttributes;
 #ifndef JsParseScriptAttributeNone
 #define JsParseScriptAttributeNone ((JsParseScriptAttributes)0)
+#endif
+#ifndef CHAKRA_CALLBACK
+// ChakraCore decorates its module/promise callback signatures with this
+// no-op annotation; SDK Chakra never defined it.
+#define CHAKRA_CALLBACK
 #endif
 
 typedef enum _JsParseModuleSourceFlags {

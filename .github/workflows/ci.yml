@@ -241,10 +241,13 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
             -DCMAKE_BUILD_TYPE=Release \
             -DJS_ENGINE=$engine \
-            -DGRAPHICS_API=Metal
+            -DGRAPHICS_API=Metal \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO
 
       - name: Build
-        run: cmake --build build --config Release --target app
+        run: cmake --build build --config Release --target app CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=""
 
       - name: Locate executable
         id: locate
