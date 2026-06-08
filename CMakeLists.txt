@@ -321,7 +321,7 @@ if(ANDROID)
 endif()
 
 if(JS_ENGINE STREQUAL "Chakra")
-  target_compile_definitions(app PRIVATE JS_ENGINE_CHAKRA=1)
+  target_compile_definitions(app PRIVATE JS_ENGINE_CHAKRA=1 _USE_CHAKRA_SDK=1)
   if(ANDROID)
     message(FATAL_ERROR "Chakra is Windows-only; pick QuickJS for Android")
   endif()

@@ -307,6 +307,19 @@ bool Host::runModule(const std::string& entryPath) {
     std::string absEntry = normalizePath(entryPath);
     rootBaseDir_ = fs::path(absEntry).parent_path().string();
 
+#if defined(_USE_CHAKRA_SDK)
+    // Legacy Chakra (Windows SDK) has no JsInitializeModuleRecord / JsParseModuleSource.
+    // Fall back to running the entry as a script; dynamic imports inside
+    // the bundle route through the global `__import` shim that main.cpp
+    // installs (the bundles are already babel-transformed to call it
+    // instead of native ES `import()`).
+    std::string source;
+    if (!fs_loader::readTextFile(absEntry, source)) {
+        std::fprintf(stderr, "[chakra] failed to read entry file: %s\n", absEntry.c_str());
+        return false;
+    }
+    return runScript(source, absEntry);
+#else
     JsModuleRecord root = nullptr;
     JsValueRef emptySpec = fromUtf8("");
     check(JsInitializeModuleRecord(nullptr, emptySpec, &root), "init root module");
@@ -343,6 +356,7 @@ bool Host::runModule(const std::string& entryPath) {
     }
     pumpMicrotasks();
     return true;
+#endif
 }
 
 bool Host::runScript(std::string_view source, const std::string& sourceUrl) {
