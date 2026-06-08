@@ -32,6 +32,10 @@ if(ANDROID)
     # we point it at the runner's system hermesc via a separate build step.
     if(DEFINED IMPORT_HERMESC AND EXISTS "${IMPORT_HERMESC}")
         message(STATUS "Using pre-built hermesc: ${IMPORT_HERMESC}")
+        # IMPORT_HERMESC must point at the host build's ImportHermesc.cmake (a
+        # CMake export of the hermesc IMPORTED target), not the binary itself —
+        # Hermes' own generator-expression rules invoke `$<TARGET_FILE:hermesc>`
+        # which only resolves when there's a real CMake target attached.
     else()
         message(WARNING
             "ANDROID Hermes build needs a host hermesc; pass -DIMPORT_HERMESC=<path> "

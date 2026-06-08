@@ -438,8 +438,8 @@ jobs:
         run: |
           # The Android NDK cross-build can't produce a runnable hermesc binary
           # (host x86_64 vs target arm64/x86_64-android). Build a native one
-          # first, then pass its path to the Android CMake configure via
-          # -DIMPORT_HERMESC.
+          # first, then point the cross-build at the generated
+          # ImportHermesc.cmake file (NOT the binary itself) via -DIMPORT_HERMESC.
           mkdir -p hermes-host && cd hermes-host
           git clone --depth 1 --branch static_h https://github.com/facebook/hermes.git
           cmake -S hermes -B build \
@@ -449,8 +449,13 @@ jobs:
             -DHERMES_ENABLE_TEST_SUITE=OFF \
             -DHERMES_ENABLE_INTL=OFF \
             -DHERMES_ENABLE_DEBUGGER=OFF
+          # Build hermesc AND its bytecode driver so ImportHermesc.cmake imports
+          # everything the cross-build will need.
           cmake --build build --target hermesc
-          echo "HERMESC_HOST=$(pwd)/build/bin/hermesc" >> "$GITHUB_ENV"
+          if [ ! -f build/ImportHermesc.cmake ]; then
+            echo "ImportHermesc.cmake not produced — Hermes layout changed?"; exit 1
+          fi
+          echo "HERMESC_HOST=$(pwd)/build/ImportHermesc.cmake" >> "$GITHUB_ENV"
 
       - name: Pass hermesc path into Android Gradle (Hermes only)
         if: matrix.engine == 'hermes'
