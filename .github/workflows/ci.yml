@@ -533,23 +533,6 @@ jobs:
         shell: pwsh
         run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
 
-      - name: Patch BN CMakeLists.txt (workarounds)
-        shell: bash
-        run: |
-          # QuickJS branch pins JsRuntimeHost to a SHA that the dumb
-          # `git fetch <sha>` path can't resolve via CMake FetchContent;
-          # switch to the `quickjs` branch name so a regular fetch works.
-          if [ "${{ matrix.engine }}" = "quickjs" ]; then
-            perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
-            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
-            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
-            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
-          fi
-          # Win32+Hermes intentionally left as-is: Hermes vendors Boost.Context
-          # which needs MASM enabled in the right CMake scope. That requires an
-          # upstream Hermes patch; the cell stays under continue-on-error and
-          # the summary shows "—" for it.
-
       - name: Set up Node (for npm install of Apps/)
         uses: actions/setup-node@v4
         with:
@@ -625,18 +608,6 @@ jobs:
       - name: Clone BabylonNative
         run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
 
-      - name: Patch BN CMakeLists.txt (workaround QuickJS SHA fetch)
-        run: |
-          # QuickJS branch pins JsRuntimeHost to a SHA that the dumb
-          # `git fetch <sha>` path can't resolve via CMake FetchContent;
-          # switch to the `quickjs` branch name so a regular fetch works.
-          if [ "${{ matrix.engine }}" = "quickjs" ]; then
-            perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
-            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
-            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
-            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
-          fi
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -704,18 +675,6 @@ jobs:
 
       - name: Clone BabylonNative
         run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
-
-      - name: Patch BN CMakeLists.txt (workaround QuickJS SHA fetch)
-        run: |
-          # QuickJS branch pins JsRuntimeHost to a SHA that the dumb
-          # `git fetch <sha>` path can't resolve via CMake FetchContent;
-          # switch to the `quickjs` branch name so a regular fetch works.
-          if [ "${{ matrix.engine }}" = "quickjs" ]; then
-            perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
-            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
-            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
-            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
-          fi
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -794,18 +753,6 @@ jobs:
 
       - name: Clone BabylonNative
         run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
-
-      - name: Patch BN CMakeLists.txt (workaround QuickJS SHA fetch)
-        run: |
-          # QuickJS branch pins JsRuntimeHost to a SHA that the dumb
-          # `git fetch <sha>` path can't resolve via CMake FetchContent;
-          # switch to the `quickjs` branch name so a regular fetch works.
-          if [ "${{ matrix.engine }}" = "quickjs" ]; then
-            perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
-            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
-            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
-            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
-          fi
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -891,18 +838,6 @@ jobs:
 
       - name: Clone BabylonNative
         run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
-
-      - name: Patch BN CMakeLists.txt (workaround QuickJS SHA fetch)
-        run: |
-          # QuickJS branch pins JsRuntimeHost to a SHA that the dumb
-          # `git fetch <sha>` path can't resolve via CMake FetchContent;
-          # switch to the `quickjs` branch name so a regular fetch works.
-          if [ "${{ matrix.engine }}" = "quickjs" ]; then
-            perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
-            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
-            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
-            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
-          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
