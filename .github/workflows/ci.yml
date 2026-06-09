@@ -541,6 +541,9 @@ jobs:
           # switch to the `quickjs` branch name so a regular fetch works.
           if [ "${{ matrix.engine }}" = "quickjs" ]; then
             perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
+            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
+            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
+            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
           fi
           # Win32+Hermes intentionally left as-is: Hermes vendors Boost.Context
           # which needs MASM enabled in the right CMake scope. That requires an
@@ -629,6 +632,9 @@ jobs:
           # switch to the `quickjs` branch name so a regular fetch works.
           if [ "${{ matrix.engine }}" = "quickjs" ]; then
             perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
+            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
+            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
+            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
           fi
 
       - name: Set up Node
@@ -706,6 +712,9 @@ jobs:
           # switch to the `quickjs` branch name so a regular fetch works.
           if [ "${{ matrix.engine }}" = "quickjs" ]; then
             perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
+            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
+            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
+            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
           fi
 
       - name: Set up Node
@@ -793,6 +802,9 @@ jobs:
           # switch to the `quickjs` branch name so a regular fetch works.
           if [ "${{ matrix.engine }}" = "quickjs" ]; then
             perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
+            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
+            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
+            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
           fi
 
       - name: Set up Node
@@ -887,6 +899,9 @@ jobs:
           # switch to the `quickjs` branch name so a regular fetch works.
           if [ "${{ matrix.engine }}" = "quickjs" ]; then
             perl -i -pe 's|GIT_TAG a66991c862362956aa142567a7faf7e9b76c0c70|GIT_TAG quickjs|' BabylonNative/CMakeLists.txt
+            # Bump C++17 -> C++20: quickjs branch is older; arcana.cpp coroutines
+            # require C++20 or there's a _COROUTINE_ABI mismatch at link time.
+            perl -i -pe 's|set\(CMAKE_CXX_STANDARD 17\)|set(CMAKE_CXX_STANDARD 20)|' BabylonNative/CMakeLists.txt
           fi
 
       - name: Set up JDK 17
