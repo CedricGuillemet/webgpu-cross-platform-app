@@ -568,10 +568,18 @@ jobs:
           }
           $engine = $engineMap['${{ matrix.engine }}']
           $gfx    = $gfxMap['${{ matrix.graphics }}']
+          # Match DawnTest's MSVC size flags for an apples-to-apples size compare.
+          $cFlags = "/O1 /Ob2 /DNDEBUG /Gy /Gw /GL /Zc:inline"
+          $linkFlags = "/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE"
           cmake -S BabylonNative -B BabylonNative/build `
             -G "Visual Studio 17 2022" -A x64 `
             "-DNAPI_JAVASCRIPT_ENGINE=$engine" `
-            "-DGRAPHICS_API=$gfx"
+            "-DGRAPHICS_API=$gfx" `
+            "-DCMAKE_C_FLAGS_RELEASE=$cFlags" `
+            "-DCMAKE_CXX_FLAGS_RELEASE=$cFlags" `
+            "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=$linkFlags" `
+            "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=$linkFlags" `
+            "-DCMAKE_STATIC_LINKER_FLAGS_RELEASE=/LTCG"
 
       - name: Build Playground (Release)
         shell: pwsh
@@ -634,10 +642,19 @@ jobs:
             jsc)     engine=JavaScriptCore ;;
             quickjs) engine=QuickJS        ;;
           esac
+          # Match DawnTest's non-MSVC size flags for an apples-to-apples size compare.
+          CFLAGS_REL="-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden"
+          CXXFLAGS_REL="$CFLAGS_REL -fvisibility-inlines-hidden"
+          LDFLAGS_REL="-Wl,-dead_strip"
           cmake -S BabylonNative -B BabylonNative/build/macOS \
             -G Xcode \
             -D NAPI_JAVASCRIPT_ENGINE=$engine \
-            -D BABYLON_NATIVE_TESTS_USE_NOOP_METAL_DEVICE=ON
+            -D BABYLON_NATIVE_TESTS_USE_NOOP_METAL_DEVICE=ON \
+            -D "CMAKE_C_FLAGS_RELEASE=$CFLAGS_REL" \
+            -D "CMAKE_CXX_FLAGS_RELEASE=$CXXFLAGS_REL" \
+            -D "CMAKE_EXE_LINKER_FLAGS_RELEASE=$LDFLAGS_REL" \
+            -D "CMAKE_SHARED_LINKER_FLAGS_RELEASE=$LDFLAGS_REL" \
+            -D CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
 
       - name: Build Playground (Release)
         run: |
@@ -703,12 +720,21 @@ jobs:
             quickjs) engine=QuickJS        ;;
           esac
           # Match upstream BN's iOS configure (ios-cmake toolchain via IOS=ON).
+          # Match DawnTest's non-MSVC size flags for an apples-to-apples size compare.
+          CFLAGS_REL="-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden"
+          CXXFLAGS_REL="$CFLAGS_REL -fvisibility-inlines-hidden"
+          LDFLAGS_REL="-Wl,-dead_strip"
           cmake -S BabylonNative -B BabylonNative/build/iOS \
             -G Xcode \
             -D IOS=ON \
             -D DEPLOYMENT_TARGET=15.0 \
             -D CMAKE_IOS_INSTALL_COMBINED=NO \
-            -D NAPI_JAVASCRIPT_ENGINE=$engine
+            -D NAPI_JAVASCRIPT_ENGINE=$engine \
+            -D "CMAKE_C_FLAGS_RELEASE=$CFLAGS_REL" \
+            -D "CMAKE_CXX_FLAGS_RELEASE=$CXXFLAGS_REL" \
+            -D "CMAKE_EXE_LINKER_FLAGS_RELEASE=$LDFLAGS_REL" \
+            -D "CMAKE_SHARED_LINKER_FLAGS_RELEASE=$LDFLAGS_REL" \
+            -D CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
 
       - name: Build Playground (Release)
         run: |
@@ -793,13 +819,23 @@ jobs:
             quickjs) engine=QuickJS        ;;
             hermes)  engine=Hermes         ;;
           esac
+          # Match DawnTest's non-MSVC size flags for an apples-to-apples size compare.
+          # Ubuntu BN job runs under clang (CC=clang above), so -Oz is valid.
+          CFLAGS_REL="-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden"
+          CXXFLAGS_REL="$CFLAGS_REL -fvisibility-inlines-hidden"
+          LDFLAGS_REL="-Wl,--gc-sections"
           cmake -S BabylonNative -B BabylonNative/build/Linux \
             -G Ninja \
             -D CMAKE_BUILD_TYPE=Release \
             -D NAPI_JAVASCRIPT_ENGINE=$engine \
             -D JAVASCRIPTCORE_LIBRARY=/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so \
             -D OpenGL_GL_PREFERENCE=GLVND \
-            -D GRAPHICS_API=OpenGL
+            -D GRAPHICS_API=OpenGL \
+            -D "CMAKE_C_FLAGS_RELEASE=$CFLAGS_REL" \
+            -D "CMAKE_CXX_FLAGS_RELEASE=$CXXFLAGS_REL" \
+            -D "CMAKE_EXE_LINKER_FLAGS_RELEASE=$LDFLAGS_REL" \
+            -D "CMAKE_SHARED_LINKER_FLAGS_RELEASE=$LDFLAGS_REL" \
+            -D CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
 
       - name: Build Playground (Release)
         run: cmake --build BabylonNative/build/Linux --target Playground
@@ -879,6 +915,16 @@ jobs:
       - name: npm install (Apps/) — required for copyFiles task
         working-directory: BabylonNative/Apps
         run: npm install --no-audit --no-fund --no-progress
+
+      - name: Inject size-parity flags into BN Android CMake args
+        run: |
+          # Mirror DawnTest's non-MSVC size flags (NDK Clang understands -Oz) so
+          # the Android comparison is apples-to-apples. Set both RELEASE and
+          # RELWITHDEBINFO variants because AGP's exact build-type choice for
+          # `assembleRelease` has varied across versions.
+          sed -i 's|"-DBABYLON_DEBUG_TRACE=ON"|"-DBABYLON_DEBUG_TRACE=ON",\n                    "-DCMAKE_C_FLAGS_RELEASE=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden",\n                    "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden",\n                    "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden",\n                    "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden",\n                    "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=-Wl,--gc-sections",\n                    "-DCMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO=-Wl,--gc-sections",\n                    "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"|' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle
+          # Show the resulting arguments block for CI debugging.
+          sed -n '/externalNativeBuild {/,/^        }$/p' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle | head -40
 
       - name: Build host hermesc (Hermes only)
         if: matrix.engine == 'hermes'
