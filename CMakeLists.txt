@@ -34,6 +34,43 @@ endif()
 if(MSVC)
   add_compile_options(/O1 /Gy /Gw /GL /Zc:inline)
   add_link_options(/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE)
+else()
+  # Apple Clang (iOS, macOS), Linux GCC/Clang, Android NDK Clang.
+  # -Os/-Oz: optimize for size (Clang's -Oz shrinks more aggressively than -Os).
+  # -ffunction-sections / -fdata-sections + linker GC ("-dead_strip" on Apple,
+  # "--gc-sections" on GNU ld / lld) drop every symbol the binary doesn't
+  # actually reference -- without this, an unused-but-emitted function in
+  # Dawn, Tint or libwebgpu lingers in the final executable.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-Oz)
+  else()
+    add_compile_options(-Os)
+  endif()
+  add_compile_options(-ffunction-sections -fdata-sections)
+  # Hide template-instantiated symbols by default so the linker can drop
+  # anything not explicitly exported.  Matches the size discipline that
+  # bgfx/BabylonNative already get from their own build setup.
+  add_compile_options(-fvisibility=hidden -fvisibility-inlines-hidden)
+  if(APPLE)
+    add_link_options(-Wl,-dead_strip)
+  elseif(ANDROID)
+    add_link_options(-Wl,--gc-sections)
+  else()
+    add_link_options(-Wl,--gc-sections)
+  endif()
+  # Link-time optimization: lets the linker delete cross-TU dead code (a big
+  # deal for Dawn/Tint, where the only entry points are a handful of WebGPU
+  # symbols and the rest is reachable via templates).  CMake's IPO wrapper
+  # picks the right flag per compiler (-flto on Clang, -flto on GCC) and is a
+  # no-op if the toolchain can't do it.
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT _ipo_ok OUTPUT _ipo_err)
+  if(_ipo_ok)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    message(STATUS "IPO/LTO enabled")
+  else()
+    message(STATUS "IPO/LTO not supported: ${_ipo_err}")
+  endif()
 endif()
 
 # ---- Dawn: disable every backend / feature we don't use ----
@@ -141,6 +178,18 @@ set(TINT_BUILD_GLSL_VALIDATOR OFF CACHE BOOL "" FORCE)
 set(TINT_BUILD_MSL_WRITER  OFF CACHE BOOL "" FORCE)
 set(TINT_BUILD_IR_BINARY   OFF CACHE BOOL "" FORCE)
 set(TINT_BUILD_SYNTAX_TREE_WRITER OFF CACHE BOOL "" FORCE)
+# Defaults to ON in debug builds; force OFF so a sneaky -DCMAKE_BUILD_TYPE=Debug
+# from upstream Gradle/Xcode doesn't drag in the IR validator.
+set(TINT_ENABLE_IR_VALIDATION OFF CACHE BOOL "" FORCE)
+# Suppress remaining size-irrelevant Tint targets that default to ON.
+set(TINT_BUILD_TINTD       OFF CACHE BOOL "" FORCE)
+set(TINT_BUILD_BENCHMARKS  OFF CACHE BOOL "" FORCE)
+set(TINT_BUILD_FUZZERS     OFF CACHE BOOL "" FORCE)
+set(TINT_BUILD_FUZZER_VULKAN_SUPPORT OFF CACHE BOOL "" FORCE)
+set(TINT_ENABLE_BREAK_IN_DEBUGGER OFF CACHE BOOL "" FORCE)
+# DXC assertions in NDEBUG defaults ON; we are NDEBUG-Release with no DXC.
+set(DAWN_DXC_ENABLE_ASSERTS_IN_NDEBUG OFF CACHE BOOL "" FORCE)
+set(DAWN_ALWAYS_ASSERT     OFF CACHE BOOL "" FORCE)
 if(GRAPHICS_API STREQUAL "Vulkan")
   set(TINT_BUILD_HLSL_WRITER OFF CACHE BOOL "" FORCE)
   set(TINT_BUILD_SPV_WRITER  ON  CACHE BOOL "" FORCE)
