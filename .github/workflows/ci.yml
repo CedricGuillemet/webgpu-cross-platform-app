@@ -569,8 +569,12 @@ jobs:
           $engine = $engineMap['${{ matrix.engine }}']
           $gfx    = $gfxMap['${{ matrix.graphics }}']
           # Match DawnTest's MSVC size flags for an apples-to-apples size compare.
+          # /IGNORE:4744 suppresses BN's latent trace_region std::atomic
+          # alignment mismatch that only becomes visible under /GL+/LTCG (BN
+          # builds with /WX globally; that warning would otherwise become a
+          # LNK1257 hard error).
           $cFlags = "/O1 /Ob2 /DNDEBUG /Gy /Gw /GL /Zc:inline"
-          $linkFlags = "/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE"
+          $linkFlags = "/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE /IGNORE:4744"
           cmake -S BabylonNative -B BabylonNative/build `
             -G "Visual Studio 17 2022" -A x64 `
             "-DNAPI_JAVASCRIPT_ENGINE=$engine" `
@@ -922,7 +926,20 @@ jobs:
           # the Android comparison is apples-to-apples. Set both RELEASE and
           # RELWITHDEBINFO variants because AGP's exact build-type choice for
           # `assembleRelease` has varied across versions.
-          sed -i 's|"-DBABYLON_DEBUG_TRACE=ON"|"-DBABYLON_DEBUG_TRACE=ON",\n                    "-DCMAKE_C_FLAGS_RELEASE=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden",\n                    "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden",\n                    "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden",\n                    "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden",\n                    "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=-Wl,--gc-sections",\n                    "-DCMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO=-Wl,--gc-sections",\n                    "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"|' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle
+          #
+          # NOTE: CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON is intentionally NOT
+          # added here even though DawnTest's Android build uses it. BN pulls
+          # in quickjs-ng (for quickjs) and Hermes (for hermes), both of which
+          # explicitly pass `-fuse-ld=gold` to some of their helper executables
+          # (lre-test, count). Combined with `-flto=thin` (which IPO=ON adds),
+          # ld.gold needs LLVMgold.so to handle aarch64 LTO bitcode — and the
+          # NDK r28 prebuilt toolchain doesn't ship LLVMgold.so. The link then
+          # fails with "could not load plugin library: LLVMgold.so" before any
+          # of our flags can take effect. DawnTest doesn't see this because it
+          # uses Cedric's QuickJS fork (no `-fuse-ld=gold`). Dropping IPO loses
+          # the LTO size win on Android-BN but everything else (-Oz, visibility,
+          # gc-sections) still applies.
+          sed -i 's|"-DBABYLON_DEBUG_TRACE=ON"|"-DBABYLON_DEBUG_TRACE=ON",\n                    "-DCMAKE_C_FLAGS_RELEASE=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden",\n                    "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden",\n                    "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden",\n                    "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O3 -DNDEBUG -Oz -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden",\n                    "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=-Wl,--gc-sections",\n                    "-DCMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO=-Wl,--gc-sections"|' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle
           # Show the resulting arguments block for CI debugging.
           sed -n '/externalNativeBuild {/,/^        }$/p' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle | head -40
 
