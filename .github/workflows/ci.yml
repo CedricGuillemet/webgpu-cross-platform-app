@@ -569,16 +569,17 @@ jobs:
           $engine = $engineMap['${{ matrix.engine }}']
           $gfx    = $gfxMap['${{ matrix.graphics }}']
           # Match DawnTest's MSVC size flags for an apples-to-apples size compare.
-          # /WX:NO disables linker-warnings-as-error so that BN's latent
-          # trace_region std::atomic alignment mismatch (C4744, only visible
-          # under /GL+/LTCG whole-program analysis) doesn't break the link.
-          # The mismatch is harmless in practice — std::atomic<int> with
-          # implicit and explicit alignof(4) lay out identically — but BN
-          # passes /WX to the linker globally, which would otherwise turn
-          # C4744 into LNK1257. /IGNORE:4744 doesn't work here because C4744
-          # isn't in MSVC link.exe's suppressible warning whitelist.
-          $cFlags = "/O1 /Ob2 /DNDEBUG /Gy /Gw /GL /Zc:inline"
-          $linkFlags = "/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE /WX:NO"
+          # /wd4744 suppresses BN's latent trace_region std::atomic alignment
+          # mismatch that only becomes visible under /GL link-time codegen.
+          # The warning is real (implicit vs __declspec(align(4)) on
+          # std::atomic<int> across TUs) but functionally harmless — both
+          # layouts are identical on x64. BN turns warnings into errors via
+          # BabylonJS/CMakeExtensions::warnings_as_errors() which adds /WX to
+          # target compile options; that promotion carries through into /GL
+          # link-time codegen as C2220 → LNK1257, so /wd4744 has to be set at
+          # compile time (link-time /IGNORE: doesn't accept C4744 either).
+          $cFlags = "/O1 /Ob2 /DNDEBUG /Gy /Gw /GL /Zc:inline /wd4744"
+          $linkFlags = "/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE"
           cmake -S BabylonNative -B BabylonNative/build `
             -G "Visual Studio 17 2022" -A x64 `
             "-DNAPI_JAVASCRIPT_ENGINE=$engine" `
