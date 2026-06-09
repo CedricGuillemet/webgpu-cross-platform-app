@@ -67,13 +67,25 @@ else()
   # symbols and the rest is reachable via templates).  CMake's IPO wrapper
   # picks the right flag per compiler (-flto on Clang, -flto on GCC) and is a
   # no-op if the toolchain can't do it.
-  include(CheckIPOSupported)
-  check_ipo_supported(RESULT _ipo_ok OUTPUT _ipo_err)
-  if(_ipo_ok)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-    message(STATUS "IPO/LTO enabled")
+  #
+  # Skip on Android: the comparison vs BabylonNative Playground is only fair
+  # without IPO here.  BN-Android can't enable LTO because some of its
+  # dependencies (quickjs-ng/lre-test, hermes/external/llvh/utils/count)
+  # explicitly pass -fuse-ld=gold and the NDK r28 prebuilt toolchain doesn't
+  # ship LLVMgold.so for ld.gold to handle aarch64 LTO bitcode.  Disabling
+  # IPO here makes the Android cells apples-to-apples; the other platforms
+  # have IPO on both sides.
+  if(NOT ANDROID)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _ipo_ok OUTPUT _ipo_err)
+    if(_ipo_ok)
+      set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+      message(STATUS "IPO/LTO enabled")
+    else()
+      message(STATUS "IPO/LTO not supported: ${_ipo_err}")
+    endif()
   else()
-    message(STATUS "IPO/LTO not supported: ${_ipo_err}")
+    message(STATUS "IPO/LTO skipped on Android for parity with BN-Android")
   endif()
 endif()
 
