@@ -50,7 +50,11 @@ else()
   # Hide template-instantiated symbols by default so the linker can drop
   # anything not explicitly exported.  Matches the size discipline that
   # bgfx/BabylonNative already get from their own build setup.
-  add_compile_options(-fvisibility=hidden -fvisibility-inlines-hidden)
+  # -fvisibility-inlines-hidden is C++-only; scope it via the
+  # $<COMPILE_LANGUAGE:CXX> generator expression so QuickJS's pure-C TUs
+  # (cutils.c, libregexp.c, ...) compiled with -Werror don't reject it.
+  add_compile_options(-fvisibility=hidden)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fvisibility-inlines-hidden>)
   if(APPLE)
     add_link_options(-Wl,-dead_strip)
   elseif(ANDROID)
