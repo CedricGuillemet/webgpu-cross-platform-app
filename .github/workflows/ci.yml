@@ -490,11 +490,476 @@ jobs:
           retention-days: 14
 
   # ============================================================
+  # BabylonNative Playground — comparison build.
+  #
+  # For every non-Vulkan DawnTest cell we also build the upstream
+  # BabylonNative `Playground` host so the size summary can show both
+  # numbers side-by-side. Branch selection per JS engine:
+  #   * quickjs → CedricGuillemet/BabylonNative @ quickjs
+  #   * hermes  → CedricGuillemet/BabylonNative @ hermes-integration
+  #   * other   → BabylonJS/BabylonNative @ master
+  #
+  # All cells: Release build, debug info stripped where applicable.
+  # ============================================================
+
+  # ---- Win32 ----
+  build-bn-win32:
+    name: bn / win32 / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: windows-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        # No Vulkan (per user request) and no OpenGL (BN Win32 only supports
+        # ANGLE-via-Chromium for GL, not viable in headless CI).
+        engine: [chakra, v8, quickjs, hermes]
+        graphics: [d3d11, d3d12]
+    steps:
+      - name: Enable Git long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Pick BabylonNative repo/branch for this engine
+        id: bn
+        shell: bash
+        run: |
+          case "${{ matrix.engine }}" in
+            quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
+            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"              >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Clone BabylonNative
+        shell: pwsh
+        run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
+
+      - name: Set up Node (for npm install of Apps/)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          $engineMap = @{
+            'chakra'  = 'Chakra'
+            'v8'      = 'V8'
+            'quickjs' = 'QuickJS'
+            'hermes'  = 'Hermes'
+          }
+          $gfxMap = @{
+            'd3d11'  = 'D3D11'
+            'd3d12'  = 'D3D12'
+          }
+          $engine = $engineMap['${{ matrix.engine }}']
+          $gfx    = $gfxMap['${{ matrix.graphics }}']
+          cmake -S BabylonNative -B BabylonNative/build `
+            -G "Visual Studio 17 2022" -A x64 `
+            "-DNAPI_JAVASCRIPT_ENGINE=$engine" `
+            "-DGRAPHICS_API=$gfx"
+
+      - name: Build Playground (Release)
+        shell: pwsh
+        run: cmake --build BabylonNative/build --config Release --target Playground -- /m
+
+      - name: Locate Playground.exe
+        id: locate
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem BabylonNative/build -Recurse -Filter Playground.exe | Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $exe) { throw "Playground.exe not found" }
+          $bytes = (Get-Item $exe.FullName).Length
+          "exe=$($exe.FullName)" | Out-File -Append $env:GITHUB_OUTPUT
+          "size_bytes=$bytes"    | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host ("BN size: {0} bytes ({1:N2} MB)" -f $bytes, ($bytes/1MB))
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bn-playground-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---- macOS ----
+  build-bn-macos:
+    name: bn / macos / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: macos-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [jsc, quickjs]
+        graphics: [metal]
+    steps:
+      - name: Pick BabylonNative repo/branch for this engine
+        id: bn
+        run: |
+          case "${{ matrix.engine }}" in
+            quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Clone BabylonNative
+        run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Configure
+        run: |
+          case "${{ matrix.engine }}" in
+            jsc)     engine=JavaScriptCore ;;
+            quickjs) engine=QuickJS        ;;
+          esac
+          cmake -S BabylonNative -B BabylonNative/build/macOS \
+            -G Xcode \
+            -D NAPI_JAVASCRIPT_ENGINE=$engine \
+            -D BABYLON_NATIVE_TESTS_USE_NOOP_METAL_DEVICE=ON
+
+      - name: Build Playground (Release)
+        run: |
+          cmake --build BabylonNative/build/macOS --target Playground --config Release
+
+      - name: Locate Playground.app, strip and report size
+        id: locate
+        run: |
+          app=$(find BabylonNative/build/macOS -type d -name 'Playground.app' | head -1)
+          if [ -z "$app" ]; then echo "Playground.app not found"; exit 1; fi
+          bin="$app/Contents/MacOS/Playground"
+          if [ -f "$bin" ]; then strip -S "$bin" || true; fi
+          # Report the inner binary size (comparable with DawnTest's `app` Mach-O).
+          bytes=$(stat -f%z "$bin")
+          echo "exe=$bin" >> "$GITHUB_OUTPUT"
+          echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
+          printf "BN size: %s bytes (%.2f MB)\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bn-playground-macos-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---- iOS ----
+  build-bn-ios:
+    name: bn / ios / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: macos-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [jsc, quickjs]
+        graphics: [metal]
+    steps:
+      - name: Pick BabylonNative repo/branch for this engine
+        id: bn
+        run: |
+          case "${{ matrix.engine }}" in
+            quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Clone BabylonNative
+        run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Configure
+        run: |
+          case "${{ matrix.engine }}" in
+            jsc)     engine=JavaScriptCore ;;
+            quickjs) engine=QuickJS        ;;
+          esac
+          # Match upstream BN's iOS configure (ios-cmake toolchain via IOS=ON).
+          cmake -S BabylonNative -B BabylonNative/build/iOS \
+            -G Xcode \
+            -D IOS=ON \
+            -D DEPLOYMENT_TARGET=15.0 \
+            -D CMAKE_IOS_INSTALL_COMBINED=NO \
+            -D NAPI_JAVASCRIPT_ENGINE=$engine
+
+      - name: Build Playground (Release)
+        run: |
+          xcodebuild \
+            -project BabylonNative/build/iOS/BabylonNative.xcodeproj \
+            -scheme Playground \
+            -sdk iphoneos \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Locate Playground.app and report size
+        id: locate
+        run: |
+          app=$(find BabylonNative/build/iOS -type d -name 'Playground.app' | head -1)
+          if [ -z "$app" ]; then echo "Playground.app not found"; exit 1; fi
+          bin="$app/Playground"
+          [ -f "$bin" ] || bin="$app/Contents/MacOS/Playground"
+          if [ -f "$bin" ]; then strip -S "$bin" || true; fi
+          bytes=$(stat -f%z "$bin")
+          echo "exe=$bin" >> "$GITHUB_OUTPUT"
+          echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
+          printf "BN size: %s bytes (%.2f MB)\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bn-playground-ios-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---- Ubuntu ----
+  build-bn-ubuntu:
+    name: bn / ubuntu / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        # No Vulkan (per user request). BN Linux supports OpenGL natively.
+        engine: [jsc, quickjs, hermes]
+        graphics: [opengl]
+    steps:
+      - name: Pick BabylonNative repo/branch for this engine
+        id: bn
+        run: |
+          case "${{ matrix.engine }}" in
+            quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
+            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Clone BabylonNative
+        run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake pkg-config clang \
+            libjavascriptcoregtk-4.1-dev \
+            libgl1-mesa-dev libcurl4-openssl-dev libwayland-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+
+      - name: Configure
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          case "${{ matrix.engine }}" in
+            jsc)     engine=JavaScriptCore ;;
+            quickjs) engine=QuickJS        ;;
+            hermes)  engine=Hermes         ;;
+          esac
+          cmake -S BabylonNative -B BabylonNative/build/Linux \
+            -G Ninja \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D NAPI_JAVASCRIPT_ENGINE=$engine \
+            -D JAVASCRIPTCORE_LIBRARY=/usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so \
+            -D OpenGL_GL_PREFERENCE=GLVND \
+            -D GRAPHICS_API=OpenGL
+
+      - name: Build Playground (Release)
+        run: cmake --build BabylonNative/build/Linux --target Playground
+
+      - name: Locate, strip and report size
+        id: locate
+        run: |
+          exe=$(find BabylonNative/build/Linux -type f -name Playground -executable | head -1)
+          if [ -z "$exe" ]; then echo "Playground not found"; exit 1; fi
+          strip --strip-all "$exe" || true
+          bytes=$(stat -c%s "$exe")
+          echo "exe=$exe" >> "$GITHUB_OUTPUT"
+          echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
+          printf "BN size: %s bytes (%.2f MB)\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bn-playground-ubuntu-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---- Android ----
+  build-bn-android:
+    name: bn / android / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        # No Vulkan (per user request). On Android the BN graphics API is
+        # always GL ES under the hood; we still emit two rows (opengl /
+        # opengles) so the matrix lines up 1:1 with the DawnTest table.
+        engine: [quickjs, v8, hermes]
+        graphics: [opengles, opengl]
+    steps:
+      - name: Pick BabylonNative repo/branch for this engine
+        id: bn
+        run: |
+          case "${{ matrix.engine }}" in
+            quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
+            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Clone BabylonNative
+        run: git clone --depth 1 --branch ${{ steps.bn.outputs.branch }} https://github.com/${{ steps.bn.outputs.repo }}.git BabylonNative
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358 cmake;3.22.1"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.13"
+
+      - name: npm install (Apps/) — required for copyFiles task
+        working-directory: BabylonNative/Apps
+        run: npm install --no-audit --no-fund --no-progress
+
+      - name: Build host hermesc (Hermes only)
+        if: matrix.engine == 'hermes'
+        run: |
+          mkdir -p hermes-host && cd hermes-host
+          git clone --depth 1 --branch static_h https://github.com/facebook/hermes.git
+          cmake -S hermes -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DHERMES_ENABLE_TOOLS=ON \
+            -DHERMES_ENABLE_TEST_SUITE=OFF \
+            -DHERMES_ENABLE_INTL=OFF \
+            -DHERMES_ENABLE_DEBUGGER=OFF
+          cmake --build build --target hermesc
+          if [ ! -f build/ImportHostCompilers.cmake ]; then
+            echo "ImportHostCompilers.cmake not produced"; exit 1
+          fi
+          echo "HERMESC_HOST=$(pwd)/build/ImportHostCompilers.cmake" >> "$GITHUB_ENV"
+
+      - name: Inject IMPORT_HOST_COMPILERS into BN Android CMake args (Hermes only)
+        if: matrix.engine == 'hermes'
+        run: |
+          # Append the host-compiler import file to the externalNativeBuild
+          # cmake arguments block in the BN library gradle file.
+          sed -i 's|"-DBABYLON_DEBUG_TRACE=ON"|"-DBABYLON_DEBUG_TRACE=ON",\n                    "-DIMPORT_HOST_COMPILERS='"$HERMESC_HOST"'"|' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle
+
+      - name: Map matrix graphics → BN GRAPHICS_API
+        id: gfx
+        run: |
+          case "${{ matrix.graphics }}" in
+            opengles|opengl) echo "value=OpenGL" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Map matrix engine → BN jsEngine
+        id: engine
+        run: |
+          case "${{ matrix.engine }}" in
+            v8)      echo "value=V8"      >> "$GITHUB_OUTPUT" ;;
+            quickjs) echo "value=QuickJS" >> "$GITHUB_OUTPUT" ;;
+            hermes)  echo "value=Hermes"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Build APK
+        working-directory: BabylonNative/Apps/Playground/Android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -PjsEngine=${{ steps.engine.outputs.value }} \
+            -PGRAPHICS_API=${{ steps.gfx.outputs.value }} \
+            -PARM64Only \
+            -PNDK_VERSION=28.2.13676358 \
+            --no-daemon --console=plain
+
+      - name: Locate native .so (arm64-v8a, stripped)
+        id: locate
+        run: |
+          # Prefer the main BN shared lib; fall back to the largest .so if
+          # the artifact name differs across branches.
+          so=$(find BabylonNative/Apps/Playground/Android -type f -name '*.so' -path '*arm64-v8a*' -path '*stripped_native_libs*' | xargs -I{} ls -S {} 2>/dev/null | head -1)
+          if [ -z "$so" ]; then
+            so=$(find BabylonNative/Apps/Playground/Android -type f -name '*.so' -path '*arm64-v8a*' | xargs -I{} ls -S {} 2>/dev/null | head -1)
+          fi
+          if [ -z "$so" ]; then echo "no arm64-v8a .so found"; find BabylonNative/Apps/Playground/Android -name '*.so'; exit 1; fi
+          bytes=$(stat -c%s "$so")
+          echo "exe=$so" >> "$GITHUB_OUTPUT"
+          echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
+          printf "BN size: %s bytes (%.2f MB) — %s\n" "$bytes" "$(echo "scale=2; $bytes/1048576" | bc)" "$(basename "$so")"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bn-playground-android-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+  # ============================================================
   # Aggregate all artifact sizes into a single Markdown summary.
   # ============================================================
   summary:
     name: summary
-    needs: [build-win32, build-macos, build-ios, build-ubuntu, build-android]
+    needs:
+      - build-win32
+      - build-macos
+      - build-ios
+      - build-ubuntu
+      - build-android
+      - build-bn-win32
+      - build-bn-macos
+      - build-bn-ios
+      - build-bn-ubuntu
+      - build-bn-android
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -504,29 +969,67 @@ jobs:
           path: artifacts
 
       - name: Build size summary
+        shell: bash
         run: |
           set -e
-          {
-            echo "# Build artifact sizes"
-            echo
-            echo "Each row is one cell of the matrix that produced a downloadable artifact."
-            echo
-            echo "| OS | Engine | Graphics | Artifact | Size (bytes) | Size |"
-            echo "|----|--------|----------|----------|-------------:|-----:|"
-            shopt -s nullglob
-            for dir in artifacts/app-*; do
-              name=$(basename "$dir")
-              IFS='-' read -r _ os engine graphics <<< "$name"
-              file=$(find "$dir" -type f | head -1)
-              if [ -n "$file" ]; then
-                bytes=$(stat -c%s "$file")
-                mb=$(awk "BEGIN { printf \"%.2f\", $bytes/1048576 }")
-                base=$(basename "$file")
-                printf "| %s | %s | %s | \`%s\` | %d | %s MB |\n" "$os" "$engine" "$graphics" "$base" "$bytes" "$mb"
-              fi
-            done | sort
-            echo
-            echo "_Build run: ${{ github.run_id }} • commit ${{ github.sha }}_"
-          } | tee "$GITHUB_STEP_SUMMARY"
+          cat > summary.py <<'PYEOF'
+          import os, glob, sys
+
+          run_id = sys.argv[1] if len(sys.argv) > 1 else ""
+          sha    = sys.argv[2] if len(sys.argv) > 2 else ""
+
+          def first_file(d):
+              for root, _, files in os.walk(d):
+                  for f in files:
+                      return os.path.join(root, f)
+              return None
+
+          # key -> {'dt': (file, bytes), 'bn': (file, bytes)}
+          rows = {}
+          for d in sorted(glob.glob('artifacts/app-*')):
+              name = os.path.basename(d)
+              parts = name.split('-')
+              if len(parts) < 4:
+                  continue
+              os_, engine, graphics = parts[1], parts[2], '-'.join(parts[3:])
+              f = first_file(d)
+              if not f:
+                  continue
+              rows.setdefault((os_, engine, graphics), {})['dt'] = (os.path.basename(f), os.path.getsize(f))
+
+          for d in sorted(glob.glob('artifacts/bn-playground-*')):
+              name = os.path.basename(d)
+              parts = name.split('-')
+              # bn-playground-<os>-<engine>-<graphics>
+              if len(parts) < 5:
+                  continue
+              os_, engine, graphics = parts[2], parts[3], '-'.join(parts[4:])
+              f = first_file(d)
+              if not f:
+                  continue
+              rows.setdefault((os_, engine, graphics), {})['bn'] = (os.path.basename(f), os.path.getsize(f))
+
+          def mb(b):
+              return "{:.2f} MB".format(b/1048576)
+
+          print("# Build artifact sizes")
+          print()
+          print("Side-by-side comparison of DawnTest and BabylonNative Playground for each matrix cell.")
+          print()
+          print("| OS | Engine | Graphics | DawnTest artifact | DawnTest size | BabylonNative Playground size |")
+          print("|----|--------|----------|-------------------|--------------:|------------------------------:|")
+          for key in sorted(rows.keys()):
+              os_, engine, graphics = key
+              entry = rows[key]
+              dt = entry.get('dt')
+              bn = entry.get('bn')
+              dt_file = "`{}`".format(dt[0]) if dt else "—"
+              dt_size = mb(dt[1]) if dt else "—"
+              bn_size = mb(bn[1]) if bn else "—"
+              print("| {} | {} | {} | {} | {} | {} |".format(os_, engine, graphics, dt_file, dt_size, bn_size))
+          print()
+          print("_Build run: {} • commit {}_".format(run_id, sha))
+          PYEOF
+          python3 summary.py "${{ github.run_id }}" "${{ github.sha }}" | tee "$GITHUB_STEP_SUMMARY"
 
 
