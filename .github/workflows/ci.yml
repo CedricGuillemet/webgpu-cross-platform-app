@@ -182,6 +182,10 @@ jobs:
         run: |
           exe=$(find build -type f -name app | head -1)
           if [ -z "$exe" ]; then echo "app not found"; exit 1; fi
+          # Strip debug symbols so the reported size is comparable with the
+          # BN Playground rows (which are also stripped) and with the
+          # Android DawnTest row (Gradle stripReleaseDebugSymbols).
+          strip -S "$exe" || true
           bytes=$(stat -f%z "$exe")
           echo "exe=$exe" >> "$GITHUB_OUTPUT"
           echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
@@ -258,6 +262,9 @@ jobs:
         run: |
           exe=$(find build -type f -name app | head -1)
           if [ -z "$exe" ]; then echo "app not found"; exit 1; fi
+          # Strip debug symbols so the reported size is comparable with the
+          # BN Playground rows (which are also stripped).
+          strip -S "$exe" || true
           bytes=$(stat -f%z "$exe")
           echo "exe=$exe" >> "$GITHUB_OUTPUT"
           echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
@@ -346,6 +353,9 @@ jobs:
         run: |
           exe=$(find build -type f -name app -executable | head -1)
           if [ -z "$exe" ]; then echo "app not found"; exit 1; fi
+          # Strip debug symbols so the reported size is comparable with the
+          # BN Playground rows (which are also stripped).
+          strip --strip-all "$exe" || true
           bytes=$(stat -c%s "$exe")
           echo "exe=$exe" >> "$GITHUB_OUTPUT"
           echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
