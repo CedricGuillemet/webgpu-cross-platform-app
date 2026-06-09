@@ -371,7 +371,7 @@ jobs:
       fail-fast: false
       matrix:
         engine: [quickjs, v8, hermes]
-        graphics: [vulkan, opengles, opengl]
+        graphics: [vulkan, opengles]
     steps:
       - name: Checkout (no submodule recursion)
         uses: actions/checkout@v4
@@ -822,10 +822,11 @@ jobs:
       fail-fast: false
       matrix:
         # No Vulkan (per user request). On Android the BN graphics API is
-        # always GL ES under the hood; we still emit two rows (opengl /
-        # opengles) so the matrix lines up 1:1 with the DawnTest table.
+        # always GL ES under the hood; only one row is emitted (opengles),
+        # since DawnTest's "opengl" Android variant was removed as a
+        # duplicate of "opengles".
         engine: [quickjs, v8, hermes]
-        graphics: [opengles, opengl]
+        graphics: [opengles]
     steps:
       - name: Pick BabylonNative repo/branch for this engine
         id: bn
@@ -898,7 +899,7 @@ jobs:
         id: gfx
         run: |
           case "${{ matrix.graphics }}" in
-            opengles|opengl) echo "value=OpenGL" >> "$GITHUB_OUTPUT" ;;
+            opengles) echo "value=OpenGL" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Map matrix engine → BN jsEngine
@@ -924,23 +925,23 @@ jobs:
       - name: Locate native .so (arm64-v8a, stripped)
         id: locate
         run: |
-          # Search the stripped output first (release build), fall back to
-          # the unstripped layout. Sort by size descending and pick the
-          # largest .so — this is the BN core library (libBabylonNative.so /
-          # libplayground.so), NOT engine-side runtimes (libc++_shared.so,
-          # libhermesvmlean.so, etc) which are separately packaged.
+          # The Playground Android module names its BN-linked JNI library
+          # `libBabylonNativeJNI.so` (see
+          # Apps/Playground/Android/BabylonNative/CMakeLists.txt).  Target it
+          # by name — selecting the "largest .so" picked up unrelated runtime
+          # libraries (libc++_shared.so for V8 builds, libhermesvmlean.so for
+          # Hermes builds) instead of the BN core that we actually built.
           base=BabylonNative/Apps/Playground/Android
           echo "--- all arm64-v8a .so candidates (size, path) ---"
           find "$base" -type f -name '*.so' -path '*arm64-v8a*' \
-            -exec stat -c '%s %n' {} \; | sort -nr
+            -exec stat -c '%s %n' {} \; | sort -nr || true
           echo "--- end candidates ---"
-          so=$(find "$base" -type f -name '*.so' -path '*arm64-v8a*' -path '*stripped_native_libs*' \
-            -exec stat -c '%s %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
+          # Prefer the stripped, release-built copy if available.
+          so=$(find "$base" -type f -name 'libBabylonNativeJNI.so' -path '*arm64-v8a*' -path '*stripped_native_libs*' | head -1)
           if [ -z "$so" ]; then
-            so=$(find "$base" -type f -name '*.so' -path '*arm64-v8a*' \
-              -exec stat -c '%s %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
+            so=$(find "$base" -type f -name 'libBabylonNativeJNI.so' -path '*arm64-v8a*' | head -1)
           fi
-          if [ -z "$so" ]; then echo "no arm64-v8a .so found"; exit 1; fi
+          if [ -z "$so" ]; then echo "libBabylonNativeJNI.so not found"; exit 1; fi
           bytes=$(stat -c%s "$so")
           echo "exe=$so" >> "$GITHUB_OUTPUT"
           echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
