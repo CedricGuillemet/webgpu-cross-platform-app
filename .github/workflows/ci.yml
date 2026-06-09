@@ -569,12 +569,16 @@ jobs:
           $engine = $engineMap['${{ matrix.engine }}']
           $gfx    = $gfxMap['${{ matrix.graphics }}']
           # Match DawnTest's MSVC size flags for an apples-to-apples size compare.
-          # /IGNORE:4744 suppresses BN's latent trace_region std::atomic
-          # alignment mismatch that only becomes visible under /GL+/LTCG (BN
-          # builds with /WX globally; that warning would otherwise become a
-          # LNK1257 hard error).
+          # /WX:NO disables linker-warnings-as-error so that BN's latent
+          # trace_region std::atomic alignment mismatch (C4744, only visible
+          # under /GL+/LTCG whole-program analysis) doesn't break the link.
+          # The mismatch is harmless in practice — std::atomic<int> with
+          # implicit and explicit alignof(4) lay out identically — but BN
+          # passes /WX to the linker globally, which would otherwise turn
+          # C4744 into LNK1257. /IGNORE:4744 doesn't work here because C4744
+          # isn't in MSVC link.exe's suppressible warning whitelist.
           $cFlags = "/O1 /Ob2 /DNDEBUG /Gy /Gw /GL /Zc:inline"
-          $linkFlags = "/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE /IGNORE:4744"
+          $linkFlags = "/LTCG /OPT:REF /OPT:ICF /INCREMENTAL:NO /DEBUG:NONE /WX:NO"
           cmake -S BabylonNative -B BabylonNative/build `
             -G "Visual Studio 17 2022" -A x64 `
             "-DNAPI_JAVASCRIPT_ENGINE=$engine" `
