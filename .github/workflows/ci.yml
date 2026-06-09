@@ -924,13 +924,23 @@ jobs:
       - name: Locate native .so (arm64-v8a, stripped)
         id: locate
         run: |
-          # Prefer the main BN shared lib; fall back to the largest .so if
-          # the artifact name differs across branches.
-          so=$(find BabylonNative/Apps/Playground/Android -type f -name '*.so' -path '*arm64-v8a*' -path '*stripped_native_libs*' | xargs -I{} ls -S {} 2>/dev/null | head -1)
+          # Search the stripped output first (release build), fall back to
+          # the unstripped layout. Sort by size descending and pick the
+          # largest .so — this is the BN core library (libBabylonNative.so /
+          # libplayground.so), NOT engine-side runtimes (libc++_shared.so,
+          # libhermesvmlean.so, etc) which are separately packaged.
+          base=BabylonNative/Apps/Playground/Android
+          echo "--- all arm64-v8a .so candidates (size, path) ---"
+          find "$base" -type f -name '*.so' -path '*arm64-v8a*' \
+            -exec stat -c '%s %n' {} \; | sort -nr
+          echo "--- end candidates ---"
+          so=$(find "$base" -type f -name '*.so' -path '*arm64-v8a*' -path '*stripped_native_libs*' \
+            -exec stat -c '%s %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
           if [ -z "$so" ]; then
-            so=$(find BabylonNative/Apps/Playground/Android -type f -name '*.so' -path '*arm64-v8a*' | xargs -I{} ls -S {} 2>/dev/null | head -1)
+            so=$(find "$base" -type f -name '*.so' -path '*arm64-v8a*' \
+              -exec stat -c '%s %n' {} \; | sort -nr | head -1 | cut -d' ' -f2-)
           fi
-          if [ -z "$so" ]; then echo "no arm64-v8a .so found"; find BabylonNative/Apps/Playground/Android -name '*.so'; exit 1; fi
+          if [ -z "$so" ]; then echo "no arm64-v8a .so found"; exit 1; fi
           bytes=$(stat -c%s "$so")
           echo "exe=$so" >> "$GITHUB_OUTPUT"
           echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
