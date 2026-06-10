@@ -1158,6 +1158,16 @@ jobs:
           # BN loads playground_runner.js from app:///Scripts/ relative to
           # the cwd, so we run from the artifact's root (where Scripts/
           # lives). The user script can be an absolute path.
+          # scene200.js is not in upstream BabylonNative (only the cedric
+          # forks carry it locally), so seed it from the asset pipeline's
+          # canonical copy so v8/chakra/quickjs/hermes all see the same
+          # script.
+          $srcScene = Join-Path $PWD '..\assets\script\dist\scene200.babylon.js'
+          if (-not (Test-Path $srcScene)) {
+              $srcScene = Join-Path $PWD '..\assets\script\src\babylon\scene200.js'
+          }
+          if (-not (Test-Path 'Scripts')) { New-Item -ItemType Directory -Path Scripts | Out-Null }
+          Copy-Item -Force $srcScene 'Scripts/scene200.js'
           $script = Resolve-Path "Scripts/scene200.js"
           $exe = Get-ChildItem . -Filter Playground.exe | Select-Object -First 1
           if (-not $exe) { throw "Playground.exe missing from artifact" }
