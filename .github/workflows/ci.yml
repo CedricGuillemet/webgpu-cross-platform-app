@@ -1080,7 +1080,10 @@ jobs:
         shell: pwsh
         working-directory: assets/script
         run: |
-          npm ci
+          # npm install (not npm ci) because the lockfile isn't tracked
+          # (see assets/script/.gitignore). Bench results don't depend on
+          # bit-exact dep versions; esbuild/babel/preset-env are stable.
+          npm install --no-audit --no-fund
           npm run build
 
       - name: Download DawnTest artifact
