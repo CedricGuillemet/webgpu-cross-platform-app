@@ -506,7 +506,7 @@ jobs:
   # BabylonNative `Playground` host so the size summary can show both
   # numbers side-by-side. Branch selection per JS engine:
   #   * quickjs → CedricGuillemet/BabylonNative @ quickjs
-  #   * hermes  → CedricGuillemet/BabylonNative @ hermes-integration
+  #   * hermes  → CedricGuillemet/BabylonNative @ hermes-integration-dawn
   #   * other   → BabylonJS/BabylonNative @ master
   #
   # All cells: Release build, debug info stripped where applicable.
@@ -535,7 +535,7 @@ jobs:
         run: |
           case "${{ matrix.engine }}" in
             quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
-            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration" >> "$GITHUB_OUTPUT" ;;
+            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration-dawn" >> "$GITHUB_OUTPUT" ;;
             *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"              >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -804,7 +804,7 @@ jobs:
         run: |
           case "${{ matrix.engine }}" in
             quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
-            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration" >> "$GITHUB_OUTPUT" ;;
+            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration-dawn" >> "$GITHUB_OUTPUT" ;;
             *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"  >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -900,7 +900,7 @@ jobs:
         run: |
           case "${{ matrix.engine }}" in
             quickjs) echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=quickjs" >> "$GITHUB_OUTPUT" ;;
-            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration" >> "$GITHUB_OUTPUT" ;;
+            hermes)  echo "repo=CedricGuillemet/BabylonNative" >> "$GITHUB_OUTPUT"; echo "branch=hermes-integration-dawn" >> "$GITHUB_OUTPUT" ;;
             *)       echo "repo=BabylonJS/BabylonNative"        >> "$GITHUB_OUTPUT"; echo "branch=master"  >> "$GITHUB_OUTPUT" ;;
           esac
 
