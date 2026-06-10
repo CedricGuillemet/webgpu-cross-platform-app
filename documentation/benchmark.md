@@ -168,14 +168,32 @@ stats (it dominates shader/PSO compile + first asset upload).
 
 ## CI integration
 
-A GitHub Actions job (`bench-win32-{d3d11,d3d12}`) runs after the
-existing per-engine build matrix. It downloads the build artifacts,
-runs `tools/bench/run-bench.mjs --frames 600 --no-open`, uploads the
-HTML report as an artifact, and extends the existing binary-size
-summary with an `avg ms/frame` column per cell.
+A GitHub Actions job (`bench / win32 / <engine> / <graphics>`) runs
+after the `build-win32` and `build-bn-win32` matrices. It does **not**
+use `tools/bench/run-bench.mjs` (the runner discovers local build dirs
+and isn't a good fit for CI's artifact-based layout); instead, each
+matrix cell:
 
+1. Downloads `app-win32-<engine>-<graphics>` (DawnTest exe) and
+   `bn-playground-dir-win32-<engine>-<graphics>` (BN full output dir,
+   needed because Playground loads `playground_runner.js` from
+   `app:///Scripts/` relative to cwd).
+2. Runs the asset pipeline (`assets/script && npm ci && npm run build`)
+   to regenerate the four scene200 bundles.
+3. Launches each binary with `--frames 300 --no-vsync`, capturing
+   the `BENCH …` stdout line.
+4. Emits `bench-win32-<engine>-<graphics>.json` (DawnTest + BN side by
+   side) as an artifact.
+
+The `summary` job downloads all `bench-win32-*` JSONs and extends the
+size-comparison Markdown table with `DawnTest avg ms/frame` and
+`BN avg ms/frame` columns per cell.
+
+CI bench is win32-only (D3D11 + D3D12 x {chakra, v8, quickjs, hermes}).
 mac / Android / iOS jobs **build only**, since GitHub-hosted mac
-runners have no GPU and Android emulator perf is meaningless.
+runners have no GPU and Android emulator perf is meaningless. Vulkan
+and OpenGL are also skipped: no Vulkan SDK on the runners, and BN
+Win32 only supports OpenGL via ANGLE.
 
 ## Files of interest
 

@@ -602,14 +602,26 @@ jobs:
           if (-not $exe) { throw "Playground.exe not found" }
           $bytes = (Get-Item $exe.FullName).Length
           "exe=$($exe.FullName)" | Out-File -Append $env:GITHUB_OUTPUT
+          # Output dir holds Playground.exe + Scripts/ + runtime DLLs; needed
+          # in full for the bench job since playground_runner.js is loaded
+          # from app:///Scripts/ relative to cwd.
+          "exedir=$($exe.Directory.FullName)" | Out-File -Append $env:GITHUB_OUTPUT
           "size_bytes=$bytes"    | Out-File -Append $env:GITHUB_OUTPUT
           Write-Host ("BN size: {0} bytes ({1:N2} MB)" -f $bytes, ($bytes/1MB))
 
-      - name: Upload artifact
+      - name: Upload artifact (exe only, for size summary)
         uses: actions/upload-artifact@v4
         with:
           name: bn-playground-win32-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload artifact (full output dir, for bench)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bn-playground-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exedir }}
           if-no-files-found: error
           retention-days: 14
 
@@ -1034,6 +1046,145 @@ jobs:
           retention-days: 14
 
   # ============================================================
+  # Per-frame perf benchmark of scene200 (win32 only, no GPU on
+  # mac/android runners). Runs each engine x graphics cell against
+  # both DawnTest and BabylonNative Playground and uploads a per-cell
+  # JSON file the summary job aggregates.
+  # ============================================================
+  bench-win32:
+    name: bench / win32 / ${{ matrix.engine }} / ${{ matrix.graphics }}
+    needs: [build-win32, build-bn-win32]
+    runs-on: windows-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chakra, v8, quickjs, hermes]
+        graphics: [d3d11, d3d12]
+    steps:
+      - name: Enable Git long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Checkout (for asset pipeline + runner)
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build asset bundles
+        shell: pwsh
+        working-directory: assets/script
+        run: |
+          npm ci
+          npm run build
+
+      - name: Download DawnTest artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: dt
+
+      - name: Download BabylonNative Playground artifact (full dir)
+        uses: actions/download-artifact@v4
+        with:
+          name: bn-playground-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: bn
+
+      - name: Bench DawnTest
+        id: bench_dt
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $bundle = if ('${{ matrix.engine }}' -eq 'chakra') {
+            'assets/script/dist-chakra/scene200.lite.chakra.js'
+          } else {
+            'assets/script/dist/scene200.lite.js'
+          }
+          $exe = Get-ChildItem dt -Recurse -Filter app.exe | Select-Object -First 1
+          if (-not $exe) { throw "app.exe missing from artifact" }
+          Write-Host "DawnTest: $($exe.FullName) -> $bundle"
+          # Capture to a file; PowerShell's pipeline preserves the BENCH line.
+          & $exe.FullName --scene $bundle --frames 300 --width 640 --height 480 *>&1 |
+            Tee-Object -FilePath dt-bench.log
+          $line = Select-String -Path dt-bench.log -Pattern '^BENCH ' | Select-Object -First 1
+          if (-not $line) {
+            Write-Warning "no BENCH line in DawnTest output"
+            "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
+          } else {
+            $line.Line | Out-File dt-bench.line
+            "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
+            Write-Host "DawnTest BENCH: $($line.Line)"
+          }
+
+      - name: Bench BabylonNative Playground
+        id: bench_bn
+        shell: pwsh
+        continue-on-error: true
+        working-directory: bn
+        run: |
+          # BN loads playground_runner.js from app:///Scripts/ relative to
+          # the cwd, so we run from the artifact's root (where Scripts/
+          # lives). The user script can be an absolute path.
+          $script = Resolve-Path "Scripts/scene200.js"
+          $exe = Get-ChildItem . -Filter Playground.exe | Select-Object -First 1
+          if (-not $exe) { throw "Playground.exe missing from artifact" }
+          Write-Host "BN Playground: $($exe.FullName) -> $script"
+          & $exe.FullName "$script" --frames 300 --no-vsync --headless *>&1 |
+            Tee-Object -FilePath bn-bench.log
+          $line = Select-String -Path bn-bench.log -Pattern '^BENCH ' | Select-Object -First 1
+          if (-not $line) {
+            Write-Warning "no BENCH line in BN output"
+            "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
+          } else {
+            $line.Line | Out-File ../bn-bench.line
+            "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
+            Write-Host "BN BENCH: $($line.Line)"
+          }
+
+      - name: Emit cell JSON
+        shell: pwsh
+        run: |
+          # Single tiny JSON per cell; summary job parses all of them.
+          function Parse([string]$path) {
+            if (-not (Test-Path $path)) { return $null }
+            $line = (Get-Content $path -Raw).Trim()
+            if (-not $line) { return $null }
+            # BENCH scene=... frames=N wall_ms=X min_ms=X avg_ms=X max_ms=X p95_ms=X
+            $h = @{}
+            foreach ($kv in ($line -replace '^BENCH\s+','') -split '\s+') {
+              $k,$v = $kv -split '=',2
+              if ($k -and $v) { $h[$k] = $v }
+            }
+            return $h
+          }
+          $dt = Parse 'dt-bench.line'
+          $bn = Parse 'bn-bench.line'
+          $obj = @{
+            engine    = '${{ matrix.engine }}'
+            graphics  = '${{ matrix.graphics }}'
+            dawntest  = $dt
+            bnplayground = $bn
+          }
+          $obj | ConvertTo-Json -Depth 5 | Out-File "bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json" -Encoding utf8
+          Get-Content "bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json"
+
+      - name: Upload bench result
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: |
+            bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json
+            dt-bench.log
+            bn-bench.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ============================================================
   # Aggregate all artifact sizes into a single Markdown summary.
   # ============================================================
   summary:
@@ -1049,6 +1200,7 @@ jobs:
       - build-bn-ios
       - build-bn-ubuntu
       - build-bn-android
+      - bench-win32
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1062,7 +1214,7 @@ jobs:
         run: |
           set -e
           cat > summary.py <<'PYEOF'
-          import os, glob, sys
+          import os, glob, sys, json
 
           run_id = sys.argv[1] if len(sys.argv) > 1 else ""
           sha    = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -1073,7 +1225,8 @@ jobs:
                       return os.path.join(root, f)
               return None
 
-          # key -> {'dt': (file, bytes), 'bn': (file, bytes)}
+          # key -> {'dt': (file, bytes), 'bn': (file, bytes),
+          #         'dt_avg': float, 'bn_avg': float}
           rows = {}
           for d in sorted(glob.glob('artifacts/app-*')):
               name = os.path.basename(d)
@@ -1086,11 +1239,14 @@ jobs:
                   continue
               rows.setdefault((os_, engine, graphics), {})['dt'] = (os.path.basename(f), os.path.getsize(f))
 
-          for d in sorted(glob.glob('artifacts/bn-playground-*')):
+          for d in sorted(glob.glob('artifacts/bn-playground-win32-*') + glob.glob('artifacts/bn-playground-macos-*') + glob.glob('artifacts/bn-playground-ios-*') + glob.glob('artifacts/bn-playground-ubuntu-*') + glob.glob('artifacts/bn-playground-android-*')):
               name = os.path.basename(d)
               parts = name.split('-')
-              # bn-playground-<os>-<engine>-<graphics>
+              # bn-playground-<os>-<engine>-<graphics>; skip the bn-playground-dir-*
+              # artifacts (those are full output dirs uploaded for the bench job).
               if len(parts) < 5:
+                  continue
+              if parts[2] == 'dir':
                   continue
               os_, engine, graphics = parts[2], parts[3], '-'.join(parts[4:])
               f = first_file(d)
@@ -1098,15 +1254,45 @@ jobs:
                   continue
               rows.setdefault((os_, engine, graphics), {})['bn'] = (os.path.basename(f), os.path.getsize(f))
 
+          # Bench JSONs: artifacts/bench-win32-<engine>-<graphics>/bench-win32-<engine>-<graphics>.json
+          for d in sorted(glob.glob('artifacts/bench-win32-*')):
+              name = os.path.basename(d)
+              parts = name.split('-')
+              if len(parts) < 4:
+                  continue
+              os_, engine, graphics = parts[1], parts[2], '-'.join(parts[3:])
+              j = os.path.join(d, name + '.json')
+              if not os.path.isfile(j):
+                  continue
+              try:
+                  with open(j, 'r', encoding='utf-8-sig') as fh:
+                      data = json.load(fh)
+              except Exception as e:
+                  print("WARN: failed to parse {}: {}".format(j, e), file=sys.stderr)
+                  continue
+              dt = (data or {}).get('dawntest') or {}
+              bn = (data or {}).get('bnplayground') or {}
+              row = rows.setdefault((os_, engine, graphics), {})
+              if dt.get('avg_ms'):
+                  try: row['dt_avg'] = float(dt['avg_ms'])
+                  except: pass
+              if bn.get('avg_ms'):
+                  try: row['bn_avg'] = float(bn['avg_ms'])
+                  except: pass
+
           def mb(b):
               return "{:.2f} MB".format(b/1048576)
+
+          def ms(v):
+              return "{:.2f} ms".format(v) if v is not None else "—"
 
           print("# Build artifact sizes")
           print()
           print("Side-by-side comparison of DawnTest and BabylonNative Playground for each matrix cell.")
+          print("Bench columns are average ms / frame for scene200 over 300 frames with vsync disabled (win32 only; mac/android CI runners have no GPU).")
           print()
-          print("| OS | Engine | Graphics | DawnTest artifact | DawnTest size | BabylonNative Playground size |")
-          print("|----|--------|----------|-------------------|--------------:|------------------------------:|")
+          print("| OS | Engine | Graphics | DawnTest artifact | DawnTest size | BN Playground size | DawnTest avg ms/frame | BN avg ms/frame |")
+          print("|----|--------|----------|-------------------|--------------:|-------------------:|----------------------:|----------------:|")
           for key in sorted(rows.keys()):
               os_, engine, graphics = key
               entry = rows[key]
@@ -1115,7 +1301,9 @@ jobs:
               dt_file = "`{}`".format(dt[0]) if dt else "—"
               dt_size = mb(dt[1]) if dt else "—"
               bn_size = mb(bn[1]) if bn else "—"
-              print("| {} | {} | {} | {} | {} | {} |".format(os_, engine, graphics, dt_file, dt_size, bn_size))
+              dt_avg  = ms(entry.get('dt_avg'))
+              bn_avg  = ms(entry.get('bn_avg'))
+              print("| {} | {} | {} | {} | {} | {} | {} | {} |".format(os_, engine, graphics, dt_file, dt_size, bn_size, dt_avg, bn_avg))
           print()
           print("_Build run: {} • commit {}_".format(run_id, sha))
           PYEOF
