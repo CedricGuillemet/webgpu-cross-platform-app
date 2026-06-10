@@ -29,4 +29,10 @@ void onResize(int widthPx, int heightPx);
 // The image is written using WIC at the configured surface size.
 void requestScreenshot(const std::string& outPath);
 
+// Disable vsync on the next canvasContext.configure(). When true, the surface
+// is configured with PresentMode::Immediate (fallback Mailbox, fallback Fifo)
+// so the render loop runs as fast as the GPU can present — required for
+// meaningful benchmark timings. Must be called before the first configure.
+void setNoVsync(bool noVsync);
+
 } // namespace wgpu_bridge

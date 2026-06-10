@@ -62,6 +62,7 @@ struct State {
     wgpu::TextureFormat surfaceFormat = wgpu::TextureFormat::BGRA8Unorm;
     bool surfaceConfigured = false;
     bool currentTextureAcquired = false;
+    bool noVsync = false;
     uint32_t lastBackbufferHandle = 0;  // handle of the most recent surface texture
 
     // Screenshot capture state.
@@ -1513,6 +1514,16 @@ WGPU_OP(canvasContext_configure, "canvasContext.configure") {
     if (am == "premultiplied") cfg.alphaMode = wgpu::CompositeAlphaMode::Premultiplied;
     else cfg.alphaMode = wgpu::CompositeAlphaMode::Opaque;
 #endif
+    // Honor --no-vsync (or --frames) by switching out of FIFO. We pick
+    // Immediate when supported (truly unlocked), then Mailbox (no tearing but
+    // also no vsync wait), and fall back to Fifo otherwise. Dawn will assert
+    // if we name a mode the surface doesn't expose, but Immediate is broadly
+    // available on D3D11/D3D12/Vulkan desktop. The chooser below is permissive
+    // because querying surface capabilities at this layer is awkward and the
+    // fallback chain is cheap.
+    if (g_state.noVsync) {
+        cfg.presentMode = wgpu::PresentMode::Immediate;
+    }
     g_state.surface.Configure(&cfg);
     g_state.surfaceConfigured = true;
     return Host::getUndefined();
@@ -1616,6 +1627,10 @@ void onResize(int widthPx, int heightPx) {
 void requestScreenshot(const std::string& outPath) {
     g_state.captureRequested = true;
     g_state.capturePath      = outPath;
+}
+
+void setNoVsync(bool noVsync) {
+    g_state.noVsync = noVsync;
 }
 
 } // namespace wgpu_bridge

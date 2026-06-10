@@ -1,0 +1,25 @@
+{
+  "name": "dawntest-bench-assets",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Builds scene200 bundles for DawnTest (lite) and BabylonNative Playground (full Babylon). Produces dist/ (modern JS) and dist-chakra/ (Chakra-compatible via Babel).",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "clean": "node -e \"import('node:fs').then(fs=>['dist','dist-chakra'].forEach(d=>fs.rmSync(d,{recursive:true,force:true})))\""
+  },
+  "dependencies": {
+    "@babylonjs/lite": "0.2.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.25.0",
+    "@babel/core": "^7.25.0",
+    "@babel/plugin-transform-class-properties": "^7.25.0",
+    "@babel/plugin-transform-logical-assignment-operators": "^7.25.0",
+    "@babel/plugin-transform-nullish-coalescing-operator": "^7.25.0",
+    "@babel/plugin-transform-object-rest-spread": "^7.25.0",
+    "@babel/plugin-transform-optional-catch-binding": "^7.25.0",
+    "@babel/plugin-transform-optional-chaining": "^7.25.0",
+    "esbuild": "^0.24.0"
+  }
+}

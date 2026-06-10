@@ -8,6 +8,7 @@
 #include "chakra_host.h"
 #include "dom_shim.h"
 #include "fs_loader.h"
+#include "framework/bench.h"
 #include "image_decoder.h"
 #include "native_window.h"
 #include "wgpu_bridge.h"
@@ -79,22 +80,37 @@ struct Args {
     int height = 0;               // 0 = use kInitialHeight (768)
     std::string screenshotPath;   // capture PNG after data-ready and before exit
     int screenshotDelayFrames = 2;// how many extra frames after ready before capture
+    bool noVsync = false;         // request PresentMode::Immediate; auto when --frames set
+    bool bench = false;           // emit BENCH line on exit
 };
 
 Args parseArgs(int argc, char** argv) {
     Args a;
     for (int i = 1; i < argc; ++i) {
         std::string s = argv[i];
-        if (s == "--max-frames" && i + 1 < argc) {
+        if ((s == "--max-frames" || s == "--frames") && i + 1 < argc) {
+            // --frames is the canonical name in the bench runner spec;
+            // --max-frames is the legacy alias kept for back-compat.
             a.maxFrames = std::atoi(argv[++i]);
+            // A finite frame budget implies bench mode: disable vsync so the
+            // measured per-frame time reflects GPU/CPU work rather than
+            // display refresh, and arm BENCH line emission.
+            a.bench = true;
+            a.noVsync = true;
         } else if (s == "--exit-on-ready") {
             a.exitOnReady = true;
         } else if (s == "--no-window") {
             a.noWindow = true;
+        } else if (s == "--no-vsync") {
+            a.noVsync = true;
         } else if (s == "--width" && i + 1 < argc) {
             a.width = std::atoi(argv[++i]);
         } else if (s == "--height" && i + 1 < argc) {
             a.height = std::atoi(argv[++i]);
+        } else if (s == "--scene" && i + 1 < argc) {
+            // Canonical flag mirroring run-bench.mjs's --scene. The legacy
+            // positional path arg below still works.
+            a.bundlePath = argv[++i];
         } else if (s == "--screenshot" && i + 1 < argc) {
             a.screenshotPath = argv[++i];
         } else if (s == "--screenshot-delay" && i + 1 < argc) {
@@ -136,11 +152,15 @@ int main(int argc, char** argv) {
     std::string bundlePath = resolveBundlePath(cli.bundlePath);
     if (!fs::exists(bundlePath)) {
         std::fprintf(stderr, "[main] scene bundle not found: %s\n", bundlePath.c_str());
-        std::fprintf(stderr, "       usage: app.exe [path/to/scene-bundle.js] [--max-frames N] [--exit-on-ready] [--no-window]\n");
+        std::fprintf(stderr, "       usage: app.exe [path/to/scene-bundle.js] [--scene PATH] [--frames N] [--max-frames N] [--no-vsync] [--exit-on-ready] [--no-window]\n");
         return kExitError;
     }
     std::string bundleDir = fs::path(bundlePath).parent_path().string();
+    std::string sceneName = fs::path(bundlePath).stem().string();
     std::fprintf(stderr, "[main] scene bundle: %s\n", bundlePath.c_str());
+
+    // Plumb --no-vsync / --frames into the surface config before Dawn touches it.
+    wgpu_bridge::setNoVsync(cli.noVsync);
 
     // 1. Create Win32 window
     int requestedW = cli.width  > 0 ? cli.width  : kInitialWidth;
@@ -280,7 +300,13 @@ int main(int argc, char** argv) {
     int readyAtFrame = -1;          // first frame where data-ready was seen
     bool screenshotRequested = false;
     double tStart = monotonicMs();
+    // Bench timer captures per-frame deltas after a 1-frame warmup. The
+    // collector lives on the stack so its dtor cannot run before the BENCH
+    // line is emitted at the end of main.
+    bench::FrameTimer timer;
+    if (cli.bench && cli.maxFrames > 0) timer.reserve(static_cast<size_t>(cli.maxFrames));
     while (window.pumpEvents()) {
+        timer.startFrame();
         double t = monotonicMs();
         dom_shim::runAnimationFrame(host, t);
         host.pumpMicrotasks();
@@ -295,6 +321,7 @@ int main(int argc, char** argv) {
             host.reportException("present");
         }
         wgpu_bridge::tick();
+        timer.endFrame();
 
         ++frameNo;
         if (frameNo == 1 || frameNo == 60 || frameNo == 300) {
@@ -347,6 +374,9 @@ int main(int argc, char** argv) {
     }
 
     std::fprintf(stderr, "[main] shutting down (rendered %d frames, exit=%d)\n", frameNo, exitCode);
+    if (cli.bench) {
+        timer.printBenchLine(sceneName);
+    }
     worker_shim::shutdownAll();
     host.shutdown();
     window.destroy();

@@ -280,6 +280,8 @@ set(FRAMEWORK_SOURCES
   "${_FW_DIR}/http_fetcher.h"
   "${_FW_DIR}/fs_loader.cpp"
   "${_FW_DIR}/fs_loader.h"
+  "src/framework/bench.cpp"
+  "src/framework/bench.h"
 )
 set(FRAMEWORK_INCLUDE_DIR "${_FW_DIR}")
 

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -423,12 +424,22 @@ std::string Host::toUtf8(JsValueRef value) {
     if (t != JsString) {
         if (JsConvertValueToString(value, &strVal) != JsNoError) return "<conv-err>";
     }
-    size_t len = 0;
-    JsCopyString(strVal, nullptr, 0, &len);
-    std::string s;
-    s.resize(len);
-    JsCopyString(strVal, s.data(), len, nullptr);
-    return s;
+    // Allocate one extra byte: empirically the legacy Chakra SDK
+    // (Windows SDK 10.0.x JsCopyString) writes only `bufferSize - 1`
+    // bytes when the buffer pointer is std::string::data(), even though
+    // the first probing call reports the full UTF-8 length. Over-allocate
+    // and use the `written` out param to size the final string.
+    size_t cap = 0;
+    JsCopyString(strVal, nullptr, 0, &cap);
+    std::vector<char> buf(cap + 1, '\0');
+    size_t actual = 0;
+    JsCopyString(strVal, buf.data(), buf.size(), &actual);
+    // If `actual` came back unchanged or zero (shouldn't happen, but
+    // defend), fall back to strnlen so we at least don't truncate.
+    if (actual == 0 || actual > cap + 1) {
+        actual = strnlen(buf.data(), buf.size());
+    }
+    return std::string(buf.data(), actual);
 }
 
 JsValueRef Host::fromUtf8(std::string_view text) {
