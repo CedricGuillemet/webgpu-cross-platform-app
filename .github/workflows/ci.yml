@@ -1172,16 +1172,76 @@ jobs:
           $exe = Get-ChildItem . -Filter Playground.exe | Select-Object -First 1
           if (-not $exe) { throw "Playground.exe missing from artifact" }
           Write-Host "BN Playground: $($exe.FullName) -> $script"
-          & $exe.FullName "$script" --frames 300 --no-vsync --headless *>&1 |
-            Tee-Object -FilePath bn-bench.log
-          $line = Select-String -Path bn-bench.log -Pattern '^BENCH ' | Select-Object -First 1
-          if (-not $line) {
-            Write-Warning "no BENCH line in BN output"
-            "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
-          } else {
-            $line.Line | Out-File ../bn-bench.line
+          # Don't pass --frames: BN's main-loop bench timer ticks every
+          # message-pump iteration (~2000 Hz when the worker is idle), so
+          # --frames 300 exits in ~140 ms — long before scene200's async
+          # asset loads finish. Instead let scene200.js drive termination:
+          # it emits "[scene200] steady-state X ms/frame" at frame 300
+          # (computed from onAfterRenderObservable — only ticks during
+          # real renders), and we kill the process as soon as that line
+          # appears.  Hard timeout 15 minutes guards against asset-load
+          # hangs (WARP can be very slow — 1.5 s/frame * 300 frames ≈
+          # 7.5 min, so allow ~2× headroom).
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = $exe.FullName
+          # Upstream BN's CLI doesn't know --frames / --no-vsync / --headless
+          # (those are cedric/quickjs + hermes-integration-dawn additions),
+          # so pass ONLY the positional script to keep all 4 engines
+          # (chakra, v8, quickjs, hermes) on the same command line.
+          # scene200.js sets its own window size + exits at frame 400.
+          $psi.Arguments = "`"$script`""
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError  = $true
+          $psi.UseShellExecute = $false
+          $psi.WorkingDirectory = $PWD
+          $proc = [System.Diagnostics.Process]::Start($psi)
+          $log = New-Object System.Text.StringBuilder
+          $foundAvg = $null
+          $deadline = [DateTime]::UtcNow.AddMinutes(15)
+          while (-not $proc.HasExited) {
+            if ([DateTime]::UtcNow -gt $deadline) {
+              Write-Warning "BN Playground hung > 15min; killing"
+              try { $proc.Kill() } catch {}
+              break
+            }
+            $line = $proc.StandardOutput.ReadLine()
+            if ($line -eq $null) {
+              if ($proc.HasExited) { break }
+              Start-Sleep -Milliseconds 50
+              continue
+            }
+            Write-Host $line
+            [void]$log.AppendLine($line)
+            if ($line -match '\[scene200\] steady-state\s+([\d.]+)\s+ms/frame') {
+              $foundAvg = $matches[1]
+              Write-Host ">>> got scene200 steady-state: $foundAvg ms/frame — terminating BN"
+              # Give BN a chance to flush a few more lines (FPS log) before kill.
+              Start-Sleep -Milliseconds 200
+              try { $proc.Kill() } catch {}
+              break
+            }
+          }
+          # Drain any remaining stderr.
+          try { [void]$log.AppendLine($proc.StandardError.ReadToEnd()) } catch {}
+          $log.ToString() | Out-File -FilePath bn-bench.log -Encoding utf8
+          if ($foundAvg) {
+            # Synthesize a BENCH-format line the parser already understands.
+            "BENCH scene=scene200 frames=240 wall_ms=0 min_ms=0 avg_ms=$foundAvg max_ms=0 p95_ms=0" | Out-File ../bn-bench.line
             "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
-            Write-Host "BN BENCH: $($line.Line)"
+            Write-Host "BN scene200 steady-state: $foundAvg ms/frame"
+          } else {
+            # Fallback: C++ BENCH line (only meaningful when the BN fork
+            # has bench wiring AND the scene rendered long enough — which
+            # in practice means it's almost certainly garbage on WARP).
+            $line = Select-String -Path bn-bench.log -Pattern '^BENCH ' | Select-Object -First 1
+            if ($line) {
+              $line.Line | Out-File ../bn-bench.line
+              "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
+              Write-Host "BN BENCH (fallback): $($line.Line)"
+            } else {
+              Write-Warning "no scene200 steady-state line and no BENCH line in BN output"
+              "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
+            }
           }
 
       - name: Emit cell JSON
