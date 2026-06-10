@@ -114,14 +114,39 @@ jobs:
           if (-not $exe) { throw "app.exe not found under build/" }
           $bytes = (Get-Item $exe.FullName).Length
           "exe=$($exe.FullName)" | Out-File -Append $env:GITHUB_OUTPUT
+          "exedir=$($exe.Directory.FullName)" | Out-File -Append $env:GITHUB_OUTPUT
           "size_bytes=$bytes" | Out-File -Append $env:GITHUB_OUTPUT
           Write-Host ("size: {0} bytes ({1:N2} MB)" -f $bytes, ($bytes/1MB))
 
-      - name: Upload artifact
+      - name: Upload artifact (exe only, for size summary)
         uses: actions/upload-artifact@v4
         with:
           name: app-win32-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Stage runtime files alongside exe
+        shell: pwsh
+        run: |
+          # The CMake post-build copy of js/ only fires if the build was
+          # run from a tree that has js/ checked in. CI does both, so the
+          # build dir already contains js/runtime-shim.js; if not, copy
+          # it now so the bench artifact is self-contained.
+          $exedir = '${{ steps.locate.outputs.exedir }}'
+          $repoJs = Join-Path $PWD 'js'
+          $stagedJs = Join-Path $exedir 'js'
+          if (-not (Test-Path $stagedJs) -and (Test-Path $repoJs)) {
+            Write-Host "Copying $repoJs -> $stagedJs"
+            Copy-Item -Recurse -Force $repoJs $stagedJs
+          }
+          Get-ChildItem $exedir -File | Select-Object Name, Length
+
+      - name: Upload artifact (full output dir, for bench)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: ${{ steps.locate.outputs.exedir }}
           if-no-files-found: error
           retention-days: 14
 
@@ -1086,10 +1111,10 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
 
-      - name: Download DawnTest artifact
+      - name: Download DawnTest artifact (full dir)
         uses: actions/download-artifact@v4
         with:
-          name: app-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          name: app-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
           path: dt
 
       - name: Download BabylonNative Playground artifact (full dir)
@@ -1235,6 +1260,9 @@ jobs:
               name = os.path.basename(d)
               parts = name.split('-')
               if len(parts) < 4:
+                  continue
+              # Skip the new app-dir-* artifacts (full output dirs for bench)
+              if parts[1] == 'dir':
                   continue
               os_, engine, graphics = parts[1], parts[2], '-'.join(parts[3:])
               f = first_file(d)
