@@ -1153,7 +1153,7 @@ jobs:
         id: bench_bn
         shell: pwsh
         continue-on-error: true
-        timeout-minutes: 20
+        timeout-minutes: 30
         working-directory: bn
         run: |
           # BN loads playground_runner.js from app:///Scripts/ relative to
@@ -1203,6 +1203,29 @@ jobs:
             $foundAvg = $m.Matches[0].Groups[1].Value
           } else {
             $foundAvg = $null
+          }
+          # Fallback: compute ms/frame from the per-frame timestamp logs
+          # ("[scene200] frame N   t=X.XXXs"). On slow WARP backends d3d11
+          # can be 6+ s/frame, so reaching frame 300 (where the canonical
+          # steady-state line prints) overruns the 30-min step timeout.
+          # Use the highest-frame log present and pair with frame 1 to
+          # derive a steady-state estimate: (tN - t1) / (N - 1) * 1000.
+          if (-not $foundAvg) {
+            $frameLines = Select-String -Path bn-bench.log -Pattern '\[scene200\] frame\s+(\d+)\s+t=([\d.]+)s'
+            $samples = @()
+            foreach ($fl in $frameLines) {
+              $samples += [pscustomobject]@{
+                Frame = [int]$fl.Matches[0].Groups[1].Value
+                T     = [double]$fl.Matches[0].Groups[2].Value
+              }
+            }
+            $f1 = $samples | Where-Object { $_.Frame -eq 1 } | Select-Object -First 1
+            $fLast = $samples | Where-Object { $_.Frame -gt 1 } | Sort-Object Frame -Descending | Select-Object -First 1
+            if ($f1 -and $fLast -and $fLast.Frame -gt $f1.Frame) {
+              $dt = ($fLast.T - $f1.T) * 1000.0 / ($fLast.Frame - $f1.Frame)
+              $foundAvg = ('{0:F3}' -f $dt)
+              Write-Host ">>> fallback: avg from frame $($f1.Frame)..$($fLast.Frame) = $foundAvg ms/frame"
+            }
           }
           if ($foundAvg) {
             # Synthesize a BENCH-format line the parser already understands.
