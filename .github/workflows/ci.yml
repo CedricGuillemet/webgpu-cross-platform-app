@@ -1195,6 +1195,20 @@ jobs:
           $psi.UseShellExecute = $false
           $psi.WorkingDirectory = $PWD
           $proc = [System.Diagnostics.Process]::Start($psi)
+          # Use a ConcurrentQueue + async event handlers so the deadline
+          # check actually runs even when BN produces no output for a
+          # long time (e.g. asset-load hang). Plain ReadLine() blocks
+          # indefinitely and the timeout never trips.
+          $queue = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
+          $onData = {
+            param($sender, $e)
+            if ($e.Data -ne $null) { $script:queue.Enqueue($e.Data) }
+          }
+          $script:queue = $queue
+          $outReg = Register-ObjectEvent -InputObject $proc -EventName 'OutputDataReceived' -Action $onData
+          $errReg = Register-ObjectEvent -InputObject $proc -EventName 'ErrorDataReceived'  -Action $onData
+          $proc.BeginOutputReadLine()
+          $proc.BeginErrorReadLine()
           $log = New-Object System.Text.StringBuilder
           $foundAvg = $null
           $deadline = [DateTime]::UtcNow.AddMinutes(15)
@@ -1204,25 +1218,32 @@ jobs:
               try { $proc.Kill() } catch {}
               break
             }
-            $line = $proc.StandardOutput.ReadLine()
-            if ($line -eq $null) {
-              if ($proc.HasExited) { break }
+            $line = $null
+            if ($queue.TryDequeue([ref] $line)) {
+              Write-Host $line
+              [void]$log.AppendLine($line)
+              if ($line -match '\[scene200\] steady-state\s+([\d.]+)\s+ms/frame') {
+                $foundAvg = $matches[1]
+                Write-Host ">>> got scene200 steady-state: $foundAvg ms/frame — terminating BN"
+                Start-Sleep -Milliseconds 200
+                try { $proc.Kill() } catch {}
+                break
+              }
+            } else {
               Start-Sleep -Milliseconds 50
-              continue
-            }
-            Write-Host $line
-            [void]$log.AppendLine($line)
-            if ($line -match '\[scene200\] steady-state\s+([\d.]+)\s+ms/frame') {
-              $foundAvg = $matches[1]
-              Write-Host ">>> got scene200 steady-state: $foundAvg ms/frame — terminating BN"
-              # Give BN a chance to flush a few more lines (FPS log) before kill.
-              Start-Sleep -Milliseconds 200
-              try { $proc.Kill() } catch {}
-              break
             }
           }
-          # Drain any remaining stderr.
-          try { [void]$log.AppendLine($proc.StandardError.ReadToEnd()) } catch {}
+          # Drain remaining queued lines.
+          $line = $null
+          while ($queue.TryDequeue([ref] $line)) {
+            Write-Host $line
+            [void]$log.AppendLine($line)
+            if (-not $foundAvg -and $line -match '\[scene200\] steady-state\s+([\d.]+)\s+ms/frame') {
+              $foundAvg = $matches[1]
+            }
+          }
+          Unregister-Event -SourceIdentifier $outReg.Name
+          Unregister-Event -SourceIdentifier $errReg.Name
           $log.ToString() | Out-File -FilePath bn-bench.log -Encoding utf8
           if ($foundAvg) {
             # Synthesize a BENCH-format line the parser already understands.
