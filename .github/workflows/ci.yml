@@ -1184,17 +1184,28 @@ jobs:
           $exe = Get-ChildItem . -Filter Playground.exe | Select-Object -First 1
           if (-not $exe) { throw "Playground.exe missing from artifact" }
           Write-Host "BN Playground: $($exe.FullName) -> $script"
-          # Run BN with the proven `&` + Tee-Object pattern (worked in
-          # the very first run, where BN's C++ BENCH line reached stdout
-          # via std::fputs). The step-level timeout-minutes guards
-          # against scene-load hangs. When timeout fires GH kills the
-          # process tree, but bn-bench.log on disk retains whatever
-          # output was flushed before kill. The next step (always-runs)
-          # parses the log and computes steady-state or fallback.
+          # cmd.exe shell redirection (`> file 2>&1`) captures every byte
+          # BN writes — including crash banners — at the OS handle level,
+          # so it survives early crashes and PowerShell pipeline tearing.
+          # Earlier attempts using `& exe *>&1 | Tee-Object` silently
+          # dropped output for processes that crashed within 1-2 s (e.g.
+          # cedric/quickjs BN fork on scene200), leaving an empty log.
+          # Start-Process -RedirectStandardOutput in turn breaks BN's
+          # stdio entirely (see prior session notes), so cmd.exe is the
+          # only approach proven to work for both fast-crash and
+          # long-running BN runs in CI.
+          New-Item -ItemType File -Force bn-bench.log | Out-Null
+          $exeDir = $exe.Directory.FullName
+          $exeName = $exe.Name
           $start = [DateTime]::UtcNow
-          & $exe.FullName "$script" *>&1 | Tee-Object -FilePath bn-bench.log
+          cmd /c "cd /d `"$exeDir`" && `"$exeName`" `"$script`" > bn-bench.log 2>&1"
+          $exitCode = $LASTEXITCODE
           $dur = ([DateTime]::UtcNow - $start).TotalSeconds
-          Write-Host "BN Playground exited after $([math]::Round($dur,1)) s"
+          Write-Host "BN Playground exited after $([math]::Round($dur,1)) s, exitCode=$exitCode"
+          $exitCode | Out-File bn-exit-code.txt
+          if (Test-Path bn-bench.log) {
+            Write-Host "bn-bench.log size: $((Get-Item bn-bench.log).Length) bytes"
+          }
 
       - name: Bench BabylonNative Playground (parse)
         id: bench_bn
@@ -1255,8 +1266,18 @@ jobs:
               "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
               Write-Host "BN BENCH (C++ fallback): $($line.Line)"
             } else {
-              Write-Warning "no scene200 steady-state, no frame logs, and no BENCH line in BN output"
-              "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
+              # Detect a BN uncaught JS error so the summary can show
+              # "crash" instead of an empty cell — useful for the cedric
+              # quickjs fork which throws on scene200 before any frame.
+              $crashed = Select-String -Path bn-bench.log -Pattern 'Uncaught Error|UNCAUGHT JS ERROR' | Select-Object -First 1
+              if ($crashed) {
+                Write-Warning "BN crashed with uncaught JS error before any frame"
+                "BENCH scene=scene200 frames=0 wall_ms=0 min_ms=0 avg_ms=crash max_ms=0 p95_ms=0" | Out-File ../bn-bench.line
+                "result=crash" | Out-File -Append $env:GITHUB_OUTPUT
+              } else {
+                Write-Warning "no scene200 steady-state, no frame logs, and no BENCH line in BN output"
+                "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
+              }
             }
           }
 
@@ -1297,6 +1318,8 @@ jobs:
             bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json
             dt-bench.log
             bn-bench.log
+            bn/bn-bench.log
+            bn/bn-exit-code.txt
           if-no-files-found: warn
           retention-days: 14
 
@@ -1396,14 +1419,20 @@ jobs:
                   try: row['dt_avg'] = float(dt['avg_ms'])
                   except: pass
               if bn.get('avg_ms'):
-                  try: row['bn_avg'] = float(bn['avg_ms'])
-                  except: pass
+                  v = bn['avg_ms']
+                  if v == 'crash':
+                      row['bn_avg'] = 'crash'
+                  else:
+                      try: row['bn_avg'] = float(v)
+                      except: pass
 
           def mb(b):
               return "{:.2f} MB".format(b/1048576)
 
           def ms(v):
-              return "{:.2f} ms".format(v) if v is not None else "—"
+              if v is None: return "—"
+              if isinstance(v, str): return v
+              return "{:.2f} ms".format(v)
 
           print("# Build artifact sizes")
           print()
