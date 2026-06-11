@@ -1149,11 +1149,11 @@ jobs:
             Write-Host "DawnTest BENCH: $($line.Line)"
           }
 
-      - name: Bench BabylonNative Playground
-        id: bench_bn
+      - name: Bench BabylonNative Playground (run only)
+        id: bench_bn_run
         shell: pwsh
         continue-on-error: true
-        timeout-minutes: 30
+        timeout-minutes: 25
         working-directory: bn
         run: |
           # BN loads playground_runner.js from app:///Scripts/ relative to
@@ -1187,29 +1187,44 @@ jobs:
           # Run BN with the proven `&` + Tee-Object pattern (worked in
           # the very first run, where BN's C++ BENCH line reached stdout
           # via std::fputs). The step-level timeout-minutes guards
-          # against scene-load hangs. scene200.js exits at frame 305 via
-          # TestUtils.exit(0) so total runtime is bounded by frame-rate.
+          # against scene-load hangs. When timeout fires GH kills the
+          # process tree, but bn-bench.log on disk retains whatever
+          # output was flushed before kill. The next step (always-runs)
+          # parses the log and computes steady-state or fallback.
           $start = [DateTime]::UtcNow
           & $exe.FullName "$script" *>&1 | Tee-Object -FilePath bn-bench.log
           $dur = ([DateTime]::UtcNow - $start).TotalSeconds
           Write-Host "BN Playground exited after $([math]::Round($dur,1)) s"
-          # Show the first and last 50 lines so we can debug missing trigger.
+
+      - name: Bench BabylonNative Playground (parse)
+        id: bench_bn
+        if: always()
+        shell: pwsh
+        continue-on-error: true
+        working-directory: bn
+        run: |
+          if (-not (Test-Path 'bn-bench.log')) {
+            Write-Warning "bn-bench.log missing — BN run step never produced any output"
+            "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
+            return
+          }
           Write-Host "----- bn-bench.log head -----"
           Get-Content bn-bench.log -Head 50 -ErrorAction SilentlyContinue
           Write-Host "----- bn-bench.log tail -----"
           Get-Content bn-bench.log -Tail 50 -ErrorAction SilentlyContinue
+          # Primary: scene200's canonical steady-state line at frame 300.
           $m = Select-String -Path bn-bench.log -Pattern '\[scene200\] steady-state\s+([\d.]+)\s+ms/frame' | Select-Object -First 1
           if ($m) {
             $foundAvg = $m.Matches[0].Groups[1].Value
+            Write-Host ">>> got canonical steady-state: $foundAvg ms/frame"
           } else {
             $foundAvg = $null
           }
-          # Fallback: compute ms/frame from the per-frame timestamp logs
-          # ("[scene200] frame N   t=X.XXXs"). On slow WARP backends d3d11
-          # can be 6+ s/frame, so reaching frame 300 (where the canonical
-          # steady-state line prints) overruns the 30-min step timeout.
-          # Use the highest-frame log present and pair with frame 1 to
-          # derive a steady-state estimate: (tN - t1) / (N - 1) * 1000.
+          # Fallback: compute ms/frame from "[scene200] frame N t=X.XXXs"
+          # log lines. On slow WARP backends d3d11 can be 6+ s/frame, so
+          # reaching frame 300 overruns the step timeout. Use the highest
+          # frame N present, paired with frame 1, to derive a steady-state
+          # estimate: (tN - t1) * 1000 / (N - 1).
           if (-not $foundAvg) {
             $frameLines = Select-String -Path bn-bench.log -Pattern '\[scene200\] frame\s+(\d+)\s+t=([\d.]+)s'
             $samples = @()
@@ -1228,26 +1243,25 @@ jobs:
             }
           }
           if ($foundAvg) {
-            # Synthesize a BENCH-format line the parser already understands.
             "BENCH scene=scene200 frames=240 wall_ms=0 min_ms=0 avg_ms=$foundAvg max_ms=0 p95_ms=0" | Out-File ../bn-bench.line
             "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
-            Write-Host "BN scene200 steady-state: $foundAvg ms/frame"
+            Write-Host "BN scene200 avg ms/frame: $foundAvg"
           } else {
-            # Fallback: C++ BENCH line (only meaningful when the BN fork
-            # has bench wiring AND the scene rendered long enough — which
-            # in practice means it's almost certainly garbage on WARP).
+            # Last-ditch: C++ bench timer BENCH line (likely garbage on WARP
+            # but kept for completeness).
             $line = Select-String -Path bn-bench.log -Pattern '^BENCH ' | Select-Object -First 1
             if ($line) {
               $line.Line | Out-File ../bn-bench.line
               "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
-              Write-Host "BN BENCH (fallback): $($line.Line)"
+              Write-Host "BN BENCH (C++ fallback): $($line.Line)"
             } else {
-              Write-Warning "no scene200 steady-state line and no BENCH line in BN output"
+              Write-Warning "no scene200 steady-state, no frame logs, and no BENCH line in BN output"
               "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
             }
           }
 
       - name: Emit cell JSON
+        if: always()
         shell: pwsh
         run: |
           # Single tiny JSON per cell; summary job parses all of them.
@@ -1275,6 +1289,7 @@ jobs:
           Get-Content "bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json"
 
       - name: Upload bench result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}
