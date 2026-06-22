@@ -126,27 +126,32 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Stage runtime files alongside exe
+      - name: Report complete deployable size (exe + JS engine + DLL deps)
+        id: complete
         shell: pwsh
         run: |
-          # The CMake post-build copy of js/ only fires if the build was
-          # run from a tree that has js/ checked in. CI does both, so the
-          # build dir already contains js/runtime-shim.js; if not, copy
-          # it now so the bench artifact is self-contained.
+          # "Complete size" = the executable plus every shared-library
+          # dependency shipped alongside it (the JS engine DLL, Dawn, etc.).
+          # For statically-linked engines (chakra via Windows SDK, quickjs,
+          # hermes) this equals the exe; for V8 it also counts the bundled
+          # v8 runtime DLLs. .js / asset files are excluded.
           $exedir = '${{ steps.locate.outputs.exedir }}'
-          $repoJs = Join-Path $PWD 'js'
-          $stagedJs = Join-Path $exedir 'js'
-          if (-not (Test-Path $stagedJs) -and (Test-Path $repoJs)) {
-            Write-Host "Copying $repoJs -> $stagedJs"
-            Copy-Item -Recurse -Force $repoJs $stagedJs
+          $exe    = Get-Item '${{ steps.locate.outputs.exe }}'
+          $dlls   = Get-ChildItem $exedir -Filter *.dll -File -ErrorAction SilentlyContinue
+          $total  = [int64]$exe.Length + (($dlls | Measure-Object Length -Sum).Sum)
+          Write-Host ("complete: {0} bytes ({1:N2} MB)" -f $total, ($total/1MB))
+          $dlls | Select-Object Name, Length | Format-Table -AutoSize
+          $obj = [ordered]@{
+            os = 'win32'; engine = '${{ matrix.engine }}'; graphics = '${{ matrix.graphics }}'
+            app = 'dawntest'; exe_bytes = [int64]$exe.Length; total_bytes = [int64]$total
           }
-          Get-ChildItem $exedir -File | Select-Object Name, Length
+          $obj | ConvertTo-Json | Out-File size.json -Encoding utf8
 
-      - name: Upload artifact (full output dir, for bench)
+      - name: Upload complete-size marker
         uses: actions/upload-artifact@v4
         with:
-          name: app-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
-          path: ${{ steps.locate.outputs.exedir }}
+          name: size-dawntest-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -221,6 +226,30 @@ jobs:
         with:
           name: app-macos-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report complete deployable size (exe + JS engine + dylib deps)
+        run: |
+          exe='${{ steps.locate.outputs.exe }}'
+          dir=$(dirname "$exe")
+          exe_bytes=$(stat -f%z "$exe")
+          total=$exe_bytes
+          # Sum any shared libraries shipped next to the binary (the JS engine
+          # dylib etc.); statically-linked engines leave this empty so total==exe.
+          while IFS= read -r lib; do
+            [ -n "$lib" ] || continue
+            total=$((total + $(stat -f%z "$lib")))
+          done < <(find "$dir" -maxdepth 1 -type f -name '*.dylib')
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"macos","engine":"%s","graphics":"%s","app":"dawntest","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
+
+      - name: Upload complete-size marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-dawntest-macos-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -300,6 +329,28 @@ jobs:
         with:
           name: app-ios-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report complete deployable size (exe + JS engine + dylib deps)
+        run: |
+          exe='${{ steps.locate.outputs.exe }}'
+          dir=$(dirname "$exe")
+          exe_bytes=$(stat -f%z "$exe")
+          total=$exe_bytes
+          while IFS= read -r lib; do
+            [ -n "$lib" ] || continue
+            total=$((total + $(stat -f%z "$lib")))
+          done < <(find "$dir" -maxdepth 1 -type f -name '*.dylib')
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"ios","engine":"%s","graphics":"%s","app":"dawntest","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
+
+      - name: Upload complete-size marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-dawntest-ios-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -391,6 +442,31 @@ jobs:
         with:
           name: app-ubuntu-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report complete deployable size (exe + JS engine + .so deps)
+        run: |
+          exe='${{ steps.locate.outputs.exe }}'
+          dir=$(dirname "$exe")
+          exe_bytes=$(stat -c%s "$exe")
+          total=$exe_bytes
+          # Sum bundled shared objects sitting next to the binary (the JS
+          # engine .so etc.); system libs resolved via the loader are not
+          # counted. Statically-linked engines leave this empty so total==exe.
+          while IFS= read -r lib; do
+            [ -n "$lib" ] || continue
+            total=$((total + $(stat -c%s "$lib")))
+          done < <(find "$dir" -maxdepth 1 -type f -name '*.so*')
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"ubuntu","engine":"%s","graphics":"%s","app":"dawntest","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
+
+      - name: Upload complete-size marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-dawntest-ubuntu-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -524,8 +600,40 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # ============================================================
-  # BabylonNative Playground — comparison build.
+      - name: Report complete deployable size (all arm64-v8a .so in the ABI)
+        run: |
+          # "Complete size per ABI" for Android = every native library packed
+          # into the arm64-v8a slot of the APK: our libdawntest.so plus the JS
+          # engine runtime (libv8android.so / libhermes*.so) and libc++_shared.so.
+          # Read the final APK's lib/arm64-v8a/ entries directly — that is the
+          # authoritative per-ABI payload (engine .so come from AARs merged at
+          # packaging time, not from stripped_native_libs/).
+          exe='${{ steps.locate.outputs.exe }}'
+          exe_bytes=$(stat -c%s "$exe")
+          apk=$(find Android/app/build/outputs/apk/release -type f -name '*.apk' | head -1)
+          if [ -n "$apk" ]; then
+            echo "--- $apk : lib/arm64-v8a/*.so ---"
+            unzip -l "$apk" 'lib/arm64-v8a/*.so' || true
+            total=$(unzip -l "$apk" 'lib/arm64-v8a/*.so' | grep '\.so$' | awk '{s+=$1} END{print s+0}')
+          else
+            echo "APK not found; falling back to stripped_native_libs sum"
+            dir=$(dirname "$exe")
+            total=$(find "$dir" -maxdepth 1 -type f -name '*.so' -exec stat -c%s {} \; | awk '{s+=$1} END{print s+0}')
+          fi
+          [ "${total:-0}" -gt 0 ] || total=$exe_bytes
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"android","engine":"%s","graphics":"%s","app":"dawntest","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
+
+      - name: Upload complete-size marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-dawntest-android-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
+          if-no-files-found: error
+          retention-days: 14
+
+
   #
   # For every non-Vulkan DawnTest cell we also build the upstream
   # BabylonNative `Playground` host so the size summary can show both
@@ -642,11 +750,29 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload artifact (full output dir, for bench)
+      - name: Report complete deployable size (exe + JS engine + DLL deps)
+        id: complete
+        shell: pwsh
+        run: |
+          # Complete size = Playground.exe plus every shipped DLL dependency
+          # (the JS engine runtime, etc.). Scripts/ assets (.js/.png) excluded.
+          $exedir = '${{ steps.locate.outputs.exedir }}'
+          $exe    = Get-Item '${{ steps.locate.outputs.exe }}'
+          $dlls   = Get-ChildItem $exedir -Filter *.dll -File -ErrorAction SilentlyContinue
+          $total  = [int64]$exe.Length + (($dlls | Measure-Object Length -Sum).Sum)
+          Write-Host ("complete: {0} bytes ({1:N2} MB)" -f $total, ($total/1MB))
+          $dlls | Select-Object Name, Length | Format-Table -AutoSize
+          $obj = [ordered]@{
+            os = 'win32'; engine = '${{ matrix.engine }}'; graphics = '${{ matrix.graphics }}'
+            app = 'bn'; exe_bytes = [int64]$exe.Length; total_bytes = [int64]$total
+          }
+          $obj | ConvertTo-Json | Out-File size.json -Encoding utf8
+
+      - name: Upload complete-size marker
         uses: actions/upload-artifact@v4
         with:
-          name: bn-playground-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
-          path: ${{ steps.locate.outputs.exedir }}
+          name: size-bn-win32-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -724,6 +850,31 @@ jobs:
         with:
           name: bn-playground-macos-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report complete deployable size (binary + JS engine + dylib deps)
+        run: |
+          exe='${{ steps.locate.outputs.exe }}'
+          # exe = Playground.app/Contents/MacOS/Playground -> bundle is 3 up.
+          app=$(dirname "$(dirname "$(dirname "$exe")")")
+          exe_bytes=$(stat -f%z "$exe")
+          total=$exe_bytes
+          # Add every dylib embedded in the .app (JS engine etc.); asset files
+          # under Scripts/ are not .dylib so they're excluded.
+          while IFS= read -r lib; do
+            [ -n "$lib" ] || continue
+            total=$((total + $(stat -f%z "$lib")))
+          done < <(find "$app" -type f -name '*.dylib')
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"macos","engine":"%s","graphics":"%s","app":"bn","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
+
+      - name: Upload complete-size marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-bn-macos-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -809,6 +960,29 @@ jobs:
         with:
           name: bn-playground-ios-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report complete deployable size (binary + JS engine + dylib deps)
+        run: |
+          exe='${{ steps.locate.outputs.exe }}'
+          app=$(dirname "$exe")
+          case "$app" in */Contents/MacOS) app=$(dirname "$(dirname "$app")");; esac
+          exe_bytes=$(stat -f%z "$exe")
+          total=$exe_bytes
+          while IFS= read -r lib; do
+            [ -n "$lib" ] || continue
+            total=$((total + $(stat -f%z "$lib")))
+          done < <(find "$app" -type f -name '*.dylib')
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"ios","engine":"%s","graphics":"%s","app":"bn","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
+
+      - name: Upload complete-size marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-bn-ios-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -902,6 +1076,28 @@ jobs:
         with:
           name: bn-playground-ubuntu-${{ matrix.engine }}-${{ matrix.graphics }}
           path: ${{ steps.locate.outputs.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report complete deployable size (exe + JS engine + .so deps)
+        run: |
+          exe='${{ steps.locate.outputs.exe }}'
+          dir=$(dirname "$exe")
+          exe_bytes=$(stat -c%s "$exe")
+          total=$exe_bytes
+          while IFS= read -r lib; do
+            [ -n "$lib" ] || continue
+            total=$((total + $(stat -c%s "$lib")))
+          done < <(find "$dir" -maxdepth 1 -type f -name '*.so*')
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"ubuntu","engine":"%s","graphics":"%s","app":"bn","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
+
+      - name: Upload complete-size marker
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-bn-ubuntu-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
           if-no-files-found: error
           retention-days: 14
 
@@ -1070,257 +1266,37 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # ============================================================
-  # Per-frame perf benchmark of scene200 (win32 only, no GPU on
-  # mac/android runners). Runs each engine x graphics cell against
-  # both DawnTest and BabylonNative Playground and uploads a per-cell
-  # JSON file the summary job aggregates.
-  # ============================================================
-  bench-win32:
-    name: bench / win32 / ${{ matrix.engine }} / ${{ matrix.graphics }}
-    needs: [build-win32, build-bn-win32]
-    runs-on: windows-latest
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        engine: [chakra, v8, quickjs, hermes]
-        graphics: [d3d11, d3d12]
-    steps:
-      - name: Enable Git long paths
-        shell: pwsh
-        run: git config --global core.longpaths true
-
-      - name: Checkout (for asset pipeline + runner)
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build asset bundles
-        shell: pwsh
-        working-directory: assets/script
+      - name: Report complete deployable size (all arm64-v8a .so in the ABI)
         run: |
-          # npm install (not npm ci) because the lockfile isn't tracked
-          # (see assets/script/.gitignore). Bench results don't depend on
-          # bit-exact dep versions; esbuild/babel/preset-env are stable.
-          npm install --no-audit --no-fund
-          npm run build
+          # Complete size per ABI = every native library packed into the
+          # arm64-v8a slot of the Playground APK: libBabylonNativeJNI.so plus
+          # the JS engine runtime (libv8android.so / libhermes*.so) and
+          # libc++_shared.so. Read the APK's lib/arm64-v8a/ entries directly.
+          base=BabylonNative/Apps/Playground/Android
+          exe='${{ steps.locate.outputs.exe }}'
+          exe_bytes=$(stat -c%s "$exe")
+          apk=$(find "$base" -type f -name '*-release*.apk' | head -1)
+          [ -n "$apk" ] || apk=$(find "$base" -path '*outputs/apk/release*' -name '*.apk' | head -1)
+          if [ -n "$apk" ]; then
+            echo "--- $apk : lib/arm64-v8a/*.so ---"
+            unzip -l "$apk" 'lib/arm64-v8a/*.so' || true
+            total=$(unzip -l "$apk" 'lib/arm64-v8a/*.so' | grep '\.so$' | awk '{s+=$1} END{print s+0}')
+          else
+            echo "APK not found; falling back to stripped_native_libs sum"
+            dir=$(dirname "$exe")
+            total=$(find "$dir" -maxdepth 1 -type f -name '*.so' -exec stat -c%s {} \; | awk '{s+=$1} END{print s+0}')
+          fi
+          [ "${total:-0}" -gt 0 ] || total=$exe_bytes
+          printf "complete: %s bytes (%.2f MB)\n" "$total" "$(echo "scale=2; $total/1048576" | bc)"
+          printf '{"os":"android","engine":"%s","graphics":"%s","app":"bn","exe_bytes":%s,"total_bytes":%s}\n' \
+            "${{ matrix.engine }}" "${{ matrix.graphics }}" "$exe_bytes" "$total" > size.json
 
-      - name: Download DawnTest artifact (full dir)
-        uses: actions/download-artifact@v4
-        with:
-          name: app-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
-          path: dt
-
-      - name: Download BabylonNative Playground artifact (full dir)
-        uses: actions/download-artifact@v4
-        with:
-          name: bn-playground-dir-win32-${{ matrix.engine }}-${{ matrix.graphics }}
-          path: bn
-
-      - name: Bench DawnTest
-        id: bench_dt
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $bundle = if ('${{ matrix.engine }}' -eq 'chakra') {
-            'assets/script/dist-chakra/scene200.lite.chakra.js'
-          } else {
-            'assets/script/dist/scene200.lite.js'
-          }
-          $exe = Get-ChildItem dt -Recurse -Filter app.exe | Select-Object -First 1
-          if (-not $exe) { throw "app.exe missing from artifact" }
-          Write-Host "DawnTest: $($exe.FullName) -> $bundle"
-          # Capture to a file; PowerShell's pipeline preserves the BENCH line.
-          & $exe.FullName --scene $bundle --frames 300 --width 640 --height 480 *>&1 |
-            Tee-Object -FilePath dt-bench.log
-          $line = Select-String -Path dt-bench.log -Pattern '^BENCH ' | Select-Object -First 1
-          if (-not $line) {
-            Write-Warning "no BENCH line in DawnTest output"
-            "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
-          } else {
-            $line.Line | Out-File dt-bench.line
-            "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
-            Write-Host "DawnTest BENCH: $($line.Line)"
-          }
-
-      - name: Bench BabylonNative Playground (run only)
-        id: bench_bn_run
-        shell: pwsh
-        continue-on-error: true
-        timeout-minutes: 25
-        working-directory: bn
-        run: |
-          # BN loads playground_runner.js from app:///Scripts/ relative to
-          # the cwd, so we run from the artifact's root (where Scripts/
-          # lives). The user script can be an absolute path.
-          # scene200.js is not in upstream BabylonNative (only the cedric
-          # forks carry it locally), so seed it from the asset pipeline's
-          # canonical copy so v8/chakra/quickjs/hermes all see the same
-          # script.
-          $srcScene = Join-Path $PWD '..\assets\script\dist\scene200.babylon.js'
-          if (-not (Test-Path $srcScene)) {
-              $srcScene = Join-Path $PWD '..\assets\script\src\babylon\scene200.js'
-          }
-          if (-not (Test-Path 'Scripts')) { New-Item -ItemType Directory -Path Scripts | Out-Null }
-          Copy-Item -Force $srcScene 'Scripts/scene200.js'
-          # Trim scene200's MAX_FRAMES so it exits a few frames after the
-          # steady-state log (frame 300). The canonical scene exits at
-          # frame 400, which on WARP (~2 s/frame for chakra+d3d12) would
-          # push past our step timeout. Replace the constant in-place;
-          # if the pattern changes upstream the bench just falls back to
-          # waiting the natural exit.
-          $sc = Get-Content 'Scripts/scene200.js' -Raw
-          $sc = $sc -replace 'const\s+MAX_FRAMES\s*=\s*\d+\s*;', 'const MAX_FRAMES = 305;'
-          Set-Content 'Scripts/scene200.js' -Value $sc -Encoding utf8
-          Write-Host "Patched MAX_FRAMES to 305 in Scripts/scene200.js"
-          Get-ChildItem Scripts | Format-Table -AutoSize
-          $script = Resolve-Path "Scripts/scene200.js"
-          $exe = Get-ChildItem . -Filter Playground.exe | Select-Object -First 1
-          if (-not $exe) { throw "Playground.exe missing from artifact" }
-          Write-Host "BN Playground: $($exe.FullName) -> $script"
-          # cmd.exe shell redirection (`> file 2>&1`) captures every byte
-          # BN writes — including crash banners — at the OS handle level,
-          # so it survives early crashes and PowerShell pipeline tearing.
-          # Earlier attempts using `& exe *>&1 | Tee-Object` silently
-          # dropped output for processes that crashed within 1-2 s (e.g.
-          # cedric/quickjs BN fork on scene200), leaving an empty log.
-          # Start-Process -RedirectStandardOutput in turn breaks BN's
-          # stdio entirely (see prior session notes), so cmd.exe is the
-          # only approach proven to work for both fast-crash and
-          # long-running BN runs in CI.
-          New-Item -ItemType File -Force bn-bench.log | Out-Null
-          $exeDir = $exe.Directory.FullName
-          $exeName = $exe.Name
-          $start = [DateTime]::UtcNow
-          cmd /c "cd /d `"$exeDir`" && `"$exeName`" `"$script`" > bn-bench.log 2>&1"
-          $exitCode = $LASTEXITCODE
-          $dur = ([DateTime]::UtcNow - $start).TotalSeconds
-          Write-Host "BN Playground exited after $([math]::Round($dur,1)) s, exitCode=$exitCode"
-          $exitCode | Out-File bn-exit-code.txt
-          if (Test-Path bn-bench.log) {
-            Write-Host "bn-bench.log size: $((Get-Item bn-bench.log).Length) bytes"
-          }
-
-      - name: Bench BabylonNative Playground (parse)
-        id: bench_bn
-        if: always()
-        shell: pwsh
-        continue-on-error: true
-        working-directory: bn
-        run: |
-          if (-not (Test-Path 'bn-bench.log')) {
-            Write-Warning "bn-bench.log missing — BN run step never produced any output"
-            "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
-            return
-          }
-          Write-Host "----- bn-bench.log head -----"
-          Get-Content bn-bench.log -Head 50 -ErrorAction SilentlyContinue
-          Write-Host "----- bn-bench.log tail -----"
-          Get-Content bn-bench.log -Tail 50 -ErrorAction SilentlyContinue
-          # Primary: scene200's canonical steady-state line at frame 300.
-          $m = Select-String -Path bn-bench.log -Pattern '\[scene200\] steady-state\s+([\d.]+)\s+ms/frame' | Select-Object -First 1
-          if ($m) {
-            $foundAvg = $m.Matches[0].Groups[1].Value
-            Write-Host ">>> got canonical steady-state: $foundAvg ms/frame"
-          } else {
-            $foundAvg = $null
-          }
-          # Fallback: compute ms/frame from "[scene200] frame N t=X.XXXs"
-          # log lines. On slow WARP backends d3d11 can be 6+ s/frame, so
-          # reaching frame 300 overruns the step timeout. Use the highest
-          # frame N present, paired with frame 1, to derive a steady-state
-          # estimate: (tN - t1) * 1000 / (N - 1).
-          if (-not $foundAvg) {
-            $frameLines = Select-String -Path bn-bench.log -Pattern '\[scene200\] frame\s+(\d+)\s+t=([\d.]+)s'
-            $samples = @()
-            foreach ($fl in $frameLines) {
-              $samples += [pscustomobject]@{
-                Frame = [int]$fl.Matches[0].Groups[1].Value
-                T     = [double]$fl.Matches[0].Groups[2].Value
-              }
-            }
-            $f1 = $samples | Where-Object { $_.Frame -eq 1 } | Select-Object -First 1
-            $fLast = $samples | Where-Object { $_.Frame -gt 1 } | Sort-Object Frame -Descending | Select-Object -First 1
-            if ($f1 -and $fLast -and $fLast.Frame -gt $f1.Frame) {
-              $dt = ($fLast.T - $f1.T) * 1000.0 / ($fLast.Frame - $f1.Frame)
-              $foundAvg = ('{0:F3}' -f $dt)
-              Write-Host ">>> fallback: avg from frame $($f1.Frame)..$($fLast.Frame) = $foundAvg ms/frame"
-            }
-          }
-          if ($foundAvg) {
-            "BENCH scene=scene200 frames=240 wall_ms=0 min_ms=0 avg_ms=$foundAvg max_ms=0 p95_ms=0" | Out-File ../bn-bench.line
-            "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
-            Write-Host "BN scene200 avg ms/frame: $foundAvg"
-          } else {
-            # Last-ditch: C++ bench timer BENCH line (likely garbage on WARP
-            # but kept for completeness).
-            $line = Select-String -Path bn-bench.log -Pattern '^BENCH ' | Select-Object -First 1
-            if ($line) {
-              $line.Line | Out-File ../bn-bench.line
-              "result=ok" | Out-File -Append $env:GITHUB_OUTPUT
-              Write-Host "BN BENCH (C++ fallback): $($line.Line)"
-            } else {
-              # Detect a BN uncaught JS error so the summary can show
-              # "crash" instead of an empty cell — useful for the cedric
-              # quickjs fork which throws on scene200 before any frame.
-              $crashed = Select-String -Path bn-bench.log -Pattern 'Uncaught Error|UNCAUGHT JS ERROR' | Select-Object -First 1
-              if ($crashed) {
-                Write-Warning "BN crashed with uncaught JS error before any frame"
-                "BENCH scene=scene200 frames=0 wall_ms=0 min_ms=0 avg_ms=crash max_ms=0 p95_ms=0" | Out-File ../bn-bench.line
-                "result=crash" | Out-File -Append $env:GITHUB_OUTPUT
-              } else {
-                Write-Warning "no scene200 steady-state, no frame logs, and no BENCH line in BN output"
-                "result=fail" | Out-File -Append $env:GITHUB_OUTPUT
-              }
-            }
-          }
-
-      - name: Emit cell JSON
-        if: always()
-        shell: pwsh
-        run: |
-          # Single tiny JSON per cell; summary job parses all of them.
-          function Parse([string]$path) {
-            if (-not (Test-Path $path)) { return $null }
-            $line = (Get-Content $path -Raw).Trim()
-            if (-not $line) { return $null }
-            # BENCH scene=... frames=N wall_ms=X min_ms=X avg_ms=X max_ms=X p95_ms=X
-            $h = @{}
-            foreach ($kv in ($line -replace '^BENCH\s+','') -split '\s+') {
-              $k,$v = $kv -split '=',2
-              if ($k -and $v) { $h[$k] = $v }
-            }
-            return $h
-          }
-          $dt = Parse 'dt-bench.line'
-          $bn = Parse 'bn-bench.line'
-          $obj = @{
-            engine    = '${{ matrix.engine }}'
-            graphics  = '${{ matrix.graphics }}'
-            dawntest  = $dt
-            bnplayground = $bn
-          }
-          $obj | ConvertTo-Json -Depth 5 | Out-File "bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json" -Encoding utf8
-          Get-Content "bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json"
-
-      - name: Upload bench result
-        if: always()
+      - name: Upload complete-size marker
         uses: actions/upload-artifact@v4
         with:
-          name: bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}
-          path: |
-            bench-win32-${{ matrix.engine }}-${{ matrix.graphics }}.json
-            dt-bench.log
-            bn-bench.log
-            bn/bn-bench.log
-            bn/bn-exit-code.txt
-          if-no-files-found: warn
+          name: size-bn-android-${{ matrix.engine }}-${{ matrix.graphics }}
+          path: size.json
+          if-no-files-found: error
           retention-days: 14
 
   # ============================================================
@@ -1339,7 +1315,6 @@ jobs:
       - build-bn-ios
       - build-bn-ubuntu
       - build-bn-android
-      - bench-win32
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1364,16 +1339,17 @@ jobs:
                       return os.path.join(root, f)
               return None
 
-          # key -> {'dt': (file, bytes), 'bn': (file, bytes),
-          #         'dt_avg': float, 'bn_avg': float}
+          # key (os, engine, graphics) -> {
+          #   'dt': (file, exe_bytes), 'bn': (file, exe_bytes),
+          #   'dt_total': int, 'bn_total': int }
+          # The 'dt'/'bn' exe size comes from the exe-only artifacts; the
+          # *_total "complete deployable size" (executable + JS engine +
+          # .so/.dll/.dylib deps, per ABI) comes from the size-* markers.
           rows = {}
           for d in sorted(glob.glob('artifacts/app-*')):
               name = os.path.basename(d)
               parts = name.split('-')
               if len(parts) < 4:
-                  continue
-              # Skip the new app-dir-* artifacts (full output dirs for bench)
-              if parts[1] == 'dir':
                   continue
               os_, engine, graphics = parts[1], parts[2], '-'.join(parts[3:])
               f = first_file(d)
@@ -1381,14 +1357,11 @@ jobs:
                   continue
               rows.setdefault((os_, engine, graphics), {})['dt'] = (os.path.basename(f), os.path.getsize(f))
 
-          for d in sorted(glob.glob('artifacts/bn-playground-win32-*') + glob.glob('artifacts/bn-playground-macos-*') + glob.glob('artifacts/bn-playground-ios-*') + glob.glob('artifacts/bn-playground-ubuntu-*') + glob.glob('artifacts/bn-playground-android-*')):
+          for d in sorted(glob.glob('artifacts/bn-playground-*')):
               name = os.path.basename(d)
               parts = name.split('-')
-              # bn-playground-<os>-<engine>-<graphics>; skip the bn-playground-dir-*
-              # artifacts (those are full output dirs uploaded for the bench job).
+              # bn-playground-<os>-<engine>-<graphics>
               if len(parts) < 5:
-                  continue
-              if parts[2] == 'dir':
                   continue
               os_, engine, graphics = parts[2], parts[3], '-'.join(parts[4:])
               f = first_file(d)
@@ -1396,14 +1369,9 @@ jobs:
                   continue
               rows.setdefault((os_, engine, graphics), {})['bn'] = (os.path.basename(f), os.path.getsize(f))
 
-          # Bench JSONs: artifacts/bench-win32-<engine>-<graphics>/bench-win32-<engine>-<graphics>.json
-          for d in sorted(glob.glob('artifacts/bench-win32-*')):
-              name = os.path.basename(d)
-              parts = name.split('-')
-              if len(parts) < 4:
-                  continue
-              os_, engine, graphics = parts[1], parts[2], '-'.join(parts[3:])
-              j = os.path.join(d, name + '.json')
+          # Complete-size markers: artifacts/size-<app>-<os>-<engine>-<graphics>/size.json
+          for d in sorted(glob.glob('artifacts/size-*')):
+              j = os.path.join(d, 'size.json')
               if not os.path.isfile(j):
                   continue
               try:
@@ -1412,46 +1380,40 @@ jobs:
               except Exception as e:
                   print("WARN: failed to parse {}: {}".format(j, e), file=sys.stderr)
                   continue
-              dt = (data or {}).get('dawntest') or {}
-              bn = (data or {}).get('bnplayground') or {}
+              os_     = data.get('os'); engine = data.get('engine'); graphics = data.get('graphics')
+              app     = data.get('app')
+              total   = data.get('total_bytes')
+              if not (os_ and engine and graphics and app):
+                  continue
               row = rows.setdefault((os_, engine, graphics), {})
-              if dt.get('avg_ms'):
-                  try: row['dt_avg'] = float(dt['avg_ms'])
-                  except: pass
-              if bn.get('avg_ms'):
-                  v = bn['avg_ms']
-                  if v == 'crash':
-                      row['bn_avg'] = 'crash'
-                  else:
-                      try: row['bn_avg'] = float(v)
-                      except: pass
+              try:
+                  total = int(total)
+              except (TypeError, ValueError):
+                  continue
+              row['dt_total' if app == 'dawntest' else 'bn_total'] = total
 
           def mb(b):
-              return "{:.2f} MB".format(b/1048576)
-
-          def ms(v):
-              if v is None: return "—"
-              if isinstance(v, str): return v
-              return "{:.2f} ms".format(v)
+              return "{:.2f} MB".format(b/1048576) if b is not None else "—"
 
           print("# Build artifact sizes")
           print()
           print("Side-by-side comparison of DawnTest and BabylonNative Playground for each matrix cell.")
-          print("Bench columns are average ms / frame for scene200 over 300 frames with vsync disabled (win32 only; mac/android CI runners have no GPU).")
           print()
-          print("| OS | Engine | Graphics | DawnTest artifact | DawnTest size | BN Playground size | DawnTest avg ms/frame | BN avg ms/frame |")
-          print("|----|--------|----------|-------------------|--------------:|-------------------:|----------------------:|----------------:|")
+          print("- **exe** — the bare main binary (app.exe / Playground / libdawntest.so / libBabylonNativeJNI.so), stripped.")
+          print("- **complete** — the full deployable size per ABI: executable + JS engine + all shipped shared-library dependencies (.dll / .so / .dylib). For Android this is every native library in the arm64-v8a slot of the APK.")
+          print()
+          print("| OS | Engine | Graphics | DawnTest exe | DawnTest complete | BN exe | BN complete |")
+          print("|----|--------|----------|-------------:|------------------:|-------:|------------:|")
           for key in sorted(rows.keys()):
               os_, engine, graphics = key
               entry = rows[key]
               dt = entry.get('dt')
               bn = entry.get('bn')
-              dt_file = "`{}`".format(dt[0]) if dt else "—"
               dt_size = mb(dt[1]) if dt else "—"
               bn_size = mb(bn[1]) if bn else "—"
-              dt_avg  = ms(entry.get('dt_avg'))
-              bn_avg  = ms(entry.get('bn_avg'))
-              print("| {} | {} | {} | {} | {} | {} | {} | {} |".format(os_, engine, graphics, dt_file, dt_size, bn_size, dt_avg, bn_avg))
+              dt_total = mb(entry.get('dt_total'))
+              bn_total = mb(entry.get('bn_total'))
+              print("| {} | {} | {} | {} | {} | {} | {} |".format(os_, engine, graphics, dt_size, dt_total, bn_size, bn_total))
           print()
           print("_Build run: {} • commit {}_".format(run_id, sha))
           PYEOF
