@@ -4,9 +4,11 @@ This guide explains how to run the side-by-side benchmark that compares
 the **DawnTest** native WebGPU app (`webgpu-cross-platform-app/`) against
 the **BabylonNative Playground** on the same `scene200` workload.
 
-The same procedure works locally (Windows or macOS host) and on CI. The
-runner auto-discovers every build configuration it finds on disk, so you
-can mix and match engines (Chakra / V8 / QuickJS / Hermes / JSC) and
+This is a **local-only** procedure (Windows or macOS host): GitHub's CI
+runners have no representative GPU, so CI publishes a build-size
+comparison instead of timings (see [CI integration](#ci-integration)).
+The runner auto-discovers every build configuration it finds on disk, so
+you can mix and match engines (Chakra / V8 / QuickJS / Hermes / JSC) and
 graphics APIs (D3D11 / D3D12 / Vulkan / Metal / OpenGL ES) without
 editing the script.
 
@@ -168,32 +170,34 @@ stats (it dominates shader/PSO compile + first asset upload).
 
 ## CI integration
 
-A GitHub Actions job (`bench / win32 / <engine> / <graphics>`) runs
-after the `build-win32` and `build-bn-win32` matrices. It does **not**
-use `tools/bench/run-bench.mjs` (the runner discovers local build dirs
-and isn't a good fit for CI's artifact-based layout); instead, each
-matrix cell:
+CI does **not** run the per-frame performance benchmark. GitHub-hosted
+runners have no usable GPU (mac/Android) or only a software rasterizer
+(WARP on win32), so the timing numbers were not representative. The perf
+benchmark described above is therefore a **local-only** tool.
 
-1. Downloads `app-win32-<engine>-<graphics>` (DawnTest exe) and
-   `bn-playground-dir-win32-<engine>-<graphics>` (BN full output dir,
-   needed because Playground loads `playground_runner.js` from
-   `app:///Scripts/` relative to cwd).
-2. Runs the asset pipeline (`assets/script && npm ci && npm run build`)
-   to regenerate the four scene200 bundles.
-3. Launches each binary with `--frames 300 --no-vsync`, capturing
-   the `BENCH …` stdout line.
-4. Emits `bench-win32-<engine>-<graphics>.json` (DawnTest + BN side by
-   side) as an artifact.
+What CI *does* publish is a build-size comparison. The `summary` job
+aggregates every build matrix cell and emits a Markdown table:
 
-The `summary` job downloads all `bench-win32-*` JSONs and extends the
-size-comparison Markdown table with `DawnTest avg ms/frame` and
-`BN avg ms/frame` columns per cell.
+| OS | Engine | Graphics | DawnTest exe | DawnTest complete | BN exe | BN complete |
 
-CI bench is win32-only (D3D11 + D3D12 x {chakra, v8, quickjs, hermes}).
-mac / Android / iOS jobs **build only**, since GitHub-hosted mac
-runners have no GPU and Android emulator perf is meaningless. Vulkan
-and OpenGL are also skipped: no Vulkan SDK on the runners, and BN
-Win32 only supports OpenGL via ANGLE.
+- **exe** — the bare, stripped main binary (`app.exe` / `Playground` /
+  `libdawntest.so` / `libBabylonNativeJNI.so`).
+- **complete** — the full deployable size **per ABI**: the executable
+  plus the JS engine and every shipped shared-library dependency
+  (`.dll` / `.so` / `.dylib`). On Android this is every native library
+  in the APK's `lib/arm64-v8a/` slot (our lib + the engine runtime, e.g.
+  `libv8android.so`, + `libc++_shared.so`). The exe-vs-complete gap is
+  large for V8 (separate ~18 MB runtime) and near-zero for statically
+  linked engines (QuickJS / Hermes / Chakra-via-SDK / JSC).
+
+Each build job computes its complete size where the build tree is still
+available and uploads a tiny `size-<app>-<os>-<engine>-<graphics>`
+marker (`size.json` with `exe_bytes` + `total_bytes`); the `summary`
+job reads those markers plus the exe-only artifacts to fill the table.
+
+The win32 build jobs are pinned to the `windows-2022` runner so the MSVC
+toolchain (and therefore the reported sizes) stays stable across runs;
+`windows-latest` now ships Visual Studio 2026.
 
 ## Files of interest
 
