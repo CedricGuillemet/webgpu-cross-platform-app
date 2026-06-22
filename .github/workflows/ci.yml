@@ -47,7 +47,12 @@ jobs:
   # ============================================================
   build-win32:
     name: win32 / ${{ matrix.engine }} / ${{ matrix.graphics }}
-    runs-on: windows-latest
+    # Pinned to windows-2022 (VS 2022). GitHub rolled `windows-latest` to
+    # `windows-2025-vs2026`, which ships Visual Studio 2026 only, so the
+    # `-G "Visual Studio 17 2022"` generator below could no longer find any
+    # VS instance. Pinning also keeps the toolchain stable run-to-run, which
+    # matters for comparable build-size numbers.
+    runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
@@ -648,7 +653,9 @@ jobs:
   # ---- Win32 ----
   build-bn-win32:
     name: bn / win32 / ${{ matrix.engine }} / ${{ matrix.graphics }}
-    runs-on: windows-latest
+    # windows-2022 for VS 2022 — see build-win32 note (windows-latest now
+    # ships VS 2026 and breaks the "Visual Studio 17 2022" generator).
+    runs-on: windows-2022
     continue-on-error: true
     strategy:
       fail-fast: false
