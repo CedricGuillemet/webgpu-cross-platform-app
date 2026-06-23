@@ -1243,23 +1243,28 @@ jobs:
       - name: Locate native .so (arm64-v8a, stripped)
         id: locate
         run: |
-          # The Playground Android module names its BN-linked JNI library
-          # `libBabylonNativeJNI.so` (see
-          # Apps/Playground/Android/BabylonNative/CMakeLists.txt).  Target it
-          # by name — selecting the "largest .so" picked up unrelated runtime
-          # libraries (libc++_shared.so for V8 builds, libhermesvmlean.so for
-          # Hermes builds) instead of the BN core that we actually built.
+          # The BN core native library is named differently depending on the
+          # source branch:
+          #   - Cedric fork (quickjs / hermes-integration-dawn): libBabylonNativeJNI.so
+          #   - upstream BabylonJS/BabylonNative master (v8):     libBabylonNativeEmbedding.so
+          # Selecting the "largest .so" picks up unrelated runtime libraries
+          # (libv8android.so, libhermesvm.so, libc++_shared.so) instead of the
+          # BN core, so we match by name — trying each known name in turn.
           base=BabylonNative/Apps/Playground/Android
           echo "--- all arm64-v8a .so candidates (size, path) ---"
           find "$base" -type f -name '*.so' -path '*arm64-v8a*' \
             -exec stat -c '%s %n' {} \; | sort -nr || true
           echo "--- end candidates ---"
-          # Prefer the stripped, release-built copy if available.
-          so=$(find "$base" -type f -name 'libBabylonNativeJNI.so' -path '*arm64-v8a*' -path '*stripped_native_libs*' | head -1)
-          if [ -z "$so" ]; then
-            so=$(find "$base" -type f -name 'libBabylonNativeJNI.so' -path '*arm64-v8a*' | head -1)
-          fi
-          if [ -z "$so" ]; then echo "libBabylonNativeJNI.so not found"; exit 1; fi
+          so=""
+          for name in libBabylonNativeJNI.so libBabylonNativeEmbedding.so; do
+            # Prefer the stripped, release-built copy if available.
+            so=$(find "$base" -type f -name "$name" -path '*arm64-v8a*' -path '*stripped_native_libs*' | head -1)
+            if [ -z "$so" ]; then
+              so=$(find "$base" -type f -name "$name" -path '*arm64-v8a*' | head -1)
+            fi
+            if [ -n "$so" ]; then echo "matched BN core lib: $name"; break; fi
+          done
+          if [ -z "$so" ]; then echo "BN core lib (libBabylonNativeJNI.so / libBabylonNativeEmbedding.so) not found"; exit 1; fi
           bytes=$(stat -c%s "$so")
           echo "exe=$so" >> "$GITHUB_OUTPUT"
           echo "size_bytes=$bytes" >> "$GITHUB_OUTPUT"
