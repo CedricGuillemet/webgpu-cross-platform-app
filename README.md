@@ -27,7 +27,12 @@ cmake --build build --target app
 ## Build the scene bundles
 
 Babylon-Lite scenes must be bundled to a self-contained IIFE first
-(`assets/script`, needs Node):
+(`assets/script`, needs Node). esbuild transpiles the TypeScript and
+resolves/tree-shakes the `babylon-lite` dependency graph into one file; IIFE
+is used because it runs on every engine — legacy Windows-SDK Chakra has no
+ES-module support, so the entry must be a plain script with no top-level
+`import`/`export`. The other engines (V8/QuickJS/Hermes/JSC) could also run an
+ESM bundle, but IIFE is the common denominator.
 
 ```powershell
 cd assets/script
