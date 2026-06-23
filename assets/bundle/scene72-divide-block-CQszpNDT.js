@@ -1,0 +1,1 @@
+import{b as tt}from"./scene72-_math-factory-DFVyS8gB.js";const rt=tt("DivideBlock",(t,e)=>`${t}/${e}`);export{rt as emitter};

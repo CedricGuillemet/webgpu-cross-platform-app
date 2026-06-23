@@ -1,0 +1,1 @@
+import{A as Na}from"./scene141.js";async function Da(s,e,r){(await Na(()=>__import("./scene141-pbr-transmission-ext-BhVe72Of.js"),[])).registerPbrTransmission(s,e,r);}export{Da as registerPbrRefraction};

@@ -1,0 +1,1 @@
+import{_ as aa}from"./scene73.js";async function rc(s,r,t){(await aa(()=>__import("./scene73-pbr-transmission-ext-DD_y9-gt.js"),[])).registerPbrTransmission(s,r,t);}export{rc as registerPbrRefraction};

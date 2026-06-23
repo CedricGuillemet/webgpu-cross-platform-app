@@ -1,0 +1,1 @@
+import{b as tl}from"./scene34.js";function Xe(o,n){Ze(o,n),tl();}function Ze(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)Ze(s[o],n);}export{Xe as s};

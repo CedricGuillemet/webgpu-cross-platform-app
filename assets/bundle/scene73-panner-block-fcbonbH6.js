@@ -1,0 +1,1 @@
+const tr={className:"PannerBlock",emit(e,t,c,r,s){const n=s.cast(s.resolve(e,"uv",c,r),"vec2f"),a=s.cast(s.resolve(e,"speed",c,r),"vec2f"),f=s.cast(s.resolve(e,"time",c,r),"f32");return{expr:`(${n.expr}+${a.expr}*${f.expr})`,type:"vec2f"};}};export{tr as emitter};

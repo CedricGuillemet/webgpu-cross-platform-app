@@ -1,0 +1,1 @@
+const tc={className:"NodeMaterialTeleportInBlock",emit(e,t,r,a,o){return o.resolve(e,"input",r,a);}};export{tc as emitter};

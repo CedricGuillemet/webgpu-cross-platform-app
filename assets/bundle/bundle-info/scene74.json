@@ -1,0 +1,86 @@
+{
+  "scene": "scene74",
+  "chunks": [
+    {
+      "file": "scene74.js",
+      "bytes": 8308,
+      "isEntry": true,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/effect/effect-renderer.ts",
+          "bytes": 5238,
+          "exports": [
+            {
+              "name": "createEffectRenderer",
+              "kind": "function"
+            },
+            {
+              "name": "createEffectWrapper",
+              "kind": "function"
+            },
+            {
+              "name": "registerEffectRenderer",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/engine.ts",
+          "bytes": 1753,
+          "exports": [
+            {
+              "name": "VERSION",
+              "kind": "const"
+            },
+            {
+              "name": "createEngine",
+              "kind": "function"
+            },
+            {
+              "name": "isRenderingContextRegistered",
+              "kind": "function"
+            },
+            {
+              "name": "registerRenderingContext",
+              "kind": "function"
+            },
+            {
+              "name": "resizeEngine",
+              "kind": "function"
+            },
+            {
+              "name": "setEngineSize",
+              "kind": "function"
+            },
+            {
+              "name": "startEngine",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/render-target.ts",
+          "bytes": 904,
+          "exports": [
+            {
+              "name": "buildRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "createRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "disposeRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "targetSignatureKey",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

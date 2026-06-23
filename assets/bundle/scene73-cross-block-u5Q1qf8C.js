@@ -1,0 +1,1 @@
+const tc={className:"CrossBlock",emit(e,t,r,s,c){return{expr:`cross(${c.cast(c.resolve(e,"left",r,s),"vec3f").expr},${c.cast(c.resolve(e,"right",r,s),"vec3f").expr})`,type:"vec3f"};}};export{tc as emitter};

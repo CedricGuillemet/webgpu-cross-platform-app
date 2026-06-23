@@ -1,0 +1,1 @@
+import{c as ii}from"./scene111-material-view-Dua1bl7W.js";import{e as fa,f as na}from"./scene111.js";function ua(e){var _e$un,_r$features;const r=(_e$un=e.un)!==null&&_e$un!==void 0?_e$un:{features:0,features2:0};return ii(e,{features:r.features&~na,features2:((_r$features=r.features2)!==null&&_r$features!==void 0?_r$features:0)|fa});}export{ua as createPbrNoColorMaterialView};

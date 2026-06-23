@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene157.js";const gr={id:"_animations",async applyAsset(a,s,t){const[{parseAnimationData:i},{createAnimationGroups:n}]=await Promise.all([sa(()=>__import("./scene157-gltf-animation-B7BcF8iA.js"),[]),sa(()=>__import("./scene157.js").then(a=>a.aA),[])]),o=i(t.Ve,t.Se,a,t.ke,t.Ge,t.Qe);return o?{animationGroups:n(o)}:{};}};export{gr as default};

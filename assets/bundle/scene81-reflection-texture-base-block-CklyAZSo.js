@@ -1,0 +1,1 @@
+const at={className:"ReflectionTextureBaseBlock",emit(e){throw Error(`ReflectionTextureBaseBlock "${e.name}" is an abstract compatibility block and cannot be emitted directly.`);}};export{at as emitter};

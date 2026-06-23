@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene5.js";const br={id:"_animations",async applyAsset(a,s,t){const[{parseAnimationData:n},{createAnimationGroups:i}]=await Promise.all([sa(()=>__import("./scene5-gltf-animation-B7XlkS6h.js"),[]),sa(()=>__import("./scene5.js").then(a=>a.az),[])]),o=n(t.je,t.Le,a,t.Ge,t.ze,t.Xe);return o?{animationGroups:i(o)}:{};}};export{br as default};

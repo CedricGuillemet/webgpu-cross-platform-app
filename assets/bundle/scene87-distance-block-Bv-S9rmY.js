@@ -1,0 +1,1 @@
+import{w as ct}from"./scene87-_math-factory-DFVyS8gB.js";const Ge={className:"DistanceBlock",emit(t,e,r,s,a){const c=a.resolve(t,"left",r,s),o=a.resolve(t,"right",r,s),m=ct(c.type,o.type);return{expr:`length(${a.cast(c,m).expr}-${a.cast(o,m).expr})`,type:"f32"};}};export{Ge as emitter};

@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene174.js";async function Hn(s,e,r){(await sa(()=>__import("./scene174-pbr-transmission-ext-CQqQz96e.js"),[])).registerPbrTransmission(s,e,r);}export{Hn as registerPbrRefraction};

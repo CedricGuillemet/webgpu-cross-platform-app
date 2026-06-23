@@ -1,0 +1,1 @@
+import{u as ct}from"./scene81-_math-factory-DFVyS8gB.js";const Je=ct("NormalizeBlock",o=>`normalize(${o})`);export{Je as emitter};

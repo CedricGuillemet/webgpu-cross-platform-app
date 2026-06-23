@@ -1,0 +1,1 @@
+import{aC as e,aj as t,af as i}from"./bjs-scene157.js";class o extends e{constructor(a){super(a),this.animationToPause=this.registerDataInput("animationToPause",t);}_execute(a){this.animationToPause.getValue(a).pause(),this.out._activateSignal(a);}getClassName(){return"FlowGraphPauseAnimationBlock";}}i("FlowGraphPauseAnimationBlock",o);export{o as FlowGraphPauseAnimationBlock};

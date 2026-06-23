@@ -1,0 +1,1 @@
+import{b as aa}from"./scene73-_math-factory-DFVyS8gB.js";const tr=aa("MinBlock",(t,o)=>`min(${t},${o})`);export{tr as emitter};

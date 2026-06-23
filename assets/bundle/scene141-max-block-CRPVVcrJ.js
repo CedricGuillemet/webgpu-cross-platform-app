@@ -1,0 +1,1 @@
+import{b as Na}from"./scene141-_math-factory-DFVyS8gB.js";const $a=Na("MaxBlock",(t,a)=>`max(${t},${a})`);export{$a as emitter};

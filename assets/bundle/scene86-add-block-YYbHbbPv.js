@@ -1,0 +1,1 @@
+import{b as He}from"./scene86-_math-factory-DFVyS8gB.js";const mt=He("AddBlock",(t,o)=>`${t}+${o}`);export{mt as emitter};

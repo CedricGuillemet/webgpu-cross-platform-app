@@ -1,0 +1,1 @@
+import{b as Vt}from"./scene85-_math-factory-DFVyS8gB.js";const ie=Vt("DivideBlock",(t,e)=>`${t}/${e}`);export{ie as emitter};

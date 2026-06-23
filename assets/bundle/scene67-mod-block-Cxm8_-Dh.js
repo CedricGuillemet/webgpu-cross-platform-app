@@ -1,0 +1,1 @@
+import{b as Xe}from"./scene67-_math-factory-DFVyS8gB.js";const Ge=Xe("ModBlock",(o,t)=>`${o}% ${t}`);export{Ge as emitter};

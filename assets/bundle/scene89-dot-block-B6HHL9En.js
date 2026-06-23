@@ -1,0 +1,1 @@
+import{w as to}from"./scene89-_math-factory-DFVyS8gB.js";const ie={className:"DotBlock",emit(t,e,o,r,s){const a=s.resolve(t,"left",o,r),c=s.resolve(t,"right",o,r),m=to(a.type,c.type);return{expr:`dot(${s.cast(a,m).expr},${s.cast(c,m).expr})`,type:"f32"};}};export{ie as emitter};

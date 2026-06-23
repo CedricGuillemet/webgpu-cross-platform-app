@@ -1,0 +1,1 @@
+import{c as et}from"./scene140-material-view-Dua1bl7W.js";function We(e){var _e$ln,_r$features;const r=(_e$ln=e.ln)!==null&&_e$ln!==void 0?_e$ln:{features:0,features2:0};return et(e,{features:-65&r.features,features2:32768|((_r$features=r.features2)!==null&&_r$features!==void 0?_r$features:0)});}export{We as createPbrNoColorMaterialView};

@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene63-_math-factory-DFVyS8gB.js";const ot=Ne("AddBlock",(t,o)=>`${t}+${o}`);export{ot as emitter};

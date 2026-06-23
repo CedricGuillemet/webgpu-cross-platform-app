@@ -1,0 +1,1 @@
+import{b as ve}from"./scene89-_math-factory-DFVyS8gB.js";const re=ve("DivideBlock",(t,e)=>`${t}/${e}`);export{re as emitter};

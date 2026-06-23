@@ -1,0 +1,1 @@
+function Ne(e,r){const u=(e=>(e=>!!e.source&&!!e.Jr)(e)?e.source:e)(e);return Object.create(u,{source:{value:u,enumerable:1},Jr:{value:{features:r.features,features2:r.features2},writable:1,enumerable:1,configurable:1}});}export{Ne as c};

@@ -1,0 +1,1 @@
+const qe={className:"ElbowBlock",emit(t,e,o,r,s){return s.resolve(t,"input",o,r);}};export{qe as emitter};

@@ -1,0 +1,1 @@
+import{S as tl}from"./scene12.js";function ln(o,n){tr(o,n),tl();}function tr(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)tr(s[o],n);}export{ln as s};

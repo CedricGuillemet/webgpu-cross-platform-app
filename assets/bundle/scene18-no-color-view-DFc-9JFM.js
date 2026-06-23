@@ -1,0 +1,1 @@
+import{c as Et}from"./scene18-material-view-Dua1bl7W.js";function et(e){var _e$Jr;return Et(e,{features:1|((_e$Jr=e.Jr)!==null&&_e$Jr!==void 0?_e$Jr:{features:0}).features});}export{et as createNodeNoColorMaterialView};

@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene64-_math-factory-DFVyS8gB.js";const ve=Ne("MinBlock",(t,o)=>`min(${t},${o})`);export{ve as emitter};

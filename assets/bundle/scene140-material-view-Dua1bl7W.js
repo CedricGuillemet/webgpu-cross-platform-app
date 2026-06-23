@@ -1,0 +1,1 @@
+function it(e,r){const u=(e=>(e=>!!e.source&&!!e.ln)(e)?e.source:e)(e);return Object.create(u,{source:{value:u,enumerable:1},ln:{value:{features:r.features,features2:r.features2},writable:1,enumerable:1,configurable:1}});}export{it as c};

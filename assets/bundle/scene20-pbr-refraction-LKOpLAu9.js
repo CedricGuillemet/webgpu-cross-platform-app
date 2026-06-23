@@ -1,0 +1,1 @@
+import{A as ss}from"./scene20.js";async function sr(s,r,e){(await ss(()=>__import("./scene20-pbr-transmission-ext-CjFf3_hx.js"),[])).registerPbrTransmission(s,r,e);}export{sr as registerPbrRefraction};

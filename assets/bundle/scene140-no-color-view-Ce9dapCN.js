@@ -1,0 +1,1 @@
+import{c as je}from"./scene140-material-view-Dua1bl7W.js";function ea(e){var _e$ln;return je(e,{features:262144|((_e$ln=e.ln)!==null&&_e$ln!==void 0?_e$ln:{features:0}).features});}export{ea as createStandardNoColorMaterialView};

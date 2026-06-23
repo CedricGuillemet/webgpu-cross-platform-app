@@ -1,0 +1,1 @@
+const Je={className:"LightInformationBlock",emit(e,t,r,i,n){var _p$t;i.usesLightsUbo=1;const c=e.serialized.lightId,o=`nmeLights.lights[nli(${"number"==typeof c?c:0}u)]`,p={direction:{expr:o+".d.xyz",type:"vec3f"},color:{expr:o+".c.rgb",type:"vec3f"},intensity:{expr:o+".c.a",type:"f32"}};return(_p$t=p[t])!==null&&_p$t!==void 0?_p$t:p.direction;}};export{Je as emitter};

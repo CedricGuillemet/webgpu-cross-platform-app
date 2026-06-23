@@ -1,0 +1,1 @@
+import{b as Xe}from"./scene69-_math-factory-DFVyS8gB.js";const rt=Xe("AddBlock",(t,o)=>`${t}+${o}`);export{rt as emitter};

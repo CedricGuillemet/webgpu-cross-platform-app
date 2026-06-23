@@ -1,0 +1,1 @@
+import{w as Kt}from"./scene88-_math-factory-DFVyS8gB.js";const ee={className:"DistanceBlock",emit(t,e,r,s,a){const c=a.resolve(t,"left",r,s),o=a.resolve(t,"right",r,s),m=Kt(c.type,o.type);return{expr:`length(${a.cast(c,m).expr}-${a.cast(o,m).expr})`,type:"f32"};}};export{ee as emitter};

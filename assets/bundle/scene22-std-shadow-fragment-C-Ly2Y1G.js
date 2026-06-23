@@ -1,0 +1,1 @@
+import{c as tr}from"./scene22-shadow-fragment-core-BgZG1upy.js";function er(e){return tr("std-shadow",e);}export{er as createStdShadowFragment};

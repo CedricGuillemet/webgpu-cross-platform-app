@@ -1,0 +1,1 @@
+import{c as rt}from"./scene72-material-view-Dua1bl7W.js";function ot(e){var _e$sn;return rt(e,{features:262144|((_e$sn=e.sn)!==null&&_e$sn!==void 0?_e$sn:{features:0}).features});}export{ot as createStandardNoColorMaterialView};

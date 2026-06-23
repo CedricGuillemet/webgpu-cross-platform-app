@@ -1,0 +1,1 @@
+function Va(e,r){const u=(e=>(e=>!!e.source&&!!e.cn)(e)?e.source:e)(e);return Object.create(u,{source:{value:u,enumerable:1},cn:{value:{features:r.features,features2:r.features2},writable:1,enumerable:1,configurable:1}});}export{Va as c};

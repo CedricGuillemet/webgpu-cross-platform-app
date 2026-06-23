@@ -1,0 +1,2957 @@
+{
+  "scene": "scene115",
+  "chunks": [
+    {
+      "file": "scene115.js",
+      "bytes": 67488,
+      "isEntry": true,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/load-gltf.ts",
+          "bytes": 7382,
+          "exports": [
+            {
+              "name": "loadGltf",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/gpu-picker.ts",
+          "bytes": 4943,
+          "exports": [
+            {
+              "name": "createGpuPicker",
+              "kind": "function"
+            },
+            {
+              "name": "disposePicker",
+              "kind": "function"
+            },
+            {
+              "name": "pickAsync",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/frame-graph/render-task.ts",
+          "bytes": 4565,
+          "exports": [
+            {
+              "name": "createRenderTask",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/detailed-picking.ts",
+          "bytes": 2452,
+          "exports": [
+            {
+              "name": "enableDetailedPicking",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/scene-core.ts",
+          "bytes": 2372,
+          "exports": [
+            {
+              "name": "addToScene",
+              "kind": "function"
+            },
+            {
+              "name": "buildScene",
+              "kind": "function"
+            },
+            {
+              "name": "createSceneContext",
+              "kind": "function"
+            },
+            {
+              "name": "onBeforeRender",
+              "kind": "function"
+            },
+            {
+              "name": "registerScene",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/skeleton/skeleton-updater.ts",
+          "bytes": 2307,
+          "exports": [
+            {
+              "name": "createAnimationController",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/deformed-geometry.ts",
+          "bytes": 2108,
+          "exports": [
+            {
+              "name": "computeDeformedNormals",
+              "kind": "function"
+            },
+            {
+              "name": "computeDeformedPositions",
+              "kind": "function"
+            },
+            {
+              "name": "hasCpuDeformation",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-pbr-builder.ts",
+          "bytes": 1915,
+          "exports": [
+            {
+              "name": "assemblePbrProps",
+              "kind": "function"
+            },
+            {
+              "name": "buildDefaultPbrTextures",
+              "kind": "function"
+            },
+            {
+              "name": "identityTexWrap",
+              "kind": "function"
+            },
+            {
+              "name": "runMatExts",
+              "kind": "function"
+            },
+            {
+              "name": "uploadTex",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/engine.ts",
+          "bytes": 1899,
+          "exports": [
+            {
+              "name": "VERSION",
+              "kind": "const"
+            },
+            {
+              "name": "_vis",
+              "kind": "const"
+            },
+            {
+              "name": "bumpVisibilityEpoch",
+              "kind": "function"
+            },
+            {
+              "name": "createEngine",
+              "kind": "function"
+            },
+            {
+              "name": "getRenderTargetSize",
+              "kind": "function"
+            },
+            {
+              "name": "isRenderingContextRegistered",
+              "kind": "function"
+            },
+            {
+              "name": "registerRenderingContext",
+              "kind": "function"
+            },
+            {
+              "name": "resizeEngine",
+              "kind": "function"
+            },
+            {
+              "name": "setEngineSize",
+              "kind": "function"
+            },
+            {
+              "name": "startEngine",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-parser.ts",
+          "bytes": 1843,
+          "exports": [
+            {
+              "name": "buildParentMap",
+              "kind": "function"
+            },
+            {
+              "name": "computeNodeWorldMatrix",
+              "kind": "function"
+            },
+            {
+              "name": "findParent",
+              "kind": "function"
+            },
+            {
+              "name": "getTextureImageIndex",
+              "kind": "function"
+            },
+            {
+              "name": "resolveAccessor",
+              "kind": "function"
+            },
+            {
+              "name": "resolveImage",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/picking-pipeline.ts",
+          "bytes": 1793,
+          "exports": [
+            {
+              "name": "getPickingMeshBGL",
+              "kind": "function"
+            },
+            {
+              "name": "getPickingPipeline",
+              "kind": "function"
+            },
+            {
+              "name": "getPickingSceneBGL",
+              "kind": "function"
+            },
+            {
+              "name": "getPickingTIMeshBGL",
+              "kind": "function"
+            },
+            {
+              "name": "getPickingTIPipeline",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/picking-shader.ts",
+          "bytes": 1735,
+          "exports": [
+            {
+              "name": "pickingShaderSource",
+              "kind": "const"
+            },
+            {
+              "name": "pickingThinInstanceShaderSource",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/standard/standard-group-builder.ts",
+          "bytes": 1653,
+          "exports": [
+            {
+              "name": "standardGroupBuilder",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/mesh.ts",
+          "bytes": 1366,
+          "exports": [
+            {
+              "name": "initMeshTransform",
+              "kind": "function"
+            },
+            {
+              "name": "uploadMeshToGPU",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/scene-node.ts",
+          "bytes": 1356,
+          "exports": [
+            {
+              "name": "createEulerProxy",
+              "kind": "function"
+            },
+            {
+              "name": "createSceneNode",
+              "kind": "function"
+            },
+            {
+              "name": "createSceneNodeFromMatrix",
+              "kind": "function"
+            },
+            {
+              "name": "eulerToQuat",
+              "kind": "function"
+            },
+            {
+              "name": "quatToEulerXYZ",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/animation/evaluate.ts",
+          "bytes": 1292,
+          "exports": [
+            {
+              "name": "evaluateSampler",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/render/lights-ubo.ts",
+          "bytes": 1150,
+          "exports": [
+            {
+              "name": "appendMeshLightUboFields",
+              "kind": "function"
+            },
+            {
+              "name": "ensureSceneLightState",
+              "kind": "function"
+            },
+            {
+              "name": "getLightsUboSize",
+              "kind": "function"
+            },
+            {
+              "name": "meshLightIndexWGSL",
+              "kind": "function"
+            },
+            {
+              "name": "refreshSceneLightsUBO",
+              "kind": "function"
+            },
+            {
+              "name": "writeMeshLightSelection",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-material.ts",
+          "bytes": 1042,
+          "exports": [
+            {
+              "name": "_computePbrMaterialFeatures",
+              "kind": "function"
+            },
+            {
+              "name": "collectPbrBoundTextures",
+              "kind": "function"
+            },
+            {
+              "name": "pbrGroupBuilder",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/picking-info.ts",
+          "bytes": 1018,
+          "exports": [
+            {
+              "name": "createEmptyPickingInfo",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/animation/animation-group.ts",
+          "bytes": 993,
+          "exports": [
+            {
+              "name": "createAnimationGroups",
+              "kind": "function"
+            },
+            {
+              "name": "goToFrame",
+              "kind": "function"
+            },
+            {
+              "name": "pauseAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "playAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "stopAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "tickAnimation",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/camera/arc-rotate.ts",
+          "bytes": 962,
+          "exports": [
+            {
+              "name": "createArcRotateCamera",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/create-box.ts",
+          "bytes": 946,
+          "exports": [
+            {
+              "name": "createBoxData",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/render-target.ts",
+          "bytes": 944,
+          "exports": [
+            {
+              "name": "REVERSE_DEPTH_COMPARE",
+              "kind": "const"
+            },
+            {
+              "name": "buildRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "createRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "disposeRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "targetSignatureKey",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-material.ts",
+          "bytes": 907,
+          "exports": [
+            {
+              "name": "assembleMaterial",
+              "kind": "function"
+            },
+            {
+              "name": "makeImageFetcher",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/camera/camera.ts",
+          "bytes": 766,
+          "exports": [
+            {
+              "name": "getCameraPosition",
+              "kind": "function"
+            },
+            {
+              "name": "getProjectionMatrix",
+              "kind": "function"
+            },
+            {
+              "name": "getViewMatrix",
+              "kind": "function"
+            },
+            {
+              "name": "getViewProjectionMatrix",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/create-sphere.ts",
+          "bytes": 718,
+          "exports": [
+            {
+              "name": "createSphereData",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/light/hemispheric.ts",
+          "bytes": 715,
+          "exports": [
+            {
+              "name": "createHemisphericLight",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-invert.ts",
+          "bytes": 708,
+          "exports": [
+            {
+              "name": "mat4Invert",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-multiply-into.ts",
+          "bytes": 702,
+          "exports": [
+            {
+              "name": "mat4MultiplyInto",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/gpu-pool.ts",
+          "bytes": 688,
+          "exports": [
+            {
+              "name": "acquireTexture",
+              "kind": "function"
+            },
+            {
+              "name": "clearSamplerCache",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreateSampler",
+              "kind": "function"
+            },
+            {
+              "name": "releaseTexture",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/world-matrix-state.ts",
+          "bytes": 677,
+          "exports": [
+            {
+              "name": "attachWorldMatrixState",
+              "kind": "function"
+            },
+            {
+              "name": "createWorldMatrixState",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/gpu-buffers.ts",
+          "bytes": 620,
+          "exports": [
+            {
+              "name": "align",
+              "kind": "function"
+            },
+            {
+              "name": "createEmptyUniformBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "createMappedBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "createUniformBuffer",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/standard/create-standard-material.ts",
+          "bytes": 570,
+          "exports": [
+            {
+              "name": "createStandardMaterial",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/observable-quat.ts",
+          "bytes": 540,
+          "exports": [
+            {
+              "name": "ObservableQuat",
+              "kind": "class"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-look-at-lh.ts",
+          "bytes": 516,
+          "exports": [
+            {
+              "name": "mat4LookAtLH",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/light/light-base.ts",
+          "bytes": 492,
+          "exports": [
+            {
+              "name": "applyWorldMatrixAccessors",
+              "kind": "function"
+            },
+            {
+              "name": "createLightBase",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/compute-aabb.ts",
+          "bytes": 490,
+          "exports": [
+            {
+              "name": "computeAabb",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/picking-helpers.ts",
+          "bytes": 446,
+          "exports": [
+            {
+              "name": "getPickedNormal",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/scene-camera.ts",
+          "bytes": 445,
+          "exports": [
+            {
+              "name": "createDefaultCamera",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/mesh-factories.ts",
+          "bytes": 440,
+          "exports": [
+            {
+              "name": "createBox",
+              "kind": "function"
+            },
+            {
+              "name": "createMeshFromData",
+              "kind": "function"
+            },
+            {
+              "name": "createSphere",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/frame-graph/frame-graph.ts",
+          "bytes": 427,
+          "exports": [
+            {
+              "name": "_appendTask",
+              "kind": "function"
+            },
+            {
+              "name": "createFrameGraph",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/observable-vec3.ts",
+          "bytes": 426,
+          "exports": [
+            {
+              "name": "ObservableVec3",
+              "kind": "class"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/picking/ray.ts",
+          "bytes": 411,
+          "exports": [
+            {
+              "name": "createPickingRay",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/standard/standard-flags.ts",
+          "bytes": 377,
+          "exports": [
+            {
+              "name": "AMBIENT_USES_UV2",
+              "kind": "const"
+            },
+            {
+              "name": "DIFFUSE_USES_UV2",
+              "kind": "const"
+            },
+            {
+              "name": "DISABLE_LIGHTING",
+              "kind": "const"
+            },
+            {
+              "name": "DOUBLE_SIDED",
+              "kind": "const"
+            },
+            {
+              "name": "ESM_SHADOW_OUTPUT",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_AMBIENT_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_BUMP_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_CUBE_REFLECTION",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_DEPTH_EMISSIVE_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_DIFFUSE_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_EMISSIVE_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_LIGHTMAP_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_OPACITY_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_REFLECTION_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "HAS_SPECULAR_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "LIGHTMAP_USES_UV2",
+              "kind": "const"
+            },
+            {
+              "name": "MATERIAL_ALPHA_BLEND",
+              "kind": "const"
+            },
+            {
+              "name": "NEEDS_UV",
+              "kind": "const"
+            },
+            {
+              "name": "NEEDS_UV2",
+              "kind": "const"
+            },
+            {
+              "name": "NO_COLOR_OUTPUT",
+              "kind": "const"
+            },
+            {
+              "name": "OPACITY_FROM_RGB",
+              "kind": "const"
+            },
+            {
+              "name": "SPECULAR_USES_UV2",
+              "kind": "const"
+            },
+            {
+              "name": "_getStdExts",
+              "kind": "function"
+            },
+            {
+              "name": "_getStdExtsSorted",
+              "kind": "function"
+            },
+            {
+              "name": "_registerStdExt",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-flag-bits.ts",
+          "bytes": 343,
+          "exports": [
+            {
+              "name": "PBR2_CC_F0_REMAP_OFF",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_CC_INT_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_CC_NORMAL_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_CC_ROUGH_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_ESM_SHADOW_OUTPUT",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_BASE_COLOR_FACTOR",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_REFLECTANCE_FACTORS",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_REFRACTION",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_REFRACTION_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_SHEEN_UV_TX",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_THICKNESS_GLTF_CHANNEL",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_UNLIT",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_UV2",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_UV_TRANSFORM",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_HAS_VOLUME",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_LINEAR_IMAGE_PROCESSING",
+              "kind": "const"
+            },
+            {
+              "name": "PBR2_NO_COLOR_OUTPUT",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_ALPHA_BLEND",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_ALPHA_TEST",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_ANISOTROPY",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_CLEARCOAT",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_DOUBLE_SIDED",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_EMISSIVE",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_EMISSIVE_COLOR",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_ENV",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_GAMMA_ALBEDO",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_METALLIC_REFLECTANCE_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_NORMAL_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_OCCLUSION",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_REFLECTANCE_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_SHEEN",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_SHEEN_ALBEDO_SCALING",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_SHEEN_TEXTURE",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_SKYBOX",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_SPECULAR_AA",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_SPEC_GLOSS",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_SUBSURFACE",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_THICKNESS_MAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_TONEMAP",
+              "kind": "const"
+            },
+            {
+              "name": "PBR_HAS_USE_ALPHA_ONLY_MR",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/light/light-matrix.ts",
+          "bytes": 329,
+          "exports": [
+            {
+              "name": "localMatrixFromDirection",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-compose-into.ts",
+          "bytes": 329,
+          "exports": [
+            {
+              "name": "mat4ComposeInto",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/render/scene-helpers.ts",
+          "bytes": 318,
+          "exports": [
+            {
+              "name": "clearSceneBGLCache",
+              "kind": "function"
+            },
+            {
+              "name": "getSceneBindGroupLayout",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/camera/viewport.ts",
+          "bytes": 298,
+          "exports": [
+            {
+              "name": "FULL_VIEWPORT",
+              "kind": "const"
+            },
+            {
+              "name": "resolveCameraViewport",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-flags.ts",
+          "bytes": 205,
+          "exports": [
+            {
+              "name": "_getPbrExts",
+              "kind": "function"
+            },
+            {
+              "name": "_getPbrExtsSorted",
+              "kind": "function"
+            },
+            {
+              "name": "_registerPbrExt",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/light/types.ts",
+          "bytes": 130,
+          "exports": [
+            {
+              "name": "LIGHT_ENTRY_FLOATS",
+              "kind": "const"
+            },
+            {
+              "name": "MAX_LIGHTS",
+              "kind": "const"
+            },
+            {
+              "name": "setMaxLights",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/texture/mip-count.ts",
+          "bytes": 126,
+          "exports": [
+            {
+              "name": "biasedMipLevelCount",
+              "kind": "function"
+            },
+            {
+              "name": "mipLevelCount",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/color.ts",
+          "bytes": 123,
+          "exports": [
+            {
+              "name": "linearToSrgbByte",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-compose.ts",
+          "bytes": 99,
+          "exports": [
+            {
+              "name": "mat4Compose",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts",
+          "bytes": 94,
+          "exports": [
+            {
+              "name": "mat4PerspectiveLHToRef",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/normalize-vec3.ts",
+          "bytes": 87,
+          "exports": [
+            {
+              "name": "normalizeVec3",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/transform-node.ts",
+          "bytes": 85,
+          "exports": [
+            {
+              "name": "createTransformNode",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-identity.ts",
+          "bytes": 81,
+          "exports": [
+            {
+              "name": "mat4Identity",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/shader/bgl-helpers.ts",
+          "bytes": 81,
+          "exports": [
+            {
+              "name": "createSingleUniformBGL",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/animation/types.ts",
+          "bytes": 72,
+          "exports": [
+            {
+              "name": "INTERP_CUBICSPLINE",
+              "kind": "const"
+            },
+            {
+              "name": "INTERP_LINEAR",
+              "kind": "const"
+            },
+            {
+              "name": "INTERP_STEP",
+              "kind": "const"
+            },
+            {
+              "name": "PATH_POINTER",
+              "kind": "const"
+            },
+            {
+              "name": "PATH_ROTATION",
+              "kind": "const"
+            },
+            {
+              "name": "PATH_SCALE",
+              "kind": "const"
+            },
+            {
+              "name": "PATH_TRANSLATION",
+              "kind": "const"
+            },
+            {
+              "name": "PATH_WEIGHTS",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/vec3-ctor.ts",
+          "bytes": 38,
+          "exports": [
+            {
+              "name": "vec3",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/vec3-up.ts",
+          "bytes": 22,
+          "exports": [
+            {
+              "name": "Vec3Up",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/shader/scene-uniforms-size.ts",
+          "bytes": 5,
+          "exports": [
+            {
+              "name": "SCENE_UBO_BYTES",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-pbr-renderable-DKr9wtAU.js",
+      "bytes": 18133,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-template.ts",
+          "bytes": 8510,
+          "exports": [
+            {
+              "name": "createPbrTemplate",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-renderable.ts",
+          "bytes": 4772,
+          "exports": [
+            {
+              "name": "buildPbrRenderables",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-pipeline.ts",
+          "bytes": 2200,
+          "exports": [
+            {
+              "name": "clearPbrPipelineCache",
+              "kind": "function"
+            },
+            {
+              "name": "createPbrMeshBindGroup",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreatePbrBindings",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreatePbrPipeline",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-compose.ts",
+          "bytes": 2187,
+          "exports": [
+            {
+              "name": "createPbrComposer",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-pbr-transmission-ext-CvF6-ffa.js",
+      "bytes": 13140,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/frame-graph/transmission.ts",
+          "bytes": 6640,
+          "exports": [
+            {
+              "name": "enableRenderTaskTransmission",
+              "kind": "function"
+            },
+            {
+              "name": "enableSceneTransmission",
+              "kind": "function"
+            },
+            {
+              "name": "executePassWithTransmission",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/frame-graph/image-processing-task.ts",
+          "bytes": 2627,
+          "exports": [
+            {
+              "name": "createImageProcessingTask",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/refraction-rtt-fragment.ts",
+          "bytes": 2500,
+          "exports": [
+            {
+              "name": "refractionRttExt",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/trilinear-anisotropic-sampler.ts",
+          "bytes": 1198,
+          "exports": [
+            {
+              "name": "getTrilinearAnisotropicSampler",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-standard-renderable-D3Aj8ZEM.js",
+      "bytes": 10081,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/standard-template.ts",
+          "bytes": 5446,
+          "exports": [
+            {
+              "name": "createStandardTemplate",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/standard/standard-pipeline.ts",
+          "bytes": 2755,
+          "exports": [
+            {
+              "name": "clearStandardPipelineCache",
+              "kind": "function"
+            },
+            {
+              "name": "createStandardMeshBindGroup",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreateStandardBindings",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreateStandardPipeline",
+              "kind": "function"
+            },
+            {
+              "name": "writeStdMaterialData",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/standard/standard-material.ts",
+          "bytes": 675,
+          "exports": [
+            {
+              "name": "_computeStandardMaterialFeatures",
+              "kind": "function"
+            },
+            {
+              "name": "_standardFeatureKey",
+              "kind": "function"
+            },
+            {
+              "name": "_standardShaderVariantKey",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/standard/standard-renderable.ts",
+          "bytes": 640,
+          "exports": [
+            {
+              "name": "buildStandardMeshRenderables",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/standard/collect-std-bound-textures.ts",
+          "bytes": 109,
+          "exports": [
+            {
+              "name": "collectStdBoundTextures",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-basisu-B3ipIraG.js",
+      "bytes": 9821,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-basisu.ts",
+          "bytes": 4269,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/texture/ktx2-loader.ts",
+          "bytes": 4216,
+          "exports": [
+            {
+              "name": "decodeKtx2ImageBitmapFromBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "uploadKtx2Texture2D",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/texture/compressed-formats.ts",
+          "bytes": 1285,
+          "exports": [
+            {
+              "name": "getCompressedFormat",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gs-picking-pipeline-N1WAJh3_.js",
+      "bytes": 8190,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/picking/gs-picking-pipeline.ts",
+          "bytes": 3781,
+          "exports": [
+            {
+              "name": "computeGsPickMatrix",
+              "kind": "function"
+            },
+            {
+              "name": "createGsPickMeshResources",
+              "kind": "function"
+            },
+            {
+              "name": "disposeGsPickMeshResources",
+              "kind": "function"
+            },
+            {
+              "name": "drawGsForPicking",
+              "kind": "function"
+            },
+            {
+              "name": "gsPickWritePickMatrixAndBind",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/GaussianSplatting/gs-gpu-picking-fragment.ts",
+          "bytes": 3429,
+          "exports": [
+            {
+              "name": "encodeIdToColor",
+              "kind": "function"
+            },
+            {
+              "name": "gsGpuPickingFragment",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/GaussianSplatting/gaussian-splatting-pipeline.ts",
+          "bytes": 921,
+          "exports": [
+            {
+              "name": "applyGsFragments",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-clearcoat-fragment-CgoGBapS.js",
+      "bytes": 5830,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/clearcoat-fragment.ts",
+          "bytes": 5742,
+          "exports": [
+            {
+              "name": "clearcoatExt",
+              "kind": "const"
+            },
+            {
+              "name": "createClearcoatFragment",
+              "kind": "function"
+            },
+            {
+              "name": "writeClearcoatUBO",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-mesh-features-GJGfSdO-.js",
+      "bytes": 5731,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/shader/shader-composer.ts",
+          "bytes": 4358,
+          "exports": [
+            {
+              "name": "composeShader",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/shader/ubo-layout.ts",
+          "bytes": 629,
+          "exports": [
+            {
+              "name": "computeUboLayout",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/mesh-features.ts",
+          "bytes": 256,
+          "exports": [
+            {
+              "name": "MSH_HAS_INSTANCE_COLOR",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_HAS_MORPH_TARGETS",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_HAS_SKELETON",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_HAS_SKELETON_8",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_HAS_TANGENTS",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_HAS_THIN_INSTANCES",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_HAS_UV2",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_HAS_VERTEX_COLOR",
+              "kind": "const"
+            },
+            {
+              "name": "MSH_RECEIVE_SHADOWS",
+              "kind": "const"
+            },
+            {
+              "name": "_computeMeshFeatures",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/shader/scene-uniforms.ts",
+          "bytes": 3,
+          "exports": [
+            {
+              "name": "SCENE_UBO_WGSL",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-shadow-fragment-core-BgZG1upy.js",
+      "bytes": 4085,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/shader/fragments/shadow-fragment-core.ts",
+          "bytes": 4085,
+          "exports": [
+            {
+              "name": "createShadowFragment",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-sheen-fragment-DKC06509.js",
+      "bytes": 3878,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/sheen-fragment.ts",
+          "bytes": 3815,
+          "exports": [
+            {
+              "name": "createSheenFragment",
+              "kind": "function"
+            },
+            {
+              "name": "sheenExt",
+              "kind": "const"
+            },
+            {
+              "name": "writeSheenUBO",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-subsurface-fragment-Dbb_FX2G.js",
+      "bytes": 3356,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/subsurface-fragment.ts",
+          "bytes": 3302,
+          "exports": [
+            {
+              "name": "createSubsurfaceFragment",
+              "kind": "function"
+            },
+            {
+              "name": "subsurfaceExt",
+              "kind": "const"
+            },
+            {
+              "name": "writeSubsurfaceUBO",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-reflectance-fragment-ekRMvjcB.js",
+      "bytes": 3352,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/reflectance-fragment.ts",
+          "bytes": 3286,
+          "exports": [
+            {
+              "name": "createReflectanceFragment",
+              "kind": "function"
+            },
+            {
+              "name": "reflectanceExt",
+              "kind": "const"
+            },
+            {
+              "name": "writeReflectanceUBO",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-animation-CSKXFXmp.js",
+      "bytes": 3238,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-animation.ts",
+          "bytes": 3107,
+          "exports": [
+            {
+              "name": "_installPointerHandlers",
+              "kind": "function"
+            },
+            {
+              "name": "computeBoneTextureData",
+              "kind": "function"
+            },
+            {
+              "name": "extractSkin",
+              "kind": "function"
+            },
+            {
+              "name": "parseAnimationData",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-anisotropy-fragment-CyODPlMn.js",
+      "bytes": 2924,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/anisotropy-fragment.ts",
+          "bytes": 2924,
+          "exports": [
+            {
+              "name": "ANISO_BENT_NORMAL",
+              "kind": "const"
+            },
+            {
+              "name": "ANISO_BRDF_FUNCTIONS",
+              "kind": "const"
+            },
+            {
+              "name": "ANISO_DIRECT_DG",
+              "kind": "const"
+            },
+            {
+              "name": "anisotropyExt",
+              "kind": "const"
+            },
+            {
+              "name": "makeAnisotropyTBBlock",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-ibl-fragment-BfgmykuX.js",
+      "bytes": 2686,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/ibl-fragment.ts",
+          "bytes": 2686,
+          "exports": [
+            {
+              "name": "createIblFragment",
+              "kind": "function"
+            },
+            {
+              "name": "iblExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-multilight-wgsl-qVCLad0r.js",
+      "bytes": 2338,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/multilight-wgsl.ts",
+          "bytes": 2303,
+          "exports": [
+            {
+              "name": "COMPUTE_PBR_LIGHT",
+              "kind": "const"
+            },
+            {
+              "name": "MULTI_LIGHT_STRUCTS",
+              "kind": "function"
+            },
+            {
+              "name": "getMultiLightLoop",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-pbr-builder-ext-DgHXsU4r.js",
+      "bytes": 2153,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-pbr-builder-ext.ts",
+          "bytes": 2047,
+          "exports": [
+            {
+              "name": "assemblePbrPropsExt",
+              "kind": "function"
+            },
+            {
+              "name": "buildDefaultPbrTexturesExt",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-draco-Dp1Q_d-R.js",
+      "bytes": 2010,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/draco-decode.ts",
+          "bytes": 1502,
+          "exports": [
+            {
+              "name": "decodeDracoPrimitive",
+              "kind": "function"
+            },
+            {
+              "name": "getDracoBufferViewBytes",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-draco.ts",
+          "bytes": 508,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-gpu-instancing-CVRI0rhY.js",
+      "bytes": 1997,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-gpu-instancing.ts",
+          "bytes": 1611,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/thin-instance.ts",
+          "bytes": 256,
+          "exports": [
+            {
+              "name": "setThinInstances",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-multiply.ts",
+          "bytes": 71,
+          "exports": [
+            {
+              "name": "mat4Multiply",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-morph-fragment-t6RXXXtF.js",
+      "bytes": 1991,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/morph-fragment.ts",
+          "bytes": 1933,
+          "exports": [
+            {
+              "name": "createMorphFragment",
+              "kind": "function"
+            },
+            {
+              "name": "morphExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-generate-mipmaps-DxZM4BVw.js",
+      "bytes": 1947,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/texture/generate-mipmaps.ts",
+          "bytes": 1832,
+          "exports": [
+            {
+              "name": "generateMipmaps",
+              "kind": "function"
+            },
+            {
+              "name": "recordMipmaps",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/samplers.ts",
+          "bytes": 80,
+          "exports": [
+            {
+              "name": "getBilinearSampler",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-dielectric-BRs-fYX1.js",
+      "bytes": 1941,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-dielectric.ts",
+          "bytes": 1941,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-skeleton-fragment-Sa2bymIR.js",
+      "bytes": 1778,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/skeleton-fragment.ts",
+          "bytes": 1712,
+          "exports": [
+            {
+              "name": "createSkeletonFragment",
+              "kind": "function"
+            },
+            {
+              "name": "skeletonExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-pbr-template-ext-B00NeHp4.js",
+      "bytes": 1557,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-template-ext.ts",
+          "bytes": 1557,
+          "exports": [
+            {
+              "name": "createPbrTemplateExt",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-lights-punctual-BdjK76BR.js",
+      "bytes": 1501,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-lights-punctual.ts",
+          "bytes": 1442,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-variants-CmswhxMR.js",
+      "bytes": 1461,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-variants.ts",
+          "bytes": 1217,
+          "exports": [
+            {
+              "name": "loadVariantMaterials",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-animation-pointer-BpvnWsMV.js",
+      "bytes": 1208,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-animation-pointer.ts",
+          "bytes": 691,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/animation-pointer.ts",
+          "bytes": 346,
+          "exports": [
+            {
+              "name": "resolveAnimationPointer",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-singlelight-spot-wgsl-D0E6eIKA.js",
+      "bytes": 1160,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/singlelight-spot-wgsl.ts",
+          "bytes": 1125,
+          "exports": [
+            {
+              "name": "SINGLE_LIGHT_STRUCTS",
+              "kind": "const"
+            },
+            {
+              "name": "getSingleLightBlock",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-reflection-fragment-ahfvli4S.js",
+      "bytes": 1111,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-reflection-fragment.ts",
+          "bytes": 1076,
+          "exports": [
+            {
+              "name": "createStdReflectionFragment",
+              "kind": "function"
+            },
+            {
+              "name": "stdReflectionExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-wgsl-helpers-WTsokIfK.js",
+      "bytes": 1093,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/shader/wgsl-helpers.ts",
+          "bytes": 1093,
+          "exports": [
+            {
+              "name": "WGSL_FOG",
+              "kind": "const"
+            },
+            {
+              "name": "WGSL_PERTURB_NORMAL",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-spot-light-D3dvp20u.js",
+      "bytes": 988,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/light/spot-light.ts",
+          "bytes": 925,
+          "exports": [
+            {
+              "name": "createSpotLight",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-singlelight-point-wgsl-DJqhoxRV.js",
+      "bytes": 965,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/singlelight-point-wgsl.ts",
+          "bytes": 930,
+          "exports": [
+            {
+              "name": "SINGLE_LIGHT_STRUCTS",
+              "kind": "const"
+            },
+            {
+              "name": "getSingleLightBlock",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-create-morph-targets-CNmWMjPZ.js",
+      "bytes": 963,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/morph/create-morph-targets.ts",
+          "bytes": 927,
+          "exports": [
+            {
+              "name": "createMorphTargets",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-thin-instance-fragment-C6G2xA6T.js",
+      "bytes": 810,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/shader/fragments/thin-instance-fragment.ts",
+          "bytes": 810,
+          "exports": [
+            {
+              "name": "createThinInstanceFragment",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-create-skeleton-C7q95480.js",
+      "bytes": 784,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/skeleton/create-skeleton.ts",
+          "bytes": 748,
+          "exports": [
+            {
+              "name": "createSkeleton",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-thin-instance-gpu-BFOKnF2w.js",
+      "bytes": 751,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/mesh/thin-instance-gpu.ts",
+          "bytes": 751,
+          "exports": [
+            {
+              "name": "syncThinInstanceBuffers",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-skeleton-BMzePRwS.js",
+      "bytes": 746,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-skeleton.ts",
+          "bytes": 703,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-singlelight-hemispheric-wgsl-BQTWI-6s.js",
+      "bytes": 727,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/singlelight-hemispheric-wgsl.ts",
+          "bytes": 692,
+          "exports": [
+            {
+              "name": "SINGLE_LIGHT_STRUCTS",
+              "kind": "const"
+            },
+            {
+              "name": "getSingleLightBlock",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-directional-light-BdfY6CCQ.js",
+      "bytes": 726,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/light/directional-light.ts",
+          "bytes": 663,
+          "exports": [
+            {
+              "name": "createDirectionalLight",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-singlelight-directional-wgsl-BJn4pQqW.js",
+      "bytes": 715,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/singlelight-directional-wgsl.ts",
+          "bytes": 680,
+          "exports": [
+            {
+              "name": "SINGLE_LIGHT_STRUCTS",
+              "kind": "const"
+            },
+            {
+              "name": "getSingleLightBlock",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-emissive-fragment-VR-Hpmn9.js",
+      "bytes": 694,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/emissive-fragment.ts",
+          "bytes": 649,
+          "exports": [
+            {
+              "name": "createEmissiveColorFragment",
+              "kind": "function"
+            },
+            {
+              "name": "emissiveColorExt",
+              "kind": "const"
+            },
+            {
+              "name": "writeEmissiveUBO",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-point-light-BeKQZXSr.js",
+      "bytes": 691,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/light/point-light.ts",
+          "bytes": 571,
+          "exports": [
+            {
+              "name": "createPointLight",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-translation.ts",
+          "bytes": 58,
+          "exports": [
+            {
+              "name": "mat4Translation",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-opacity-fragment-DkTEJsaH.js",
+      "bytes": 664,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-opacity-fragment.ts",
+          "bytes": 621,
+          "exports": [
+            {
+              "name": "createStdOpacityFragment",
+              "kind": "function"
+            },
+            {
+              "name": "stdOpacityExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-pbr-aces-wgsl-XxSkrbTG.js",
+      "bytes": 660,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-aces-wgsl.ts",
+          "bytes": 660,
+          "exports": [
+            {
+              "name": "ACES_HELPERS_WGSL",
+              "kind": "const"
+            },
+            {
+              "name": "ACES_TONEMAP_CALL_WGSL",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-morph-Dg5q6fQC.js",
+      "bytes": 634,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-morph.ts",
+          "bytes": 591,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-lightmap-fragment-DSb7DNEG.js",
+      "bytes": 627,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-lightmap-fragment.ts",
+          "bytes": 584,
+          "exports": [
+            {
+              "name": "createStdLightmapFragment",
+              "kind": "function"
+            },
+            {
+              "name": "stdLightmapExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-emissive-fragment-BF-EeqnX.js",
+      "bytes": 624,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-emissive-fragment.ts",
+          "bytes": 581,
+          "exports": [
+            {
+              "name": "createStdEmissiveFragment",
+              "kind": "function"
+            },
+            {
+              "name": "stdEmissiveExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-uv-transform-fragment-BJnSYzXA.js",
+      "bytes": 623,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/uv-transform-fragment.ts",
+          "bytes": 623,
+          "exports": [
+            {
+              "name": "uvTransformExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-ambient-fragment-CWnm2wDb.js",
+      "bytes": 593,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-ambient-fragment.ts",
+          "bytes": 550,
+          "exports": [
+            {
+              "name": "createStdAmbientFragment",
+              "kind": "function"
+            },
+            {
+              "name": "stdAmbientExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-normal-map-fragment-ChSCOQFv.js",
+      "bytes": 588,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/normal-map-fragment.ts",
+          "bytes": 496,
+          "exports": [
+            {
+              "name": "bumpStdExt",
+              "kind": "const"
+            },
+            {
+              "name": "createNormalMapFragment",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-specular-fragment-CB6nrCjv.js",
+      "bytes": 586,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-specular-fragment.ts",
+          "bytes": 543,
+          "exports": [
+            {
+              "name": "createStdSpecularFragment",
+              "kind": "function"
+            },
+            {
+              "name": "stdSpecularExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-unlit-fragment-WMbldGBQ.js",
+      "bytes": 581,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/unlit-fragment.ts",
+          "bytes": 545,
+          "exports": [
+            {
+              "name": "createUnlitFragment",
+              "kind": "function"
+            },
+            {
+              "name": "unlitExt",
+              "kind": "const"
+            },
+            {
+              "name": "writeUnlitUBO",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-cube-reflection-fragment-ChTCUBNy.js",
+      "bytes": 576,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-cube-reflection-fragment.ts",
+          "bytes": 541,
+          "exports": [
+            {
+              "name": "createStdCubeReflectionFragment",
+              "kind": "function"
+            },
+            {
+              "name": "stdCubeReflectionExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-clearcoat-BgaLgSgD.js",
+      "bytes": 552,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-clearcoat.ts",
+          "bytes": 552,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-orm-BOan5ne0.js",
+      "bytes": 523,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-orm.ts",
+          "bytes": 523,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-ibl-skybox-wgsl-CqiGRVBe.js",
+      "bytes": 487,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/ibl-skybox-wgsl.ts",
+          "bytes": 487,
+          "exports": [
+            {
+              "name": "IBL_SKYBOX_CALCULATION",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-glb-parser-BdYiApo0.js",
+      "bytes": 479,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-glb-parser.ts",
+          "bytes": 479,
+          "exports": [
+            {
+              "name": "parseGlbContainer",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-uv-transform-V-Q5DyGg.js",
+      "bytes": 460,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-uv-transform.ts",
+          "bytes": 405,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-spec-gloss-D60sFZYX.js",
+      "bytes": 457,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-spec-gloss.ts",
+          "bytes": 457,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-variants-BDjanUOt.js",
+      "bytes": 454,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-variants.ts",
+          "bytes": 419,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-feature-animations-Bbf5WstY.js",
+      "bytes": 362,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-feature-animations.ts",
+          "bytes": 327,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-alpha-test-fragment-QWoHAoFl.js",
+      "bytes": 352,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/alpha-test-fragment.ts",
+          "bytes": 316,
+          "exports": [
+            {
+              "name": "alphaTestExt",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-swapchain-overlay-DDEHaTMc.js",
+      "bytes": 339,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/scene/swapchain-overlay.ts",
+          "bytes": 339,
+          "exports": [
+            {
+              "name": "configureSwapchainOverlayScene",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-scene-material-swap-D59o_FWG.js",
+      "bytes": 329,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/scene/scene-material-swap.ts",
+          "bytes": 329,
+          "exports": [
+            {
+              "name": "processMaterialSwaps",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-sheen-Cje8BD0o.js",
+      "bytes": 326,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-sheen.ts",
+          "bytes": 326,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-node-visibility-CbMQ1PAH.js",
+      "bytes": 326,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-node-visibility.ts",
+          "bytes": 249,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-anisotropy-Bq0SvIJY.js",
+      "bytes": 291,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-anisotropy.ts",
+          "bytes": 291,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-emissive-strength-CButLZnK.js",
+      "bytes": 252,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-emissive-strength.ts",
+          "bytes": 252,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-pbr-shadow-fragment-YMgTfKTk.js",
+      "bytes": 246,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/fragments/pbr-shadow-fragment.ts",
+          "bytes": 181,
+          "exports": [
+            {
+              "name": "createPbrShadowFragment",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-gltf-ext-unlit-1vUYfF7v.js",
+      "bytes": 222,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-gltf/gltf-ext-unlit.ts",
+          "bytes": 222,
+          "exports": [
+            {
+              "name": "default",
+              "kind": "unknown"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-pbr-refraction-m9iZKyZV.js",
+      "bytes": 200,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/pbr/pbr-refraction.ts",
+          "bytes": 165,
+          "exports": [
+            {
+              "name": "registerPbrRefraction",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-visibility-Dmjipj10.js",
+      "bytes": 167,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/scene/visibility.ts",
+          "bytes": 132,
+          "exports": [
+            {
+              "name": "setSubtreeVisible",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-std-shadow-fragment-Sq1Al_J8.js",
+      "bytes": 144,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/standard/fragments/std-shadow-fragment.ts",
+          "bytes": 79,
+          "exports": [
+            {
+              "name": "createStdShadowFragment",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene115-texture-2d-DQo3n8D6.js",
+      "bytes": 51,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/texture/texture-2d.ts",
+          "bytes": 51,
+          "exports": [
+            {
+              "name": "cloneTexture2D",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

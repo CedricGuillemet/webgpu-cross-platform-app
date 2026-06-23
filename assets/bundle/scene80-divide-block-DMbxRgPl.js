@@ -1,0 +1,1 @@
+import{b as et}from"./scene80-_math-factory-DFVyS8gB.js";const Ie=et("DivideBlock",(t,e)=>`${t}/${e}`);export{Ie as emitter};

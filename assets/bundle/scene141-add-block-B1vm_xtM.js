@@ -1,0 +1,1 @@
+import{b as Na}from"./scene141-_math-factory-DFVyS8gB.js";const Oa=Na("AddBlock",(t,o)=>`${t}+${o}`);export{Oa as emitter};

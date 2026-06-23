@@ -1,0 +1,1 @@
+function R(t,n,o,a=0,r=0,c=0,e){const s=Math.sqrt(t*t+n*n+o*o)||1,l=t/s,h=n/s,u=o/s;let M=-u,f=l;const i=Math.sqrt(M*M+0+f*f)||1;M/=i,f/=i;const p=h*f-0*u,w=u*M-l*f,x=0*l-h*M,y=e!==null&&e!==void 0?e:new Float32Array(16);return y[0]=M,y[1]=0,y[2]=f,y[3]=0,y[4]=p,y[5]=w,y[6]=x,y[7]=0,y[8]=l,y[9]=h,y[10]=u,y[11]=0,y[12]=a,y[13]=r,y[14]=c,y[15]=1,y;}export{R as l};

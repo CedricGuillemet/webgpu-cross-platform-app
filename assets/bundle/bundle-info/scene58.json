@@ -1,0 +1,313 @@
+{
+  "scene": "scene58",
+  "chunks": [
+    {
+      "file": "scene58.js",
+      "bytes": 19048,
+      "isEntry": true,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/sprite/sprite-pipeline.ts",
+          "bytes": 4927,
+          "exports": [
+            {
+              "name": "LAYER_UBO_BYTES",
+              "kind": "const"
+            },
+            {
+              "name": "LAYER_UBO_FLOATS",
+              "kind": "const"
+            },
+            {
+              "name": "SHARED_SPRITE_INDEX_DATA",
+              "kind": "const"
+            },
+            {
+              "name": "buildSpriteLayerUbo",
+              "kind": "function"
+            },
+            {
+              "name": "createSpriteInstanceBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "createSpriteLayerBindGroup",
+              "kind": "function"
+            },
+            {
+              "name": "createSpritePipelineCache",
+              "kind": "function"
+            },
+            {
+              "name": "ensureSpriteInstanceBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreateSpritePipeline",
+              "kind": "function"
+            },
+            {
+              "name": "uploadSpriteInstances",
+              "kind": "function"
+            },
+            {
+              "name": "writeSpriteLayerUboIfDirty",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/sprite/sprite-2d.ts",
+          "bytes": 2464,
+          "exports": [
+            {
+              "name": "DEPTH_INSTANCE_FLOATS_PER_SPRITE",
+              "kind": "const"
+            },
+            {
+              "name": "PURE_2D_INSTANCE_FLOATS_PER_SPRITE",
+              "kind": "const"
+            },
+            {
+              "name": "PURE_2D_INSTANCE_STRIDE_BYTES",
+              "kind": "const"
+            },
+            {
+              "name": "SAVED_SIZE_FLOATS_PER_SPRITE",
+              "kind": "const"
+            },
+            {
+              "name": "addSprite2DIndex",
+              "kind": "function"
+            },
+            {
+              "name": "createSprite2DLayer",
+              "kind": "function"
+            },
+            {
+              "name": "removeSprite2DIndex",
+              "kind": "function"
+            },
+            {
+              "name": "setSprite2DFrameIndex",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/sprite/sprite-animation.ts",
+          "bytes": 2155,
+          "exports": [
+            {
+              "name": "addSpriteAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "attachSpriteAnimationsToRenderer",
+              "kind": "function"
+            },
+            {
+              "name": "createSpriteAnimationManager",
+              "kind": "function"
+            },
+            {
+              "name": "createSpriteFrameAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "disposeSpriteAnimationBinding",
+              "kind": "function"
+            },
+            {
+              "name": "playSpriteTargetAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "removeSpriteAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "updateSpriteAnimationManager",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/sprite/sprite-renderer.ts",
+          "bytes": 2133,
+          "exports": [
+            {
+              "name": "createSpriteRenderer",
+              "kind": "function"
+            },
+            {
+              "name": "registerSpriteRenderer",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/engine.ts",
+          "bytes": 1826,
+          "exports": [
+            {
+              "name": "VERSION",
+              "kind": "const"
+            },
+            {
+              "name": "createEngine",
+              "kind": "function"
+            },
+            {
+              "name": "getRenderTargetSize",
+              "kind": "function"
+            },
+            {
+              "name": "isRenderingContextRegistered",
+              "kind": "function"
+            },
+            {
+              "name": "registerRenderingContext",
+              "kind": "function"
+            },
+            {
+              "name": "resizeEngine",
+              "kind": "function"
+            },
+            {
+              "name": "setEngineSize",
+              "kind": "function"
+            },
+            {
+              "name": "startEngine",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/texture/texture-2d.ts",
+          "bytes": 1535,
+          "exports": [
+            {
+              "name": "loadTexture2D",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/sprite/shared/sprite-atlas.ts",
+          "bytes": 1203,
+          "exports": [
+            {
+              "name": "createGridSpriteAtlas",
+              "kind": "function"
+            },
+            {
+              "name": "loadSpriteAtlas",
+              "kind": "function"
+            },
+            {
+              "name": "resolveSpriteFrame",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/sprite/sprite-2d-handle.ts",
+          "bytes": 1128,
+          "exports": [
+            {
+              "name": "addSprite2D",
+              "kind": "function"
+            },
+            {
+              "name": "isSprite2DHandleAlive",
+              "kind": "function"
+            },
+            {
+              "name": "removeSprite2D",
+              "kind": "function"
+            },
+            {
+              "name": "setSprite2DFrame",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/gpu-pool.ts",
+          "bytes": 489,
+          "exports": [
+            {
+              "name": "acquireTexture",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreateSampler",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/sprite/sprite-2d-handle-animation.ts",
+          "bytes": 405,
+          "exports": [
+            {
+              "name": "playSprite2DAnimation",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/gpu-buffers.ts",
+          "bytes": 380,
+          "exports": [
+            {
+              "name": "align",
+              "kind": "function"
+            },
+            {
+              "name": "createEmptyUniformBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "createMappedBuffer",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene58-generate-mipmaps-BMAXOYWD.js",
+      "bytes": 1789,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/texture/generate-mipmaps.ts",
+          "bytes": 1697,
+          "exports": [
+            {
+              "name": "generateMipmaps",
+              "kind": "function"
+            },
+            {
+              "name": "recordMipmaps",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/samplers.ts",
+          "bytes": 59,
+          "exports": [
+            {
+              "name": "getBilinearSampler",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

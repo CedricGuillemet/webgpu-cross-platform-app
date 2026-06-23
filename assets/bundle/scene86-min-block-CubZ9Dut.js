@@ -1,0 +1,1 @@
+import{b as He}from"./scene86-_math-factory-DFVyS8gB.js";const ii=He("MinBlock",(t,o)=>`min(${t},${o})`);export{ii as emitter};

@@ -1,0 +1,1 @@
+import{c as ii}from"./scene111-material-view-Dua1bl7W.js";import{ac as fa}from"./scene111.js";function Ma(e){var _e$un;return ii(e,{features:((_e$un=e.un)!==null&&_e$un!==void 0?_e$un:{features:0}).features|fa});}export{Ma as createStandardNoColorMaterialView};

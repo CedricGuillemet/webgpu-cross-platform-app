@@ -1,0 +1,1 @@
+import{b as Wt}from"./scene83-_math-factory-DFVyS8gB.js";const oo=Wt("MultiplyBlock",(t,o)=>`${t}*${o}`);export{oo as emitter};

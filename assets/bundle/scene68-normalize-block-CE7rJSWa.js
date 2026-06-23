@@ -1,0 +1,1 @@
+import{u as Ye}from"./scene68-_math-factory-DFVyS8gB.js";const Ue=Ye("NormalizeBlock",o=>`normalize(${o})`);export{Ue as emitter};

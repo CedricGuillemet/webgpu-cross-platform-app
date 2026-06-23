@@ -1,0 +1,1 @@
+import{u as Le}from"./scene63-_math-factory-DFVyS8gB.js";const ge=Le("NormalizeBlock",o=>`normalize(${o})`);export{ge as emitter};

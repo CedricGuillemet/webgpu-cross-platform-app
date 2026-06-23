@@ -1,0 +1,1 @@
+import{b as Na}from"./scene141-_math-factory-DFVyS8gB.js";const ii=Na("ModBlock",(o,t)=>`${o}% ${t}`);export{ii as emitter};

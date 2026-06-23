@@ -1,0 +1,1 @@
+import{_ as ta}from"./scene32.js";const je={id:"_animations",async applyAsset(a,t,i){const[{parseAnimationData:n},{createAnimationGroups:s}]=await Promise.all([ta(()=>__import("./scene32-gltf-animation-vKPkQy9Y.js"),[]),ta(()=>__import("./scene32-animation-group-DlxIVMti.js"),[])]),o=n(i.We,i.Xe,a,i.Qe,i.Ye,i.ln);return o?{animationGroups:s(o)}:{};}};export{je as default};

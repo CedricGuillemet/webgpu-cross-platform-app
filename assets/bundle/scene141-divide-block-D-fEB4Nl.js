@@ -1,0 +1,1 @@
+import{b as Na}from"./scene141-_math-factory-DFVyS8gB.js";const ii=Na("DivideBlock",(t,e)=>`${t}/${e}`);export{ii as emitter};

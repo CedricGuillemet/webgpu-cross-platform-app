@@ -1,0 +1,1 @@
+import{A as ss}from"./scene8.js";async function Wt(s,r,e){(await ss(()=>__import("./scene8-pbr-transmission-ext-Dho0hLCF.js"),[])).registerPbrTransmission(s,r,e);}export{Wt as registerPbrRefraction};

@@ -1,0 +1,1 @@
+import{A as ba}from"./scene21.js";async function en(s,r,e){(await ba(()=>__import("./scene21-pbr-transmission-ext-Cjqss_oQ.js"),[])).registerPbrTransmission(s,r,e);}export{en as registerPbrRefraction};

@@ -1,0 +1,1 @@
+const it={className:"ShadowMapBlock",stage:"fragment",emit(e,t,a,r,o){const s=e.serialized.lightId;return{expr:`_NME_SHADOW_${"number"==typeof s?s:0}_`,type:"f32"};}};export{it as emitter};

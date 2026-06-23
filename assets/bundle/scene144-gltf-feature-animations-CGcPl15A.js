@@ -1,0 +1,1 @@
+import{_ as ta}from"./scene144.js";const Xr={id:"_animations",async applyAsset(a,t,s){const[{parseAnimationData:n},{createAnimationGroups:o}]=await Promise.all([ta(()=>__import("./scene144-gltf-animation-B9ztk7oo.js"),[]),ta(()=>__import("./scene144.js").then(a=>a.aA),[])]),i=n(s.ir,s.cr,a,s.lr,s.pr,s.Mr);return i?{animationGroups:o(i)}:{};}};export{Xr as default};

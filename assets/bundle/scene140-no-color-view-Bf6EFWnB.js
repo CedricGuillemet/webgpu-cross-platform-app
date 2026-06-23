@@ -1,0 +1,1 @@
+import{c as je}from"./scene140-material-view-Dua1bl7W.js";import{a as et}from"./scene140-node-flags-3CD_c1Kp.js";function qe(e){var _e$ln;return je(e,{features:((_e$ln=e.ln)!==null&&_e$ln!==void 0?_e$ln:{features:0}).features|et});}export{qe as createNodeNoColorMaterialView};

@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene62-_math-factory-DFVyS8gB.js";const $e=Ne("MaxBlock",(t,a)=>`max(${t},${a})`);export{$e as emitter};

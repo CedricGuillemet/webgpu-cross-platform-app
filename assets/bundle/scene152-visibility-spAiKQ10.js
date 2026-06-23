@@ -1,0 +1,1 @@
+import{b as tl}from"./scene152.js";function Ze(o,n){tr(o,n),tl();}function tr(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)tr(s[o],n);}export{Ze as s};

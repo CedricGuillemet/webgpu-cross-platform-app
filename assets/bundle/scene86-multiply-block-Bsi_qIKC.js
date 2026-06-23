@@ -1,0 +1,1 @@
+import{b as He}from"./scene86-_math-factory-DFVyS8gB.js";const lt=He("MultiplyBlock",(t,o)=>`${t}*${o}`);export{lt as emitter};

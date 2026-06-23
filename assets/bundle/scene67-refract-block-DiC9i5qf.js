@@ -1,0 +1,1 @@
+const Le={className:"RefractBlock",emit(e,r,t,c,a){return{expr:`refract(${a.cast(a.resolve(e,"incident",t,c),"vec3f").expr},${a.cast(a.resolve(e,"normal",t,c),"vec3f").expr},${a.cast(a.resolve(e,"ior",t,c),"f32").expr})`,type:"vec3f"};}};export{Le as emitter};

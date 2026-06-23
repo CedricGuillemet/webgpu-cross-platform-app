@@ -1,0 +1,1 @@
+import{u as Lt}from"./scene79-_math-factory-DFVyS8gB.js";const ii=Lt("NormalizeBlock",o=>`normalize(${o})`);export{ii as emitter};

@@ -1,0 +1,1 @@
+const Ve="fn dither(seed:vec2<f32>,varianceAmount:f32)->f32{let rand=fract(sin(dot(seed,vec2<f32>(12.9898,78.233)))*43758.5453);let normVariance=varianceAmount/255.0;return mix(-normVariance,normVariance,rand);}",ta="fn dither(a:vec2<f32>,b:f32)->f32{return 0.0;}";export{Ve as W,ta as a};

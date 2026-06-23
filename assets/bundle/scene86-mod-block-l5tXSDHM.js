@@ -1,0 +1,1 @@
+import{b as He}from"./scene86-_math-factory-DFVyS8gB.js";const ii=He("ModBlock",(o,t)=>`${o}% ${t}`);export{ii as emitter};

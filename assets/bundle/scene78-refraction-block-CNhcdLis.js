@@ -1,0 +1,1 @@
+const jt={className:"RefractionBlock",stage:"fragment",emit(e,t,r,a,c){return{expr:"vec3<f32>(0.0)",type:"vec3f"};}};export{jt as emitter};

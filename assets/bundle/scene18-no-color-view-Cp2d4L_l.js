@@ -1,0 +1,1 @@
+import{c as Et}from"./scene18-material-view-Dua1bl7W.js";function rr(e){var _e$Jr,_r$features;const r=(_e$Jr=e.Jr)!==null&&_e$Jr!==void 0?_e$Jr:{features:0,features2:0};return Et(e,{features:-65&r.features,features2:32768|((_r$features=r.features2)!==null&&_r$features!==void 0?_r$features:0)});}export{rr as createPbrNoColorMaterialView};

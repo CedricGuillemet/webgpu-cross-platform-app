@@ -1,0 +1,1 @@
+import{A as Ia}from"./scene26.js";async function en(r,s,e){(await Ia(()=>__import("./scene26-pbr-transmission-ext-D3Tovr__.js"),[])).registerPbrTransmission(r,s,e);}export{en as registerPbrRefraction};

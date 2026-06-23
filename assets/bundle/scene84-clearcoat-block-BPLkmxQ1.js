@@ -1,0 +1,1 @@
+const Ot={className:"ClearCoatBlock",stage:"fragment",emit(e,t,a,r,c){return r.usesClearcoat=1,{expr:"vec3<f32>(0.0)",type:"vec3f"};}};export{Ot as emitter};

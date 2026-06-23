@@ -1,0 +1,1 @@
+import{b as He}from"./scene86-_math-factory-DFVyS8gB.js";const ii=He("DivideBlock",(t,e)=>`${t}/${e}`);export{ii as emitter};

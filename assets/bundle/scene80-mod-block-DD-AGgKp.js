@@ -1,0 +1,1 @@
+import{b as et}from"./scene80-_math-factory-DFVyS8gB.js";const Ie=et("ModBlock",(o,t)=>`${o}% ${t}`);export{Ie as emitter};

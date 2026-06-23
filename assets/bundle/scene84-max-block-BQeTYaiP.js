@@ -1,0 +1,1 @@
+import{b as Nt}from"./scene84-_math-factory-DFVyS8gB.js";const xt=Nt("MaxBlock",(t,a)=>`max(${t},${a})`);export{xt as emitter};

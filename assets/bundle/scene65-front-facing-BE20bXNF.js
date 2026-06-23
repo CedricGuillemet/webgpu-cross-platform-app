@@ -1,0 +1,1 @@
+const aa={className:"FrontFacingBlock",stage:"fragment",emit(e,t,r,a,s){return{expr:"select(0.0, 1.0, _NME_FRONT_FACING_)",type:"f32"};}};export{aa as emitter};

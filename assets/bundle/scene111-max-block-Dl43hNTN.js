@@ -1,0 +1,1 @@
+import{b as fa}from"./scene111-_math-factory-DFVyS8gB.js";const pa=fa("MaxBlock",(t,a)=>`max(${t},${a})`);export{pa as emitter};

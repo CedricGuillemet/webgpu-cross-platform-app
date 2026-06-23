@@ -1,0 +1,1 @@
+const tl={id:"KHR_materials_unlit",async applyMaterial(t){var _t$Se;if(!((_t$Se=t.Se)!==null&&_t$Se!==void 0&&(_t$Se=_t$Se.extensions)!==null&&_t$Se!==void 0&&_t$Se.KHR_materials_unlit))return null;const l=t.de,n=t.ye?[l[0],l[1],l[2]]:void 0;return n?{unlit:1,unlitColor:n}:{unlit:1};}};export{tl as default};

@@ -1,0 +1,1 @@
+import{b as Vt}from"./scene85-_math-factory-DFVyS8gB.js";const qt=Vt("SubtractBlock",(t,o)=>`${t}-${o}`);export{qt as emitter};

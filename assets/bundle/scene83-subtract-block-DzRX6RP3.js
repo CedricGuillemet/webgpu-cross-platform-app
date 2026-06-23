@@ -1,0 +1,1 @@
+import{b as Wt}from"./scene83-_math-factory-DFVyS8gB.js";const to=Wt("SubtractBlock",(t,o)=>`${t}-${o}`);export{to as emitter};

@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene61-_math-factory-DFVyS8gB.js";const ge=Ne("ModBlock",(o,t)=>`${o}% ${t}`);export{ge as emitter};

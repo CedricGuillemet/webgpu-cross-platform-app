@@ -1,0 +1,1 @@
+import{c as ei}from"./scene22-material-view-Dua1bl7W.js";import{a as er}from"./scene22-node-flags-3CD_c1Kp.js";function _n(e){var _e$mo;return ei(e,{features:((_e$mo=e.mo)!==null&&_e$mo!==void 0?_e$mo:{features:0}).features|er});}export{_n as createNodeNoColorMaterialView};

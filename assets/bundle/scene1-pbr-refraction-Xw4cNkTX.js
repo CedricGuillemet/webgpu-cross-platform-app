@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene1.js";async function Ke(s,r,e){(await sa(()=>__import("./scene1-pbr-transmission-ext-1sjTrJsb.js"),[])).registerPbrTransmission(s,r,e);}export{Ke as registerPbrRefraction};

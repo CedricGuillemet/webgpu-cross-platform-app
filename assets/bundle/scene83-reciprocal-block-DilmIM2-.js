@@ -1,0 +1,1 @@
+const oo={className:"ReciprocalBlock",emit(e,t,r,p,a){const c=a.resolve(e,"input",r,p);return"mat4f"===c.type?{expr:`inverse(${c.expr})`,type:"mat4f"}:{expr:`(1.0/${c.expr})`,type:c.type};}};export{oo as emitter};

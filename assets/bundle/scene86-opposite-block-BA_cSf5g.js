@@ -1,0 +1,1 @@
+import{u as Qe}from"./scene86-_math-factory-DFVyS8gB.js";const mt=Qe("OppositeBlock",t=>"1.0-"+t);export{mt as emitter};

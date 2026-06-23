@@ -1,0 +1,1 @@
+import{b as Ze}from"./scene87-_math-factory-DFVyS8gB.js";const De=Ze("MinBlock",(t,o)=>`min(${t},${o})`);export{De as emitter};

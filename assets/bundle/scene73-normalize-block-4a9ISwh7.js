@@ -1,0 +1,1 @@
+import{u as ca}from"./scene73-_math-factory-DFVyS8gB.js";const tr=ca("NormalizeBlock",o=>`normalize(${o})`);export{tr as emitter};

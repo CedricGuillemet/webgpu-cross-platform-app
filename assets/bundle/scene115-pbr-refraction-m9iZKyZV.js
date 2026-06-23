@@ -1,0 +1,1 @@
+import{_ as po}from"./scene115.js";async function na(s,r,e){(await po(()=>__import("./scene115-pbr-transmission-ext-CvF6-ffa.js"),[])).registerPbrTransmission(s,r,e);}export{na as registerPbrRefraction};

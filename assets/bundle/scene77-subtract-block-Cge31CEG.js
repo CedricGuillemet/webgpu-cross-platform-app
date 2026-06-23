@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene77-_math-factory-DFVyS8gB.js";const ot=Ne("SubtractBlock",(t,o)=>`${t}-${o}`);export{ot as emitter};

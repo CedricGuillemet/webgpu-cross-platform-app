@@ -1,0 +1,1 @@
+import{b as et}from"./scene80-_math-factory-DFVyS8gB.js";const st=et("MultiplyBlock",(t,o)=>`${t}*${o}`);export{st as emitter};

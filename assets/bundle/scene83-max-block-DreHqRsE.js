@@ -1,0 +1,1 @@
+import{b as Wt}from"./scene83-_math-factory-DFVyS8gB.js";const Be=Wt("MaxBlock",(t,a)=>`max(${t},${a})`);export{Be as emitter};

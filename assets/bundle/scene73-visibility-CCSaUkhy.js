@@ -1,0 +1,1 @@
+import{f as tr}from"./scene73.js";function rc(o,n){jr(o,n),tr();}function jr(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)jr(s[o],n);}export{rc as s};

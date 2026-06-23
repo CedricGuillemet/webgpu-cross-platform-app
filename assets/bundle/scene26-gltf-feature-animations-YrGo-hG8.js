@@ -1,0 +1,1 @@
+import{A as ja}from"./scene26.js";const tr={id:"_animations",async applyAsset(a,n,s){const[{parseAnimationData:t},{createAnimationGroups:i}]=await Promise.all([ja(()=>__import("./scene26-gltf-animation-CV5KjlGc.js"),[]),ja(()=>__import("./scene26-animation-group-sLq__GSh.js"),[])]),o=t(s.ke,s.Ne,a,s.qe,s.We,s.Je);return o?{animationGroups:i(o)}:{};}};export{tr as default};

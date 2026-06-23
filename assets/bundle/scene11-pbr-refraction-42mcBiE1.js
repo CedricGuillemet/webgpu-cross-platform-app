@@ -1,0 +1,1 @@
+import{_ as ss}from"./scene11.js";async function qe(s,r,e){(await ss(()=>__import("./scene11-pbr-transmission-ext-COXJ_4qh.js"),[])).registerPbrTransmission(s,r,e);}export{qe as registerPbrRefraction};

@@ -1,0 +1,1 @@
+import{b as tl}from"./scene14.js";function Ke(o,n){Qe(o,n),tl();}function Qe(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)Qe(s[o],n);}export{Ke as s};

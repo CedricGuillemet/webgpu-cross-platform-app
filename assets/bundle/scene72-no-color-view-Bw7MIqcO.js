@@ -1,0 +1,1 @@
+import{c as tt}from"./scene72-material-view-Dua1bl7W.js";function nt(e){var _e$sn,_r$features;const r=(_e$sn=e.sn)!==null&&_e$sn!==void 0?_e$sn:{features:0,features2:0};return tt(e,{features:-65&r.features,features2:32768|((_r$features=r.features2)!==null&&_r$features!==void 0?_r$features:0)});}export{nt as createPbrNoColorMaterialView};

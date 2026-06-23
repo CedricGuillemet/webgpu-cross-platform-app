@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene77-_math-factory-DFVyS8gB.js";const ge=Ne("MinBlock",(t,o)=>`min(${t},${o})`);export{ge as emitter};

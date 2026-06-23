@@ -1,0 +1,1 @@
+import{b as Xe}from"./scene71-_math-factory-DFVyS8gB.js";const ot=Xe("MultiplyBlock",(t,o)=>`${t}*${o}`);export{ot as emitter};

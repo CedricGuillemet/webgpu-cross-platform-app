@@ -1,0 +1,1 @@
+import{b as ve}from"./scene89-_math-factory-DFVyS8gB.js";const eo=ve("AddBlock",(t,o)=>`${t}+${o}`);export{eo as emitter};

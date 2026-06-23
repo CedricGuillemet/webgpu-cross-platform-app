@@ -1,0 +1,1 @@
+const et={className:"InstancesBlock",stage:"vertex",emit(e,t,s,r,a){return{expr:"meshU.world",type:"mat4f"};}};export{et as emitter};

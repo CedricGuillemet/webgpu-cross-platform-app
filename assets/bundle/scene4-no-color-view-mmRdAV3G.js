@@ -1,0 +1,1 @@
+import{c as _e}from"./scene4-material-view-Dua1bl7W.js";import{w as Ee}from"./scene4.js";function Pe(e){var _e$m;return _e(e,{features:((_e$m=e.m)!==null&&_e$m!==void 0?_e$m:{features:0}).features|Ee});}export{Pe as createStandardNoColorMaterialView};

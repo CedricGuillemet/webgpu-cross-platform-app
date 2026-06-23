@@ -1,0 +1,1 @@
+import{b as Xe}from"./scene67-_math-factory-DFVyS8gB.js";const Ge=Xe("DivideBlock",(t,e)=>`${t}/${e}`);export{Ge as emitter};

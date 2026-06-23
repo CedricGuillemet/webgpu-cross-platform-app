@@ -1,0 +1,1 @@
+const ec=1,aa=2;export{aa as N,ec as a};

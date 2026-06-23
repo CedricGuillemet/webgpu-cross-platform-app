@@ -1,0 +1,1 @@
+import{c as De}from"./scene66-material-view-Dua1bl7W.js";import{a as et}from"./scene66-node-flags-3CD_c1Kp.js";function $e(e){var _e$sn;return De(e,{features:((_e$sn=e.sn)!==null&&_e$sn!==void 0?_e$sn:{features:0}).features|et});}export{$e as createNodeNoColorMaterialView};

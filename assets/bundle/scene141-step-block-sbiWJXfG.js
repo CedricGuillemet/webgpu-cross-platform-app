@@ -1,0 +1,1 @@
+const Pa={className:"StepBlock",emit(e,t,s,p,r){const a=r.resolve(e,"value",s,p),c=r.resolve(e,"edge",s,p);return{expr:`step(${r.cast(c,a.type).expr},${a.expr})`,type:a.type};}};export{Pa as emitter};

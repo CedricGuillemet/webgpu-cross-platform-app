@@ -1,0 +1,120 @@
+{
+  "scene": "scene76",
+  "chunks": [
+    {
+      "file": "scene76.js",
+      "bytes": 9282,
+      "isEntry": true,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/effect/effect-renderer.ts",
+          "bytes": 4495,
+          "exports": [
+            {
+              "name": "createEffectRenderer",
+              "kind": "function"
+            },
+            {
+              "name": "createEffectWrapper",
+              "kind": "function"
+            },
+            {
+              "name": "registerEffectRenderer",
+              "kind": "function"
+            },
+            {
+              "name": "setEffectTexture",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/engine.ts",
+          "bytes": 1753,
+          "exports": [
+            {
+              "name": "VERSION",
+              "kind": "const"
+            },
+            {
+              "name": "createEngine",
+              "kind": "function"
+            },
+            {
+              "name": "isRenderingContextRegistered",
+              "kind": "function"
+            },
+            {
+              "name": "registerRenderingContext",
+              "kind": "function"
+            },
+            {
+              "name": "resizeEngine",
+              "kind": "function"
+            },
+            {
+              "name": "setEngineSize",
+              "kind": "function"
+            },
+            {
+              "name": "startEngine",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/texture/solid-texture.ts",
+          "bytes": 1064,
+          "exports": [
+            {
+              "name": "createSolidTexture2D",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/render-target.ts",
+          "bytes": 904,
+          "exports": [
+            {
+              "name": "buildRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "createRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "disposeRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "targetSignatureKey",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/gpu-pool.ts",
+          "bytes": 388,
+          "exports": [
+            {
+              "name": "getOrCreateSampler",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/samplers.ts",
+          "bytes": 72,
+          "exports": [
+            {
+              "name": "getBilinearSampler",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+import{u as ct}from"./scene81-_math-factory-DFVyS8gB.js";const Je=ct("OneMinusBlock",t=>"1.0-"+t);export{Je as emitter};

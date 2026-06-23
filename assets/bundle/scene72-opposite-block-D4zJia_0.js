@@ -1,0 +1,1 @@
+import{u as dt}from"./scene72-_math-factory-DFVyS8gB.js";const ot=dt("OppositeBlock",t=>"1.0-"+t);export{ot as emitter};

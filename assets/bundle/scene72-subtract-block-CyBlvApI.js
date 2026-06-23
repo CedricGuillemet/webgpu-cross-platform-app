@@ -1,0 +1,1 @@
+import{b as tt}from"./scene72-_math-factory-DFVyS8gB.js";const ot=tt("SubtractBlock",(t,o)=>`${t}-${o}`);export{ot as emitter};

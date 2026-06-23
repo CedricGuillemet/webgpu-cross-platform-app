@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene11.js";const br={id:"_animations",async applyAsset(a,s,t){const[{parseAnimationData:n},{createAnimationGroups:i}]=await Promise.all([sa(()=>__import("./scene11-gltf-animation-BWzE3UOK.js"),[]),sa(()=>__import("./scene11.js").then(a=>a.az),[])]),o=n(t.Ie,t.Se,a,t.Le,t.ke,t.Xe);return o?{animationGroups:i(o)}:{};}};export{br as default};

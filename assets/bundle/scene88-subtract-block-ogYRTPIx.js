@@ -1,0 +1,1 @@
+import{b as ve}from"./scene88-_math-factory-DFVyS8gB.js";const Ht=ve("SubtractBlock",(t,o)=>`${t}-${o}`);export{Ht as emitter};

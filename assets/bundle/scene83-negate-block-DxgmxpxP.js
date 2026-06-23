@@ -1,0 +1,1 @@
+import{u as Yt}from"./scene83-_math-factory-DFVyS8gB.js";const Ue=Yt("NegateBlock",e=>"-"+e,void 0,"value");export{Ue as emitter};

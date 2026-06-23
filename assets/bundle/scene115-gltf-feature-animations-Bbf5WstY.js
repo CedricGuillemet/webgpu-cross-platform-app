@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene115.js";const Gr={id:"_animations",async applyAsset(a,s,t){const[{parseAnimationData:n},{createAnimationGroups:i}]=await Promise.all([sa(()=>__import("./scene115-gltf-animation-CSKXFXmp.js"),[]),sa(()=>__import("./scene115.js").then(a=>a.b1),[])]),o=n(t.Ue,t.ve,a,t.Fe,t.Te,t.Be);return o?{animationGroups:i(o)}:{};}};export{Gr as default};

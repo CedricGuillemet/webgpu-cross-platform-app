@@ -1,0 +1,1 @@
+import{u as me}from"./scene88-_math-factory-DFVyS8gB.js";const ie=me("OneMinusBlock",t=>"1.0-"+t);export{ie as emitter};

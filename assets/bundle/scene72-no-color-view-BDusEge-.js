@@ -1,0 +1,1 @@
+import{c as rt}from"./scene72-material-view-Dua1bl7W.js";import{a as tt}from"./scene72-node-flags-3CD_c1Kp.js";function vt(e){var _e$sn;return rt(e,{features:((_e$sn=e.sn)!==null&&_e$sn!==void 0?_e$sn:{features:0}).features|tt});}export{vt as createNodeNoColorMaterialView};

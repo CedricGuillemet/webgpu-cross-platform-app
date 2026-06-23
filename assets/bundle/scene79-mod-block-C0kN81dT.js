@@ -1,0 +1,1 @@
+import{b as Nt}from"./scene79-_math-factory-DFVyS8gB.js";const ii=Nt("ModBlock",(o,t)=>`${o}% ${t}`);export{ii as emitter};

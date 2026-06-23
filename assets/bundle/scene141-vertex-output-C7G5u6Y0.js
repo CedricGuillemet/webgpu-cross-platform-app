@@ -1,0 +1,1 @@
+const Nn={className:"VertexOutputBlock",stage:"vertex",emit(e,t,r,c,s){const o=s.resolve(e,"vector","vertex",c),v=s.cast(o,"vec4f").expr;return c.vertex.body.push(`_NME_VTX_OUTPUT_=${v};`),{expr:v,type:"vec4f"};}};export{Nn as emitter};

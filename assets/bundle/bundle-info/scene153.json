@@ -1,0 +1,94 @@
+{
+  "scene": "scene153",
+  "chunks": [
+    {
+      "file": "scene153.js",
+      "bytes": 8108,
+      "isEntry": true,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/animation/property-animation.ts",
+          "bytes": 3932,
+          "exports": [
+            {
+              "name": "createPropertyAnimationClip",
+              "kind": "function"
+            },
+            {
+              "name": "createPropertyAnimationGroup",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/animation/evaluate.ts",
+          "bytes": 1300,
+          "exports": [
+            {
+              "name": "evaluateSampler",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/animation/animation-manager.ts",
+          "bytes": 954,
+          "exports": [
+            {
+              "name": "addAnimationTask",
+              "kind": "function"
+            },
+            {
+              "name": "createAnimationManager",
+              "kind": "function"
+            },
+            {
+              "name": "createAnimationTask",
+              "kind": "function"
+            },
+            {
+              "name": "startAnimationManager",
+              "kind": "function"
+            },
+            {
+              "name": "updateAnimationManager",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/animation/animation-group-task.ts",
+          "bytes": 378,
+          "exports": [
+            {
+              "name": "ANIMATION_GROUP_TASK_CATEGORY",
+              "kind": "const"
+            },
+            {
+              "name": "addAnimationGroup",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/animation/animation-group.ts",
+          "bytes": 342,
+          "exports": [
+            {
+              "name": "goToFrame",
+              "kind": "function"
+            },
+            {
+              "name": "playAnimation",
+              "kind": "function"
+            },
+            {
+              "name": "tickAnimation",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

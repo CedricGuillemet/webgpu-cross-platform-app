@@ -1,0 +1,1 @@
+const Te={className:"ReflectBlock",emit(e,t,c,r,f){return{expr:`reflect(${f.cast(f.resolve(e,"incident",c,r),"vec3f").expr},${f.cast(f.resolve(e,"normal",c,r),"vec3f").expr})`,type:"vec3f"};}};export{Te as emitter};

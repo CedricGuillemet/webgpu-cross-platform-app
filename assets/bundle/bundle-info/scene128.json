@@ -1,0 +1,685 @@
+{
+  "scene": "scene128",
+  "chunks": [
+    {
+      "file": "scene128.js",
+      "bytes": 45363,
+      "isEntry": true,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/mesh/GaussianSplatting/gaussian-splatting-pipeline.ts",
+          "bytes": 4875,
+          "exports": [
+            {
+              "name": "applyGsFragments",
+              "kind": "function"
+            },
+            {
+              "name": "attachGaussianSplattingMesh",
+              "kind": "function"
+            },
+            {
+              "name": "buildGaussianSplattingRenderable",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/frame-graph/render-task.ts",
+          "bytes": 4540,
+          "exports": [
+            {
+              "name": "createRenderTask",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/shader/shader-material.ts",
+          "bytes": 3244,
+          "exports": [
+            {
+              "name": "_isShaderSystemUniform",
+              "kind": "function"
+            },
+            {
+              "name": "createShaderMaterial",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/GaussianSplatting/gaussian-splatting-mesh.ts",
+          "bytes": 3121,
+          "exports": [
+            {
+              "name": "createGaussianSplattingMesh",
+              "kind": "function"
+            },
+            {
+              "name": "disposeGaussianSplattingMesh",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/camera/arc-rotate-controls.ts",
+          "bytes": 2369,
+          "exports": [
+            {
+              "name": "attachControl",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/scene-core.ts",
+          "bytes": 2343,
+          "exports": [
+            {
+              "name": "addToScene",
+              "kind": "function"
+            },
+            {
+              "name": "buildScene",
+              "kind": "function"
+            },
+            {
+              "name": "createSceneContext",
+              "kind": "function"
+            },
+            {
+              "name": "registerScene",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-splat/splat-ply-parser.ts",
+          "bytes": 2277,
+          "exports": [
+            {
+              "name": "convertPlyToSplat",
+              "kind": "function"
+            },
+            {
+              "name": "isPly",
+              "kind": "function"
+            },
+            {
+              "name": "isPlyCompressedOrSH",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/engine.ts",
+          "bytes": 1875,
+          "exports": [
+            {
+              "name": "VERSION",
+              "kind": "const"
+            },
+            {
+              "name": "_vis",
+              "kind": "const"
+            },
+            {
+              "name": "createEngine",
+              "kind": "function"
+            },
+            {
+              "name": "getRenderTargetSize",
+              "kind": "function"
+            },
+            {
+              "name": "isRenderingContextRegistered",
+              "kind": "function"
+            },
+            {
+              "name": "registerRenderingContext",
+              "kind": "function"
+            },
+            {
+              "name": "resizeEngine",
+              "kind": "function"
+            },
+            {
+              "name": "setEngineSize",
+              "kind": "function"
+            },
+            {
+              "name": "startEngine",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-splat/splat-data.ts",
+          "bytes": 1548,
+          "exports": [
+            {
+              "name": "buildSplatGeometry",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/mesh.ts",
+          "bytes": 1336,
+          "exports": [
+            {
+              "name": "initMeshTransform",
+              "kind": "function"
+            },
+            {
+              "name": "uploadMeshToGPU",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/GaussianSplatting/gs-depth-fragments.ts",
+          "bytes": 1311,
+          "exports": [
+            {
+              "name": "gsAlphaBlendedDepthFragment",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/loader-splat/load-splat.ts",
+          "bytes": 977,
+          "exports": [
+            {
+              "name": "attachParsedSplat",
+              "kind": "function"
+            },
+            {
+              "name": "loadSplat",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/camera/arc-rotate.ts",
+          "bytes": 962,
+          "exports": [
+            {
+              "name": "createArcRotateCamera",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/create-box.ts",
+          "bytes": 933,
+          "exports": [
+            {
+              "name": "createBoxData",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/engine/render-target.ts",
+          "bytes": 926,
+          "exports": [
+            {
+              "name": "buildRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "createRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "disposeRenderTarget",
+              "kind": "function"
+            },
+            {
+              "name": "targetSignatureKey",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/render/linear-depth-material.ts",
+          "bytes": 885,
+          "exports": [
+            {
+              "name": "createLinearDepthMaterial",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/camera/camera.ts",
+          "bytes": 846,
+          "exports": [
+            {
+              "name": "getCameraPosition",
+              "kind": "function"
+            },
+            {
+              "name": "getEffectiveAspectRatio",
+              "kind": "function"
+            },
+            {
+              "name": "getProjectionMatrix",
+              "kind": "function"
+            },
+            {
+              "name": "getViewMatrix",
+              "kind": "function"
+            },
+            {
+              "name": "getViewProjectionMatrix",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/create-sphere.ts",
+          "bytes": 718,
+          "exports": [
+            {
+              "name": "createSphereData",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-multiply-into.ts",
+          "bytes": 702,
+          "exports": [
+            {
+              "name": "mat4MultiplyInto",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/world-matrix-state.ts",
+          "bytes": 677,
+          "exports": [
+            {
+              "name": "attachWorldMatrixState",
+              "kind": "function"
+            },
+            {
+              "name": "createWorldMatrixState",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/create-ground.ts",
+          "bytes": 653,
+          "exports": [
+            {
+              "name": "createFlatGroundData",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/scene/scene-node.ts",
+          "bytes": 630,
+          "exports": [
+            {
+              "name": "createEulerProxy",
+              "kind": "function"
+            },
+            {
+              "name": "eulerToQuat",
+              "kind": "function"
+            },
+            {
+              "name": "quatToEulerXYZ",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/gpu-buffers.ts",
+          "bytes": 620,
+          "exports": [
+            {
+              "name": "align",
+              "kind": "function"
+            },
+            {
+              "name": "createEmptyUniformBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "createMappedBuffer",
+              "kind": "function"
+            },
+            {
+              "name": "createUniformBuffer",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/render/lights-ubo.ts",
+          "bytes": 606,
+          "exports": [
+            {
+              "name": "ensureSceneLightState",
+              "kind": "function"
+            },
+            {
+              "name": "getLightsUboSize",
+              "kind": "function"
+            },
+            {
+              "name": "refreshSceneLightsUBO",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/observable-quat.ts",
+          "bytes": 539,
+          "exports": [
+            {
+              "name": "ObservableQuat",
+              "kind": "class"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-look-at-lh.ts",
+          "bytes": 516,
+          "exports": [
+            {
+              "name": "mat4LookAtLH",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/mesh/mesh-factories.ts",
+          "bytes": 516,
+          "exports": [
+            {
+              "name": "createBox",
+              "kind": "function"
+            },
+            {
+              "name": "createGround",
+              "kind": "function"
+            },
+            {
+              "name": "createMeshFromData",
+              "kind": "function"
+            },
+            {
+              "name": "createSphere",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/frame-graph/frame-graph.ts",
+          "bytes": 427,
+          "exports": [
+            {
+              "name": "_appendTask",
+              "kind": "function"
+            },
+            {
+              "name": "createFrameGraph",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/observable-vec3.ts",
+          "bytes": 426,
+          "exports": [
+            {
+              "name": "ObservableVec3",
+              "kind": "class"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/render/scene-helpers.ts",
+          "bytes": 291,
+          "exports": [
+            {
+              "name": "getSceneBindGroupLayout",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-compose-into.ts",
+          "bytes": 288,
+          "exports": [
+            {
+              "name": "mat4ComposeInto",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/shader/shader-group-builder.ts",
+          "bytes": 262,
+          "exports": [
+            {
+              "name": "shaderGroupBuilder",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/compute-aabb.ts",
+          "bytes": 199,
+          "exports": [
+            {
+              "name": "computeAabb",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-compose.ts",
+          "bytes": 99,
+          "exports": [
+            {
+              "name": "mat4Compose",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts",
+          "bytes": 94,
+          "exports": [
+            {
+              "name": "mat4PerspectiveLHToRef",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/mat4-identity.ts",
+          "bytes": 81,
+          "exports": [
+            {
+              "name": "mat4Identity",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/math/vec3-up.ts",
+          "bytes": 22,
+          "exports": [
+            {
+              "name": "Vec3Up",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/light/types.ts",
+          "bytes": 12,
+          "exports": [
+            {
+              "name": "LIGHT_ENTRY_FLOATS",
+              "kind": "const"
+            },
+            {
+              "name": "MAX_LIGHTS",
+              "kind": "const"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/shader/scene-uniforms-size.ts",
+          "bytes": 5,
+          "exports": [
+            {
+              "name": "SCENE_UBO_BYTES",
+              "kind": "const"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene128-gaussian-splatting-pipeline-sh-EbU4_v3a.js",
+      "bytes": 10394,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/mesh/GaussianSplatting/gaussian-splatting-pipeline-sh.ts",
+          "bytes": 10307,
+          "exports": [
+            {
+              "name": "attachGaussianSplattingMeshSH",
+              "kind": "function"
+            },
+            {
+              "name": "buildGaussianSplattingRenderableSH",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene128-shader-renderable-C8hk6Vfv.js",
+      "bytes": 9785,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/material/shader/shader-renderable.ts",
+          "bytes": 4681,
+          "exports": [
+            {
+              "name": "buildShaderMaterialRenderables",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/material/shader/shader-pipeline.ts",
+          "bytes": 4117,
+          "exports": [
+            {
+              "name": "getOrCreateShaderPipeline",
+              "kind": "function"
+            },
+            {
+              "name": "getOrCreateShaderPipelineBindings",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/shader/ubo-layout.ts",
+          "bytes": 627,
+          "exports": [
+            {
+              "name": "computeUboLayout",
+              "kind": "function"
+            }
+          ]
+        },
+        {
+          "id": "packages/babylon-lite/src/resource/gpu-pool.ts",
+          "bytes": 258,
+          "exports": [
+            {
+              "name": "acquireTexture",
+              "kind": "function"
+            },
+            {
+              "name": "releaseTexture",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene128-splat-ply-compressed-D-fMhYTB.js",
+      "bytes": 5431,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/loader-splat/splat-ply-compressed.ts",
+          "bytes": 5431,
+          "exports": [
+            {
+              "name": "convertCompressedPlyToParsedSplat",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene128-swapchain-overlay-DDEHaTMc.js",
+      "bytes": 339,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/scene/swapchain-overlay.ts",
+          "bytes": 339,
+          "exports": [
+            {
+              "name": "configureSwapchainOverlayScene",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "scene128-scene-material-swap-D59o_FWG.js",
+      "bytes": 326,
+      "isEntry": false,
+      "modules": [
+        {
+          "id": "packages/babylon-lite/src/scene/scene-material-swap.ts",
+          "bytes": 326,
+          "exports": [
+            {
+              "name": "processMaterialSwaps",
+              "kind": "function"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

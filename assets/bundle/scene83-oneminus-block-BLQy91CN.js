@@ -1,0 +1,1 @@
+import{u as Yt}from"./scene83-_math-factory-DFVyS8gB.js";const Ue=Yt("OneMinusBlock",t=>"1.0-"+t);export{Ue as emitter};

@@ -1,0 +1,1 @@
+import{b as ve}from"./scene89-_math-factory-DFVyS8gB.js";const ro=ve("MultiplyBlock",(t,o)=>`${t}*${o}`);export{ro as emitter};

@@ -1,0 +1,1 @@
+import{u as ut}from"./scene82-_math-factory-DFVyS8gB.js";const ct=ut("OppositeBlock",t=>"1.0-"+t);export{ct as emitter};

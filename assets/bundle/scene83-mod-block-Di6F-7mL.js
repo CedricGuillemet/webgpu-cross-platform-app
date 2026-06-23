@@ -1,0 +1,1 @@
+import{b as Wt}from"./scene83-_math-factory-DFVyS8gB.js";const Ue=Wt("ModBlock",(o,t)=>`${o}% ${t}`);export{Ue as emitter};

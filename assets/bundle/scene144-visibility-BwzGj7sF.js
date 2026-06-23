@@ -1,0 +1,1 @@
+import{b as tl}from"./scene144.js";function en(o,n){xr(o,n),tl();}function xr(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)xr(s[o],n);}export{en as s};

@@ -1,0 +1,1 @@
+const Va={className:"SubSurfaceBlock",stage:"fragment",emit(e,t,r,a,c){return a.usesSubsurface=1,{expr:"vec3<f32>(0.0)",type:"vec3f"};}};export{Va as emitter};

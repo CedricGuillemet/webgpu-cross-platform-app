@@ -1,0 +1,1 @@
+const ea={className:"ArcTan2Block",emit(e,t,a,r,c){return{expr:`atan2(${c.cast(c.resolve(e,"x",a,r),"f32").expr},${c.cast(c.resolve(e,"y",a,r),"f32").expr})`,type:"f32"};}};export{ea as emitter};

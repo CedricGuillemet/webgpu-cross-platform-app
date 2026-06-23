@@ -1,0 +1,1 @@
+import{u as me}from"./scene89-_math-factory-DFVyS8gB.js";const eo=me("OppositeBlock",t=>"1.0-"+t);export{eo as emitter};

@@ -1,0 +1,1 @@
+const Ee={className:"ScaleBlock",emit(t,e,c,r,a){const o=a.resolve(t,"input",c,r),s=a.resolve(t,"factor",c,r),n=a.cast(s,"f32").expr;return{expr:`(${o.expr}*${n})`,type:o.type};}};export{Ee as emitter};

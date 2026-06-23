@@ -1,0 +1,1 @@
+import{b as Ze}from"./scene87-_math-factory-DFVyS8gB.js";const ze=Ze("MaxBlock",(t,a)=>`max(${t},${a})`);export{ze as emitter};

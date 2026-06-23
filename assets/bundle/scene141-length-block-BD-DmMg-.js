@@ -1,0 +1,1 @@
+const Da={className:"LengthBlock",emit(e,t,r,a,l){return{expr:`length(${l.resolve(e,"value",r,a).expr})`,type:"f32"};}};export{Da as emitter};

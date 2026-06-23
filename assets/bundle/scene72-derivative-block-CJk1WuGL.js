@@ -1,0 +1,1 @@
+const ht={dx:"dpdx",dy:"dpdy"},$t={className:"DerivativeBlock",stage:"fragment",emit(t,e,r,o,i){const a=ht[e];if(!a)throw Error(`NodeMaterial:DerivativeBlock output "${e}" is not supported`);const p=i.resolve(t,"input",r,o);return{expr:`${a}(${p.expr})`,type:p.type};}};export{$t as emitter};

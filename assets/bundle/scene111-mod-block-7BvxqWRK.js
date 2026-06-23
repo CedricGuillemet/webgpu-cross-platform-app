@@ -1,0 +1,1 @@
+import{b as fa}from"./scene111-_math-factory-DFVyS8gB.js";const ii=fa("ModBlock",(o,t)=>`${o}% ${t}`);export{ii as emitter};

@@ -1,0 +1,1 @@
+import{b as ve}from"./scene89-_math-factory-DFVyS8gB.js";const re=ve("ModBlock",(o,t)=>`${o}% ${t}`);export{re as emitter};

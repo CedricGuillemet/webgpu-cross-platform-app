@@ -1,0 +1,1 @@
+const Pa={className:"Rotate2dBlock",emit(e,t,c,s,$){const n=$.cast($.resolve(e,"input",c,s),"vec2f"),o=$.cast($.resolve(e,"angle",c,s),"f32");return{expr:`vec2<f32>(cos(${o.expr})*(${n.expr}).x-sin(${o.expr})*(${n.expr}).y,sin(${o.expr})*(${n.expr}).x+cos(${o.expr})*(${n.expr}).y)`,type:"vec2f"};}};export{Pa as emitter};

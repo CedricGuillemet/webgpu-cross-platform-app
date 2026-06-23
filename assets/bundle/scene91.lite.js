@@ -1,0 +1,9176 @@
+"use strict";
+(() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __esm = (fn, res) => function __init() {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  };
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/typed-arrays.ts
+  var F32, F64, U32, U8;
+  var init_typed_arrays = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/typed-arrays.ts"() {
+      "use strict";
+      F32 = Float32Array;
+      F64 = Float64Array;
+      U32 = Uint32Array;
+      U8 = Uint8Array;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/_matrix-allocator.ts
+  function _defaultAllocate() {
+    return new F32(16);
+  }
+  function allocateMat4() {
+    return (_allocate ?? _defaultAllocate)();
+  }
+  function _setHpmAllocator(allocate) {
+    _allocate = allocate;
+  }
+  var _allocate;
+  var init_matrix_allocator = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/_matrix-allocator.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/gpu-flags.ts
+  var TU, BU, SS, CW;
+  var init_gpu_flags = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/gpu-flags.ts"() {
+      "use strict";
+      TU = globalThis.GPUTextureUsage;
+      BU = globalThis.GPUBufferUsage;
+      SS = globalThis.GPUShaderStage;
+      CW = globalThis.GPUColorWrite;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/render-target.ts
+  function targetSignatureKey(desc) {
+    return `${desc._colorFormat ?? "-"}|${desc._depthStencilFormat ?? "-"}|${desc._depthCompare ?? ""}|${desc._sampleCount}`;
+  }
+  function createRenderTarget(descriptor) {
+    return {
+      _descriptor: descriptor,
+      _colorTexture: null,
+      _colorView: null,
+      _depthTexture: null,
+      _depthView: null,
+      _width: 0,
+      _height: 0
+    };
+  }
+  function buildRenderTarget(rt, engine) {
+    if (rt._eager) {
+      return;
+    }
+    disposeRenderTarget(rt);
+    const desc = rt._descriptor;
+    const { width, height } = resolveSize(desc);
+    rt._width = width;
+    rt._height = height;
+    const device = engine._device;
+    const allocColor = !!desc.format;
+    if (allocColor) {
+      rt._colorTexture = device.createTexture({
+        label: desc.lbl,
+        size: { width, height },
+        format: desc.format,
+        sampleCount: desc.samples,
+        usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING | TU.COPY_SRC
+      });
+      rt._colorView = rt._colorTexture.createView();
+    }
+    if (desc.dFormat) {
+      rt._depthTexture = device.createTexture({
+        label: desc.lbl,
+        size: { width, height },
+        format: desc.dFormat,
+        sampleCount: desc.samples,
+        usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING
+      });
+      rt._depthView = rt._depthTexture.createView();
+    }
+  }
+  function disposeRenderTarget(rt) {
+    if (!rt || rt._eager) {
+      return;
+    }
+    if (rt._colorTexture) {
+      rt._colorTexture.destroy();
+      rt._colorTexture = null;
+      rt._colorView = null;
+    }
+    if (rt._depthTexture) {
+      if (rt._ownsDepthTexture !== false) {
+        rt._depthTexture.destroy();
+      }
+      rt._depthTexture = null;
+      rt._depthView = null;
+    }
+    rt._width = 0;
+    rt._height = 0;
+  }
+  function resolveSize(desc) {
+    const size = desc.size;
+    if ("canvas" in size) {
+      const canvas = size.canvas;
+      return { width: canvas.width, height: canvas.height };
+    }
+    return size;
+  }
+  var REVERSE_DEPTH_COMPARE;
+  var init_render_target = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/render-target.ts"() {
+      "use strict";
+      init_gpu_flags();
+      REVERSE_DEPTH_COMPARE = "greater-equal";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/surface.ts
+  function isDomCanvas(canvas) {
+    return "clientWidth" in canvas;
+  }
+  function _buildSurface(engine, canvas, options) {
+    const context = canvas.getContext("webgpu");
+    if (!context) {
+      throw new Error("WebGPU context not available");
+    }
+    const format = options?.format ?? navigator.gpu.getPreferredCanvasFormat();
+    const alphaMode = options?.alphaMode ?? "opaque";
+    context.configure({ device: engine._device, format, alphaMode });
+    const msaaSamples = options?.msaaSamples === 1 ? 1 : 4;
+    const scRT = createRenderTarget({ lbl: "swapchain", format, samples: 1, size: { width: 0, height: 0 } });
+    scRT._eager = true;
+    return {
+      engine,
+      canvas,
+      format,
+      msaaSamples,
+      scRT,
+      maxDevicePixelRatio: options?.maxDevicePixelRatio ?? Infinity,
+      _uniqueId: _nextSurfaceId++,
+      _context: context,
+      _alphaMode: alphaMode,
+      _renderingContexts: []
+    };
+  }
+  function _refreshScRT(surface) {
+    const tex = surface._context.getCurrentTexture();
+    const swap = surface.scRT;
+    swap._colorTexture = tex;
+    swap._colorView = tex.createView();
+    swap._width = tex.width;
+    swap._height = tex.height;
+  }
+  function resizeSurface(surface) {
+    const canvas = surface.canvas;
+    if (!isDomCanvas(canvas)) {
+      return;
+    }
+    const clientWidth = canvas.clientWidth;
+    const clientHeight = canvas.clientHeight;
+    if (!(clientWidth > 0 && clientHeight > 0)) {
+      return;
+    }
+    const scale = Math.min(globalThis.devicePixelRatio || 1, surface.maxDevicePixelRatio);
+    const w = clientWidth * scale | 0;
+    const h = clientHeight * scale | 0;
+    setSurfaceSize(surface, w, h);
+  }
+  function setSurfaceSize(surface, widthPx, heightPx) {
+    const canvas = surface.canvas;
+    const w = widthPx | 0;
+    const h = heightPx | 0;
+    if (!(w > 0 && h > 0)) {
+      return;
+    }
+    if (w === canvas.width && h === canvas.height) {
+      return;
+    }
+    canvas.width = w;
+    canvas.height = h;
+    surface.scRT._width = w;
+    surface.scRT._height = h;
+    for (const c of surface._renderingContexts) {
+      c._resize?.();
+    }
+  }
+  var _nextSurfaceId;
+  var init_surface = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/surface.ts"() {
+      "use strict";
+      init_render_target();
+      _nextSurfaceId = 1;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/_mat4-storage-f64.ts
+  var mat4_storage_f64_exports = {};
+  __export(mat4_storage_f64_exports, {
+    MAT4_STORAGE_F64_BUILD_TAG: () => MAT4_STORAGE_F64_BUILD_TAG,
+    allocateF64Mat4: () => allocateF64Mat4
+  });
+  function allocateF64Mat4() {
+    return new F64(16);
+  }
+  var MAT4_STORAGE_F64_BUILD_TAG;
+  var init_mat4_storage_f64 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/_mat4-storage-f64.ts"() {
+      "use strict";
+      init_typed_arrays();
+      MAT4_STORAGE_F64_BUILD_TAG = "@@MAT4_STORAGE_F64@@";
+      allocateF64Mat4[MAT4_STORAGE_F64_BUILD_TAG] = true;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/types.ts
+  var MAX_LIGHTS, LIGHT_ENTRY_FLOATS;
+  var init_types = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/types.ts"() {
+      "use strict";
+      MAX_LIGHTS = 16;
+      LIGHT_ENTRY_FLOATS = 16;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/large-world/floating-origin.ts
+  var floating_origin_exports = {};
+  __export(floating_origin_exports, {
+    applyLightFoOffset: () => applyLightFoOffset,
+    getFloatingOriginOffset: () => getFloatingOriginOffset,
+    lightFoVersion: () => lightFoVersion,
+    wrapRenderableForFO: () => wrapRenderableForFO
+  });
+  function getFloatingOriginOffset(scene) {
+    const cam = scene.camera;
+    if (!cam) {
+      return { x: 0, y: 0, z: 0 };
+    }
+    const w = cam.worldMatrix;
+    return { x: w[12], y: w[13], z: w[14] };
+  }
+  function lightFoVersion(scene) {
+    return scene.camera ? scene.camera.worldMatrixVersion : 0;
+  }
+  function applyLightFoOffset(data, scene) {
+    const cam = scene.camera;
+    const w = cam?.worldMatrix;
+    if (!w) {
+      return;
+    }
+    const ox = w[12];
+    const oy = w[13];
+    const oz = w[14];
+    let count = 0;
+    for (const light of scene.lights) {
+      if (count >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      const o = 4 + count * LIGHT_ENTRY_FLOATS;
+      const type = data[o + 3];
+      if (type === 0 || type === 2) {
+        const lw = light.worldMatrix;
+        data[o] = lw[12] - ox;
+        data[o + 1] = lw[13] - oy;
+        data[o + 2] = lw[14] - oz;
+      }
+      count++;
+    }
+  }
+  function wrapRenderableForFO(inner, scene, invalidate) {
+    let _lastCameraVersion = -1;
+    return () => {
+      const cv = scene.camera ? scene.camera.worldMatrixVersion : -1;
+      if (cv !== _lastCameraVersion) {
+        invalidate();
+        _lastCameraVersion = cv;
+      }
+      inner();
+    };
+  }
+  var init_floating_origin = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/large-world/floating-origin.ts"() {
+      "use strict";
+      init_types();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/large-world/pack-mat4-with-offset.ts
+  var pack_mat4_with_offset_exports = {};
+  __export(pack_mat4_with_offset_exports, {
+    makePackMeshWorld: () => makePackMeshWorld,
+    packMat4IntoF32WithOffset: () => packMat4IntoF32WithOffset
+  });
+  function packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, offsetX, offsetY, offsetZ) {
+    const src = mat;
+    const s = srcOffsetFloats;
+    const o = offsetFloats;
+    view[o + 0] = src[s + 0];
+    view[o + 1] = src[s + 1];
+    view[o + 2] = src[s + 2];
+    view[o + 3] = src[s + 3];
+    view[o + 4] = src[s + 4];
+    view[o + 5] = src[s + 5];
+    view[o + 6] = src[s + 6];
+    view[o + 7] = src[s + 7];
+    view[o + 8] = src[s + 8];
+    view[o + 9] = src[s + 9];
+    view[o + 10] = src[s + 10];
+    view[o + 11] = src[s + 11];
+    view[o + 12] = src[s + 12] - offsetX;
+    view[o + 13] = src[s + 13] - offsetY;
+    view[o + 14] = src[s + 14] - offsetZ;
+    view[o + 15] = src[s + 15];
+  }
+  function makePackMeshWorld(scene) {
+    return (view, mat, offsetFloats, srcOffsetFloats) => {
+      const cam = scene.camera;
+      if (!cam) {
+        packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, 0, 0, 0);
+        return;
+      }
+      const w = cam.worldMatrix;
+      packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, w[12], w[13], w[14]);
+    };
+  }
+  var init_pack_mat4_with_offset = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/large-world/pack-mat4-with-offset.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/engine.ts
+  function isRenderingContextRegistered(surface, context) {
+    return surface._renderingContexts.indexOf(context) !== -1;
+  }
+  function registerRenderingContext(surface, context) {
+    if (surface._renderingContexts.indexOf(context) !== -1) {
+      return false;
+    }
+    surface._renderingContexts.push(context);
+    return true;
+  }
+  async function createEngine(canvas, options) {
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+    if (!adapter) {
+      throw new Error("WebGPU adapter not available");
+    }
+    const features = [];
+    if (adapter.features.has("float32-filterable")) {
+      features.push("float32-filterable");
+    }
+    for (const f of ["texture-compression-astc", "texture-compression-bc", "texture-compression-etc2", "timestamp-query"]) {
+      if (adapter.features.has(f)) {
+        features.push(f);
+      }
+    }
+    const device = await adapter.requestDevice({ requiredFeatures: features, requiredLimits: options?.requiredLimits });
+    const versionToLog = `Babylon Lite v${VERSION}`;
+    console.log(`${versionToLog} - WebGPU engine`);
+    if (isDomCanvas(canvas)) {
+      canvas.setAttribute("data-engine", versionToLog);
+    }
+    const useHpm = options?.useHighPrecisionMatrix === true;
+    const useFO = options?.useFloatingOrigin === true;
+    if (useFO && !useHpm) {
+      throw new Error("Babylon Lite: useFloatingOrigin requires useHighPrecisionMatrix on the engine.");
+    }
+    if (useHpm) {
+      const { allocateF64Mat4: allocateF64Mat42 } = await Promise.resolve().then(() => (init_mat4_storage_f64(), mat4_storage_f64_exports));
+      _setHpmAllocator(allocateF64Mat42);
+    }
+    let _wrapRenderableForFO;
+    let _makePackMeshWorld;
+    let _lightFoVersion;
+    let _applyLightFoOffset;
+    if (useFO) {
+      const [{ wrapRenderableForFO: wrapRenderableForFO2, lightFoVersion: lightFoVersion2, applyLightFoOffset: applyLightFoOffset2 }, { makePackMeshWorld: makePackMeshWorld2 }] = await Promise.all([
+        Promise.resolve().then(() => (init_floating_origin(), floating_origin_exports)),
+        Promise.resolve().then(() => (init_pack_mat4_with_offset(), pack_mat4_with_offset_exports))
+      ]);
+      _wrapRenderableForFO = wrapRenderableForFO2;
+      _makePackMeshWorld = makePackMeshWorld2;
+      _lightFoVersion = lightFoVersion2;
+      _applyLightFoOffset = applyLightFoOffset2;
+    }
+    const engine = { _device: device };
+    const surfaces = [engine];
+    Object.assign(
+      engine,
+      {
+        engine,
+        // self-reference: the engine IS its primary surface
+        surfaces,
+        // public readonly view of `_surfaces` (same underlying array)
+        _surfaces: surfaces,
+        _device: device,
+        drawCallCount: 0,
+        gpuFrameTimeMs: 0,
+        useHighPrecisionMatrix: useHpm,
+        useFloatingOrigin: useFO,
+        _animFrameId: 0,
+        _renderFn: null,
+        _currentEncoder: void 0,
+        _currentDelta: 0,
+        _cbs: [],
+        _wrapRenderableForFO,
+        _makePackMeshWorld,
+        _lightFoVersion,
+        _applyLightFoOffset
+      },
+      _buildSurface(engine, canvas, options)
+    );
+    resizeSurface(engine);
+    _refreshScRT(engine);
+    return engine;
+  }
+  function resizeEngine(engine) {
+    for (const surface of engine.surfaces) {
+      resizeSurface(surface);
+    }
+  }
+  function startEngine(engine) {
+    return new Promise((resolve) => {
+      let firstRafFrame = true;
+      let lastTime = 0;
+      engine._renderFn = (now) => {
+        const delta = firstRafFrame ? 0 : lastTime > 0 ? now - lastTime : 16.667;
+        lastTime = now;
+        resizeEngine(engine);
+        renderFrame(engine, delta);
+        if (firstRafFrame) {
+          firstRafFrame = false;
+          resolve();
+        }
+        engine._animFrameId = requestAnimationFrame(engine._renderFn);
+      };
+      engine._animFrameId = requestAnimationFrame(engine._renderFn);
+    });
+  }
+  function renderFrame(engine, delta) {
+    const surfaces = engine.surfaces;
+    let total = 0;
+    for (let i = 0; i < surfaces.length; i++) {
+      total += surfaces[i]._renderingContexts.length;
+    }
+    if (total === 0) {
+      return;
+    }
+    const encoder = engine._device.createCommandEncoder({ label: "frame" });
+    engine._currentEncoder = encoder;
+    engine._currentDelta = delta;
+    engine._gpuTimerBegin?.(encoder);
+    let drawCalls = 0;
+    for (let i = 0; i < surfaces.length; i++) {
+      const surface = surfaces[i];
+      surface._capturePreFrame?.(surface);
+      _refreshScRT(surface);
+      const ctxs = surface._renderingContexts;
+      for (let j = 0; j < ctxs.length; j++) {
+        const s = ctxs[j];
+        s._update();
+        drawCalls += s._drawCallsPre;
+        drawCalls += s._record();
+      }
+    }
+    const finalEncoder = engine._currentEncoder;
+    for (let i = 0; i < surfaces.length; i++) {
+      const surface = surfaces[i];
+      surface._captureService?.(surface, finalEncoder);
+    }
+    engine._gpuTimerEnd?.(finalEncoder);
+    engine._cbs[0] = finalEncoder.finish();
+    engine._device.queue.submit(engine._cbs);
+    engine.drawCallCount = drawCalls;
+    engine._gpuTimerResolve?.();
+  }
+  var VERSION, _vis;
+  var init_engine = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/engine.ts"() {
+      "use strict";
+      init_matrix_allocator();
+      init_surface();
+      VERSION = "0.1.0";
+      _vis = 0;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-material-swap.ts
+  var scene_material_swap_exports = {};
+  __export(scene_material_swap_exports, {
+    processMaterialSwaps: () => processMaterialSwaps
+  });
+  function processMaterialSwaps(scene) {
+    const q = scene._materialSwapQueue;
+    const device = scene.surface.engine._device;
+    for (const mesh of q) {
+      const old = scene._meshDisposables.get(mesh);
+      if (old) {
+        scene._meshDisposables.delete(mesh);
+        void device.queue.onSubmittedWorkDone().then(() => {
+          try {
+            for (const fn of old) {
+              fn();
+            }
+          } catch {
+          }
+        }).catch(() => {
+        });
+      }
+      const mat = mesh.material;
+      const builder = mat?._buildGroup;
+      if (!builder) {
+        continue;
+      }
+      const rebuild = builder._rebuildSingle;
+      if (!rebuild) {
+        continue;
+      }
+      const renderable = rebuild(scene, mesh);
+      let i = scene._renderables.length;
+      while (i > 0 && scene._renderables[i - 1].order > renderable.order) {
+        i--;
+      }
+      scene._renderables.splice(i, 0, renderable);
+    }
+    q.length = 0;
+    scene._renderableVersion++;
+  }
+  var init_scene_material_swap = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-material-swap.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/mesh-scene-registry.ts
+  function enqueueMaterialSwap(scene, mesh) {
+    if (scene._materialSwapQueue.indexOf(mesh) >= 0) {
+      return;
+    }
+    scene._materialSwapQueue.push(mesh);
+    if (!scene._processSwaps) {
+      void Promise.resolve().then(() => (init_scene_material_swap(), scene_material_swap_exports)).then((m) => {
+        scene._processSwaps = m.processMaterialSwaps;
+      });
+    }
+  }
+  function installMaterialSetter(mesh) {
+    let _mat = mesh.material;
+    Object.defineProperty(mesh, "material", {
+      get() {
+        return _mat;
+      },
+      set(v) {
+        if (v !== _mat) {
+          _mat = v;
+          const scenes = _meshScenes?.get(mesh);
+          if (scenes) {
+            for (const scene of scenes) {
+              enqueueMaterialSwap(scene, mesh);
+            }
+          }
+        }
+      },
+      configurable: true,
+      enumerable: true
+    });
+  }
+  function registerMeshScene(scene, mesh) {
+    const map = _meshScenes ?? (_meshScenes = /* @__PURE__ */ new WeakMap());
+    let scenes = map.get(mesh);
+    if (!scenes) {
+      map.set(mesh, scenes = /* @__PURE__ */ new Set());
+      installMaterialSetter(mesh);
+    }
+    scenes.add(scene);
+  }
+  var _meshScenes;
+  var init_mesh_scene_registry = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/mesh-scene-registry.ts"() {
+      "use strict";
+      _meshScenes = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/frame-graph.ts
+  function createFrameGraph(_engine) {
+    const fg = {
+      _tasks: [],
+      _currentProcessedTask: null,
+      build() {
+        for (let i = 0; i < fg._tasks.length; i++) {
+          const task = fg._tasks[i];
+          task._passes.length = 0;
+          fg._currentProcessedTask = task;
+          task.record();
+          fg._currentProcessedTask = null;
+        }
+        for (let i = 0; i < fg._tasks.length; i++) {
+          const passes = fg._tasks[i]._passes;
+          for (let j = 0; j < passes.length; j++) {
+            passes[j]._initialize();
+          }
+        }
+      },
+      execute() {
+        let drawCalls = 0;
+        for (const task of fg._tasks) {
+          if (task.execute) {
+            drawCalls += task.execute();
+          } else {
+            for (const pass of task._passes) {
+              drawCalls += pass._execute();
+            }
+          }
+        }
+        return drawCalls;
+      },
+      dispose() {
+        for (const task of fg._tasks) {
+          task.dispose();
+        }
+        fg._tasks.length = 0;
+        fg._currentProcessedTask = null;
+      }
+    };
+    return fg;
+  }
+  function _appendTask(fg, task) {
+    fg._tasks.push(task);
+  }
+  var init_frame_graph = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/frame-graph.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply-into.ts
+  function mat4MultiplyInto(dst, d, a, i, b, j) {
+    const a0 = a[i], a1 = a[i + 1], a2 = a[i + 2], a3 = a[i + 3];
+    const a4 = a[i + 4], a5 = a[i + 5], a6 = a[i + 6], a7 = a[i + 7];
+    const a8 = a[i + 8], a9 = a[i + 9], a10 = a[i + 10], a11 = a[i + 11];
+    const a12 = a[i + 12], a13 = a[i + 13], a14 = a[i + 14], a15 = a[i + 15];
+    let b0 = b[j], b1 = b[j + 1], b2 = b[j + 2], b3 = b[j + 3];
+    dst[d] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 1] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 2] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 3] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 4];
+    b1 = b[j + 5];
+    b2 = b[j + 6];
+    b3 = b[j + 7];
+    dst[d + 4] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 5] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 6] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 7] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 8];
+    b1 = b[j + 9];
+    b2 = b[j + 10];
+    b3 = b[j + 11];
+    dst[d + 8] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 9] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 10] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 11] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 12];
+    b1 = b[j + 13];
+    b2 = b[j + 14];
+    b3 = b[j + 15];
+    dst[d + 12] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 13] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 14] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 15] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+  }
+  var init_mat4_multiply_into = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply-into.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts
+  function mat4PerspectiveLHToRef(out, fov, aspect, near, far) {
+    const tan = 1 / Math.tan(fov * 0.5);
+    const range = far - near;
+    out[0] = tan / aspect;
+    out[5] = tan;
+    out[10] = -near / range;
+    out[11] = 1;
+    out[14] = far * near / range;
+  }
+  var init_mat4_perspective_lh_to_ref = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/camera/camera.ts
+  function getViewMatrix(camera) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._viewVer === ver) {
+      return camera._viewCache;
+    }
+    const v = camera._viewCache;
+    const w = camera.worldMatrix;
+    const useFO = camera._useFloatingOrigin;
+    const cx = useFO ? 0 : w[12];
+    const cy = useFO ? 0 : w[13];
+    const cz = useFO ? 0 : w[14];
+    v[0] = w[0];
+    v[1] = w[4];
+    v[2] = w[8];
+    v[3] = 0;
+    v[4] = w[1];
+    v[5] = w[5];
+    v[6] = w[9];
+    v[7] = 0;
+    v[8] = w[2];
+    v[9] = w[6];
+    v[10] = w[10];
+    v[11] = 0;
+    v[12] = -(w[0] * cx + w[1] * cy + w[2] * cz);
+    v[13] = -(w[4] * cx + w[5] * cy + w[6] * cz);
+    v[14] = -(w[8] * cx + w[9] * cy + w[10] * cz);
+    v[15] = 1;
+    camera._viewVer = ver;
+    return v;
+  }
+  function getProjectionMatrix(camera, aspectRatio) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._projVer === ver && camera._projAspect === aspectRatio) {
+      return camera._projCache;
+    }
+    const p = camera._projCache;
+    mat4PerspectiveLHToRef(p, camera.fov, aspectRatio, camera.nearPlane, camera.farPlane);
+    camera._projVer = ver;
+    camera._projAspect = aspectRatio;
+    return p;
+  }
+  function getViewProjectionMatrix(camera, aspectRatio) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._vpVer === ver && camera._vpAspect === aspectRatio) {
+      return camera._vpCache;
+    }
+    const vp = camera._vpCache;
+    mat4MultiplyInto(vp, 0, getProjectionMatrix(camera, aspectRatio), 0, getViewMatrix(camera), 0);
+    camera._vpVer = ver;
+    camera._vpAspect = aspectRatio;
+    return vp;
+  }
+  var init_camera = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/camera/camera.ts"() {
+      "use strict";
+      init_mat4_multiply_into();
+      init_mat4_perspective_lh_to_ref();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/render/scene-helpers.ts
+  function getSceneBindGroupLayout(engine) {
+    const device = engine._device;
+    if (_cachedSceneBGL && _cachedDevice === device) {
+      return _cachedSceneBGL;
+    }
+    _cachedDevice = device;
+    _cachedSceneBGL = device.createBindGroupLayout({
+      label: "scene",
+      entries: [
+        { binding: 0, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } },
+        { binding: 1, visibility: SS.FRAGMENT, buffer: { type: "uniform" } }
+      ]
+    });
+    return _cachedSceneBGL;
+  }
+  function clearSceneBGLCache() {
+    _cachedSceneBGL = null;
+    _cachedDevice = null;
+  }
+  var _cachedSceneBGL, _cachedDevice;
+  var init_scene_helpers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/render/scene-helpers.ts"() {
+      "use strict";
+      init_gpu_flags();
+      _cachedSceneBGL = null;
+      _cachedDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/pack-mat4-into-f32.ts
+  function packMat4IntoF32(view, mat, offsetFloats = 0, srcOffsetFloats = 0) {
+    const src = mat;
+    if (srcOffsetFloats === 0 && src.length === 16) {
+      view.set(src, offsetFloats);
+      return;
+    }
+    const s = srcOffsetFloats;
+    const o = offsetFloats;
+    view[o + 0] = src[s + 0];
+    view[o + 1] = src[s + 1];
+    view[o + 2] = src[s + 2];
+    view[o + 3] = src[s + 3];
+    view[o + 4] = src[s + 4];
+    view[o + 5] = src[s + 5];
+    view[o + 6] = src[s + 6];
+    view[o + 7] = src[s + 7];
+    view[o + 8] = src[s + 8];
+    view[o + 9] = src[s + 9];
+    view[o + 10] = src[s + 10];
+    view[o + 11] = src[s + 11];
+    view[o + 12] = src[s + 12];
+    view[o + 13] = src[s + 13];
+    view[o + 14] = src[s + 14];
+    view[o + 15] = src[s + 15];
+  }
+  var init_pack_mat4_into_f32 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/pack-mat4-into-f32.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/scene-uniforms-pack.ts
+  function _packSceneUniforms(data, eng, scene, camera, aspect) {
+    data.fill(0);
+    const viewProj = getViewProjectionMatrix(camera, aspect);
+    const viewMat = getViewMatrix(camera);
+    const wm = camera.worldMatrix;
+    packMat4IntoF32(data, viewProj, 0);
+    packMat4IntoF32(data, viewMat, 16);
+    if (eng.useFloatingOrigin) {
+      data[32] = 0;
+      data[33] = 0;
+      data[34] = 0;
+    } else {
+      data[32] = wm[12];
+      data[33] = wm[13];
+      data[34] = wm[14];
+    }
+    data[87] = eng.canvas.width;
+    data[36] = scene.envRotationY || 0;
+    const envTextures = scene._envTextures;
+    const img = scene.imageProcessing;
+    data[76] = img.exposure;
+    data[77] = img.contrast;
+    data[78] = envTextures?.lodGenerationScale ?? 0.8;
+    data[79] = +img.toneMappingEnabled;
+    data[37] = eng.canvas.height;
+  }
+  var init_scene_uniforms_pack = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/scene-uniforms-pack.ts"() {
+      "use strict";
+      init_camera();
+      init_pack_mat4_into_f32();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-buffers.ts
+  function align(n, to) {
+    return n + to - 1 & ~(to - 1);
+  }
+  function createUniformBuffer(engine, data, label) {
+    const device = engine._device;
+    const buf = device.createBuffer({
+      label,
+      size: align(data.byteLength, 16),
+      usage: BU.UNIFORM | BU.COPY_DST
+    });
+    device.queue.writeBuffer(buf, 0, data.buffer, data.byteOffset, data.byteLength);
+    return buf;
+  }
+  function createEmptyUniformBuffer(engine, byteLength, label) {
+    return engine._device.createBuffer({
+      label,
+      size: align(byteLength, 16),
+      usage: BU.UNIFORM | BU.COPY_DST
+    });
+  }
+  function createMappedBuffer(engine, data, usage) {
+    const size = align(Math.max(data.byteLength, 4), 4);
+    const buf = engine._device.createBuffer({
+      size,
+      usage: usage | BU.COPY_DST,
+      mappedAtCreation: true
+    });
+    new U8(buf.getMappedRange()).set(new U8(data.buffer, data.byteOffset, data.byteLength));
+    buf.unmap();
+    return buf;
+  }
+  var init_gpu_buffers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-buffers.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms-size.ts
+  var SCENE_UBO_BYTES;
+  var init_scene_uniforms_size = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms-size.ts"() {
+      "use strict";
+      SCENE_UBO_BYTES = 368;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/render/lights-ubo.ts
+  function meshLightIndexVec4Count() {
+    return Math.ceil(MAX_LIGHTS / 4);
+  }
+  function getLightsUboSize() {
+    return 16 + MAX_LIGHTS * LIGHT_ENTRY_FLOATS * 4;
+  }
+  function computeLightsVersion(lights) {
+    let v = 0;
+    for (const light of lights) {
+      v += light._lightVersion ?? 0;
+    }
+    return v;
+  }
+  function fillLightsData(data, lights) {
+    data.fill(0);
+    let count = 0;
+    const headerFloats = 4;
+    for (const light of lights) {
+      if (count >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      light._writeLightUbo(data, headerFloats + count * LIGHT_ENTRY_FLOATS);
+      count++;
+    }
+    _countU32[0] = count;
+    data[0] = _countF32[0];
+  }
+  function ensureSceneLightState(engine, scene) {
+    let state = scene._lightGpuState;
+    const byteSize = getLightsUboSize();
+    if (state && state._byteSize === byteSize) {
+      return state;
+    }
+    const registerDisposer = !state;
+    state?._buffer.destroy();
+    const scratch = new F32(byteSize / 4);
+    fillLightsData(scratch, scene.lights);
+    engine._applyLightFoOffset?.(scratch, scene);
+    state = {
+      _buffer: createUniformBuffer(engine, scratch),
+      _scratch: scratch,
+      _version: computeLightsVersion(scene.lights) + (engine._lightFoVersion?.(scene) ?? 0),
+      _lightCount: scene.lights.length,
+      _byteSize: byteSize
+    };
+    scene._lightGpuState = state;
+    if (registerDisposer) {
+      scene._disposables.push(() => {
+        scene._lightGpuState?._buffer.destroy();
+        scene._lightGpuState = void 0;
+      });
+    }
+    return state;
+  }
+  function refreshSceneLightsUBO(engine, scene) {
+    const state = ensureSceneLightState(engine, scene);
+    const version = computeLightsVersion(scene.lights) + (engine._lightFoVersion?.(scene) ?? 0);
+    if (version !== state._version || scene.lights.length !== state._lightCount) {
+      state._version = version;
+      state._lightCount = scene.lights.length;
+      fillLightsData(state._scratch, scene.lights);
+      engine._applyLightFoOffset?.(state._scratch, scene);
+      engine._device.queue.writeBuffer(state._buffer, 0, state._scratch);
+    }
+    return state._buffer;
+  }
+  function appendMeshLightUboFields(fields) {
+    fields.push({ _name: "lc", _type: "u32" });
+    fields.push({ _name: "li", _type: `array<vec4<u32>, ${meshLightIndexVec4Count()}>` });
+  }
+  function meshLightIndexWGSL(meshVar, functionName = "mli") {
+    return `fn ${functionName}(i: u32) -> u32 { return ${meshVar}.li[i / 4u][i % 4u]; }`;
+  }
+  function affectsMesh(light, mesh) {
+    const meshId = mesh.id;
+    const included = light.includedOnlyMeshIds;
+    if (included?.size) {
+      return !!meshId && included.has(meshId);
+    }
+    return !meshId || !light.excludedMeshIds?.has(meshId);
+  }
+  function writeMeshLightSelection(mesh, lights, data) {
+    const u32 = data ? new U32(data.buffer, data.byteOffset, data.byteLength / 4) : null;
+    let count = 0;
+    let single = -1;
+    let pi = 0;
+    for (const light of lights) {
+      if (pi >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      if (affectsMesh(light, mesh)) {
+        single = pi;
+        if (u32) {
+          u32[MSH_LIGHT_INDEX_WORD_OFFSET + count] = pi;
+        }
+        count++;
+      }
+      pi++;
+    }
+    if (u32) {
+      u32[16] = count;
+      for (let i = count; i < MAX_LIGHTS; i++) {
+        u32[MSH_LIGHT_INDEX_WORD_OFFSET + i] = 0;
+      }
+    }
+    return count === 1 ? single + 1 : -count;
+  }
+  var _countU32, _countF32, MSH_LIGHT_INDEX_WORD_OFFSET;
+  var init_lights_ubo = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/render/lights-ubo.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_types();
+      init_gpu_buffers();
+      _countU32 = new U32(1);
+      _countF32 = new F32(_countU32.buffer);
+      MSH_LIGHT_INDEX_WORD_OFFSET = 20;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/render-task.ts
+  function createRenderTask(config, engine, scene) {
+    const sc = scene;
+    config.clrColor ?? (config.clrColor = { r: 0.2, g: 0.2, b: 0.3, a: 1 });
+    config.clr ?? (config.clr = true);
+    const desc = config.rt._descriptor;
+    const targetSignature = {
+      _colorFormat: desc.format,
+      _depthStencilFormat: config.depth?._descriptor.dFormat ?? desc.dFormat,
+      _depthCompare: desc._depthCompare,
+      _sampleCount: desc.samples ?? 1
+    };
+    const sceneBGL = getSceneBindGroupLayout(engine);
+    const sceneUBO = createEmptyUniformBuffer(engine, SCENE_UBO_BYTES);
+    const lightsUBO = ensureSceneLightState(engine, sc)._buffer;
+    const sceneBG = engine._device.createBindGroup({
+      layout: sceneBGL,
+      entries: [
+        { binding: 0, resource: { buffer: sceneUBO } },
+        { binding: 1, resource: { buffer: lightsUBO } }
+      ]
+    });
+    const colorAttachment = { loadOp: "clear", storeOp: "store" };
+    const updateContext = { targetWidth: 0, targetHeight: 0 };
+    const task = {
+      name: config.name,
+      _config: config,
+      engine,
+      scene: sc,
+      _passes: [],
+      _autoFromScene: false,
+      _renderables: [],
+      _opaqueBindings: [],
+      _directBindings: [],
+      _transparentBindings: [],
+      _opaqueBundles: [],
+      _lastVersion: -1,
+      _lastVis: 0,
+      _renderPassDescriptor: { colorAttachments: [colorAttachment] },
+      _colorAttachment: colorAttachment,
+      _depthSrc: config.depth,
+      _depthLoadOp: config.depth ? config.depth._eager ? "load" : "clear" : void 0,
+      _sceneUBO: sceneUBO,
+      _sceneBG: sceneBG,
+      _lightsUBO: lightsUBO,
+      _suData: new F32(SCENE_UBO_BYTES / 4),
+      _su: [],
+      _targetSignature: targetSignature,
+      _pendingMeshes: [],
+      addMesh(mesh, opts) {
+        const material = opts?.material ?? mesh.material;
+        if (!material) {
+          return;
+        }
+        task._pendingMeshes.push({ mesh, material });
+      },
+      record() {
+        if (task._autoFromScene) {
+          task._renderables.length = 0;
+        }
+        resolvePendingMeshes(task, sc);
+        task._autoFromScene = task._renderables.length === 0;
+        if (task._autoFromScene) {
+          task._renderables.push(...sc._renderables);
+        }
+        const rt = config.rt;
+        buildRenderTarget(rt, engine);
+        if (config.rst && (rt._descriptor.samples ?? 1) > 1) {
+          buildRenderTarget(config.rst, engine);
+        }
+        if (config.depth && !config.depth._eager) {
+          buildRenderTarget(config.depth, engine);
+        }
+        updateContext.targetWidth = rt._width;
+        updateContext.targetHeight = rt._height;
+        refreshTaskSceneBindGroup(task, engine);
+        buildBindings(task, engine, targetSignature);
+        buildRenderPassDescriptor(task, rt);
+      },
+      execute() {
+        return executePass(task, engine, targetSignature, updateContext);
+      },
+      dispose() {
+        task._passes.length = 0;
+        disposeRenderTarget(config.rt);
+        disposeRenderTarget(config.rst);
+        disposeRenderTarget(config.depth);
+        task._opaqueBindings.length = 0;
+        task._directBindings.length = 0;
+        task._transparentBindings.length = 0;
+        task._renderables.length = 0;
+        task._opaqueBundles.length = 0;
+        task._sceneUBO.destroy();
+      }
+    };
+    return task;
+  }
+  function resolvePendingMeshes(task, sc) {
+    if (task._pendingMeshes.length === 0) {
+      return;
+    }
+    for (const { mesh, material } of task._pendingMeshes) {
+      const rebuild = material._buildGroup?._rebuildSingle;
+      if (!rebuild) {
+        throw new Error();
+      }
+      const renderable = rebuild(sc, mesh, material);
+      if (!task._renderables.includes(renderable)) {
+        task._renderables.push(renderable);
+      }
+    }
+    task._pendingMeshes.length = 0;
+  }
+  function sortTransparentBindings(task, camera) {
+    const arr = task._transparentBindings;
+    if (arr.length <= 1 || !camera) {
+      return;
+    }
+    const v = getViewMatrix(camera);
+    for (const b of arr) {
+      const wc = b.renderable._worldCenter;
+      b._sortDistance = wc ? wc[0] * v[2] + wc[1] * v[6] + wc[2] * v[10] + v[14] : 0;
+    }
+    arr.sort((a, b) => b._sortDistance - a._sortDistance || a.renderable.order - b.renderable.order);
+  }
+  function buildBindings(task, eng, targetSignature) {
+    const opaque = task._opaqueBindings;
+    const direct = task._directBindings;
+    const transparent = task._transparentBindings;
+    opaque.length = 0;
+    direct.length = 0;
+    transparent.length = 0;
+    for (const r of task._renderables) {
+      const binding = r.bind(eng, targetSignature);
+      if (r.isTransparent || r._transmissive) {
+        transparent.push(binding);
+      } else if (r._direct) {
+        direct.push(binding);
+      } else {
+        opaque.push(binding);
+      }
+    }
+    opaque.sort((a, b) => a.renderable.order - b.renderable.order);
+    direct.sort((a, b) => a.renderable.order - b.renderable.order);
+    task._opaqueBundles.length = 0;
+    task._lastVersion = task.scene._renderableVersion;
+  }
+  function buildRenderPassDescriptor(task, rt) {
+    const att = task._colorAttachment;
+    att.view = rt._colorView;
+    att.resolveTarget = task._config.rst?._colorView ?? void 0;
+    task._renderPassDescriptor.colorAttachments = rt._colorView ? [att] : [];
+    const depthSrc = task._depthSrc ?? rt;
+    const depthView = depthSrc._depthView;
+    let depthAttachment;
+    if (depthView) {
+      const dd = depthSrc._descriptor;
+      const loadOp = task._depthLoadOp ?? "clear";
+      depthAttachment = {
+        view: depthView,
+        depthClearValue: dd._depthClearValue ?? 0,
+        depthLoadOp: loadOp,
+        depthStoreOp: "store"
+      };
+      if (dd.dFormat?.includes("stencil")) {
+        depthAttachment.stencilClearValue = 0;
+        depthAttachment.stencilLoadOp = loadOp;
+        depthAttachment.stencilStoreOp = "store";
+      }
+    }
+    task._renderPassDescriptor.depthStencilAttachment = depthAttachment;
+  }
+  function prepareRenderTaskPass(task, eng, targetSignature, context) {
+    const sc = task.scene;
+    if (task._autoFromScene && task._lastVersion !== sc._renderableVersion) {
+      task._renderables.length = 0;
+      task._renderables.push(...sc._renderables);
+      buildBindings(task, eng, targetSignature);
+    }
+    refreshTaskSceneBindGroup(task, eng);
+    const camera = task._config.cam ?? sc.camera;
+    sc._clusteredLightUpdater?.(camera, context.targetWidth, context.targetHeight);
+    writePassSceneUBO(task, eng, sc, camera);
+    refreshSceneLightsUBO(eng, sc);
+    context._camera = camera;
+    updateBindings(task._opaqueBindings, context);
+    updateBindings(task._directBindings, context);
+    updateBindings(task._transparentBindings, context);
+    sortTransparentBindings(task, camera);
+  }
+  function executePass(task, eng, targetSignature, context) {
+    const sc = task.scene;
+    const sampleCount = targetSignature._sampleCount;
+    prepareRenderTaskPass(task, eng, targetSignature, context);
+    const att = task._colorAttachment;
+    const cfg = task._config;
+    if (cfg.rt._colorView) {
+      if (cfg.rt === eng.scRT) {
+        att.view = cfg.rt._colorView;
+      }
+      att.resolveTarget = cfg.rst?._colorView ?? void 0;
+      att.clearValue = task._autoFromScene ? sc.clearColor : cfg.clrColor;
+      att.loadOp = cfg.clr ? "clear" : "load";
+    }
+    if (task._executeWithTransmission) {
+      return task._executeWithTransmission(sampleCount);
+    }
+    const pass = eng._currentEncoder.beginRenderPass(task._renderPassDescriptor);
+    const draws = executePassBody(task, pass);
+    pass.end();
+    return draws;
+  }
+  function executePassBody(task, pass) {
+    const eng = task.engine;
+    const cfg = task._config;
+    const rt = cfg.rt;
+    const scene = task.scene;
+    const opaqueBindings = task._opaqueBindings;
+    const opaqueBundles = task._opaqueBundles;
+    const sceneBG = task._sceneBG;
+    const camera = cfg.cam ?? scene.camera;
+    const v = camera?.viewport;
+    if (v) {
+      const rw = rt._width;
+      const rh = rt._height;
+      const x = Math.floor(v.x * rw);
+      const y = Math.floor((1 - v.y - v.height) * rh);
+      const w = Math.ceil((v.x + v.width) * rw) - x;
+      const h = Math.ceil((1 - v.y) * rh) - y;
+      pass.setViewport(x, y, w, h, 0, 1);
+      pass.setScissorRect(x, y, w, h);
+    }
+    pass.setBindGroup(0, sceneBG);
+    if (task._lastVersion !== scene._renderableVersion || task._lastVis !== _vis || opaqueBundles.length === 0) {
+      const desc = rt._descriptor;
+      const be = eng._device.createRenderBundleEncoder({
+        colorFormats: desc.format ? [desc.format] : [],
+        // Use the task's target signature, not the RT descriptor: a depth
+        // override (config.depth) supplies the depth format externally, so
+        // the cached opaque pipelines are built with it while the colour RT
+        // carries no depthStencilFormat of its own. The bundle encoder's
+        // attachment state must match those pipelines exactly.
+        depthStencilFormat: task._targetSignature._depthStencilFormat,
+        sampleCount: desc.samples ?? 1
+      });
+      be.setBindGroup(0, sceneBG);
+      drawList(be, opaqueBindings, eng);
+      opaqueBundles[0] = be.finish();
+      task._lastVersion = scene._renderableVersion;
+      task._lastVis = _vis;
+    }
+    let draws = opaqueBindings.length;
+    pass.executeBundles(opaqueBundles);
+    pass.setBindGroup(0, sceneBG);
+    draws += drawList(pass, task._directBindings, eng);
+    draws += drawList(pass, task._transparentBindings, eng);
+    return draws;
+  }
+  function refreshTaskSceneBindGroup(task, eng) {
+    const lightsUBO = ensureSceneLightState(eng, task.scene)._buffer;
+    if (lightsUBO === task._lightsUBO) {
+      return;
+    }
+    task._lightsUBO = lightsUBO;
+    task._sceneBG = eng._device.createBindGroup({
+      layout: getSceneBindGroupLayout(eng),
+      entries: [
+        { binding: 0, resource: { buffer: task._sceneUBO } },
+        { binding: 1, resource: { buffer: lightsUBO } }
+      ]
+    });
+    task._opaqueBundles.length = 0;
+    task._lastVersion = -1;
+  }
+  function writePassSceneUBO(task, eng, scene, camera) {
+    if (!camera) {
+      return;
+    }
+    const v = camera.viewport;
+    const rt = task._config.rt;
+    const aspect = (task._config.cs ? eng.canvas.width / eng.canvas.height : rt._width / rt._height) * (v ? v.width / v.height : 1);
+    const fog = scene.fog;
+    const img = scene.imageProcessing;
+    const envRotationY = scene.envRotationY || 0;
+    const wv = camera.worldMatrixVersion;
+    const s = task._su;
+    if (s[0] === camera && s[1] === fog && s[2] === wv && s[3] === aspect && s[4] === envRotationY && s[5] === img.exposure && s[6] === img.contrast) {
+      return;
+    }
+    s[0] = camera;
+    s[1] = fog;
+    s[2] = wv;
+    s[3] = aspect;
+    s[4] = envRotationY;
+    s[5] = img.exposure;
+    s[6] = img.contrast;
+    const data = task._suData;
+    _packSceneUniforms(data, eng, scene, camera, aspect);
+    const contribs = scene._sceneUboContributors;
+    if (contribs) {
+      for (const c of contribs) {
+        c(data, scene);
+      }
+    }
+    eng._device.queue.writeBuffer(task._sceneUBO, 0, data);
+  }
+  function updateBindings(list, context) {
+    for (const b of list) {
+      b.update?.(context);
+    }
+  }
+  function drawList(enc, list, engine) {
+    let lp = null;
+    let draws = 0;
+    for (const b of list) {
+      const mesh = b.renderable.mesh;
+      if (mesh && mesh.visible === false) {
+        continue;
+      }
+      if (b.pipeline !== lp) {
+        enc.setPipeline(b.pipeline);
+        lp = b.pipeline;
+      }
+      draws += b.draw(enc, engine);
+    }
+    return draws;
+  }
+  var init_render_task = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/render-task.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_engine();
+      init_render_target();
+      init_camera();
+      init_scene_helpers();
+      init_scene_uniforms_pack();
+      init_gpu_buffers();
+      init_scene_uniforms_size();
+      init_lights_ubo();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/swapchain-overlay.ts
+  var swapchain_overlay_exports = {};
+  __export(swapchain_overlay_exports, {
+    configureSwapchainOverlayScene: () => configureSwapchainOverlayScene
+  });
+  function getDefaultSwapchainTask(scene, surface) {
+    for (const task of scene._frameGraph._tasks) {
+      const ptask = task;
+      if (!ptask?._config || !ptask._colorAttachment) {
+        continue;
+      }
+      const renderTask = task;
+      if (renderTask._config.rt === surface.scRT || renderTask._config.rst === surface.scRT) {
+        return renderTask;
+      }
+    }
+    return null;
+  }
+  function configureSwapchainOverlayScene(surface, overlay) {
+    const base = surface._renderingContexts[surface._renderingContexts.length - 1];
+    if (!base?._frameGraph) {
+      return;
+    }
+    const baseTask = getDefaultSwapchainTask(base, surface);
+    const overlayTask = getDefaultSwapchainTask(overlay, surface);
+    if (!baseTask || !overlayTask) {
+      return;
+    }
+    overlayTask._config.clr = false;
+    overlay._beforeRender.unshift(() => {
+      if (surface.msaaSamples > 1) {
+        const view = baseTask._config.rt._colorView;
+        if (view) {
+          overlayTask._colorAttachment.view = view;
+        }
+      }
+    });
+  }
+  var init_swapchain_overlay = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/swapchain-overlay.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-core.ts
+  function createSceneContext(surface, options) {
+    const eng = surface.engine;
+    const ctxLocal = {
+      surface,
+      clearColor: { r: 0.2, g: 0.2, b: 0.3, a: 1 },
+      camera: null,
+      lights: [],
+      meshes: [],
+      animationGroups: [],
+      fog: null,
+      clipPlane: null,
+      shadowGenerators: [],
+      imageProcessing: { exposure: 1, contrast: 1, toneMappingEnabled: false },
+      _renderables: [],
+      _prePasses: [],
+      _gsMeshes: [],
+      _uniformUpdaters: [],
+      fixedDeltaMs: 0,
+      _beforeRender: [],
+      _deferredBuilders: [],
+      _groups: /* @__PURE__ */ new Map(),
+      _disposables: [],
+      _meshDisposables: /* @__PURE__ */ new Map(),
+      _materialSwapQueue: [],
+      _renderableVersion: 0,
+      _built: false,
+      _drawCallsPre: 0,
+      _update() {
+        if (eng.useFloatingOrigin && ctx.camera && !ctx.camera._useFloatingOrigin) {
+          ctx.camera._useFloatingOrigin = true;
+          ctx.camera._viewVer = -1;
+          ctx.camera._vpVer = -1;
+        }
+        const d = ctx.fixedDeltaMs > 0 ? ctx.fixedDeltaMs : eng._currentDelta;
+        const encoder = eng._currentEncoder;
+        let draws = 0;
+        for (const cb of ctx._beforeRender) {
+          cb(d);
+        }
+        if (ctx._materialSwapQueue.length > 0) {
+          ctx._processSwaps?.(ctx);
+        }
+        for (const pp of ctx._prePasses) {
+          draws += pp.execute(encoder, eng);
+        }
+        for (const u of ctx._uniformUpdaters) {
+          u.update(eng);
+        }
+        ctx._drawCallsPre = draws;
+      },
+      _record() {
+        return ctx._frameGraph.execute();
+      },
+      _resize() {
+        ctx._frameGraph.build();
+      }
+    };
+    const ctx = ctxLocal;
+    const fg = createFrameGraph(eng);
+    ctx._frameGraph = fg;
+    if (options?.defaultRenderTask !== false) {
+      const msaa = surface.msaaSamples > 1;
+      const rt = msaa ? createRenderTarget({ lbl: "scene-color", format: surface.format, dFormat: "depth24plus-stencil8", samples: surface.msaaSamples, size: surface }) : surface.scRT;
+      const depth = msaa ? void 0 : createRenderTarget({ lbl: "scene-depth", dFormat: "depth24plus-stencil8", samples: 1, size: surface });
+      _appendTask(fg, createRenderTask({ name: "scene", rt, rst: msaa ? surface.scRT : void 0, depth, clrColor: ctx.clearColor }, eng, ctx));
+    }
+    ctx._disposables.push(() => fg.dispose());
+    return ctx;
+  }
+  function addToScene(scene, entity) {
+    const ctx = scene;
+    if ("entities" in entity) {
+      const result = entity;
+      for (const e of result.entities) {
+        addToScene(scene, e);
+      }
+      if (result.clearColor) {
+        ctx.clearColor = result.clearColor;
+      }
+      if (result.camera && !ctx.camera) {
+        ctx.camera = result.camera;
+      }
+      if (result.animationGroups?.length) {
+        const engine = ctx.surface.engine;
+        const groups = result.animationGroups;
+        ctx.animationGroups.push(...groups);
+        ctx._beforeRender.push((deltaMs) => {
+          for (const g of groups) {
+            if (!g._stopped && g._ctrl) {
+              g._ctrl.tick(deltaMs, engine);
+            }
+          }
+        });
+      }
+      return;
+    }
+    if ("_gpu" in entity && "material" in entity) {
+      const mesh = entity;
+      ctx.meshes.push(mesh);
+      registerMeshScene(ctx, mesh);
+      const build = mesh.material ? mesh.material._buildGroup : void 0;
+      if (build) {
+        let group = ctx._groups.get(build);
+        if (!group) {
+          group = [];
+          ctx._groups.set(build, group);
+          ctx._deferredBuilders.push(async () => {
+            const result = await build(ctx, group);
+            ctx._renderables.push(...result.renderables);
+            if (result.updater) {
+              ctx._uniformUpdaters.push(result.updater);
+            }
+          });
+        }
+        group.push(mesh);
+        if (ctx._built) {
+          enqueueMaterialSwap(ctx, mesh);
+        }
+      }
+    } else if ("lightType" in entity) {
+      ctx.lights.push(entity);
+    }
+    const kids = entity.children;
+    if (kids?.length) {
+      for (const child of kids) {
+        child.parent = entity;
+        addToScene(scene, child);
+      }
+    }
+  }
+  async function buildScene(scene) {
+    const ctx = scene;
+    while (ctx._deferredBuilders.length > 0) {
+      const builders = [...ctx._deferredBuilders];
+      ctx._deferredBuilders = [];
+      await Promise.all(builders.map(async (b) => b()));
+    }
+    ctx._materialSwapQueue.length = 0;
+    ctx._renderableVersion++;
+    ctx._built = true;
+  }
+  async function registerScene(scene) {
+    const ctx = scene;
+    const surface = ctx.surface;
+    if (isRenderingContextRegistered(surface, ctx)) {
+      return;
+    }
+    await buildScene(scene);
+    ctx._renderables.sort(byOrder);
+    await Promise.all(ctx._frameGraph._tasks.map((task) => task._preload?.()).filter((preload) => preload !== void 0));
+    ctx._frameGraph.build();
+    if (surface._renderingContexts.length > 0) {
+      (await Promise.resolve().then(() => (init_swapchain_overlay(), swapchain_overlay_exports))).configureSwapchainOverlayScene(surface, ctx);
+    }
+    registerRenderingContext(surface, ctx);
+  }
+  var byOrder;
+  var init_scene_core = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-core.ts"() {
+      "use strict";
+      init_engine();
+      init_mesh_scene_registry();
+      init_frame_graph();
+      init_render_task();
+      init_render_target();
+      byOrder = (a, b) => a.order - b.order;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-identity.ts
+  function mat4Identity() {
+    const m = new F32(16);
+    m[0] = 1;
+    m[5] = 1;
+    m[10] = 1;
+    m[15] = 1;
+    return m;
+  }
+  var init_mat4_identity = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-identity.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-look-at-lh.ts
+  function mat4LookAtLH(eye, target, up) {
+    const zAxis = { x: target.x - eye.x, y: target.y - eye.y, z: target.z - eye.z };
+    const zLen = Math.sqrt(zAxis.x * zAxis.x + zAxis.y * zAxis.y + zAxis.z * zAxis.z);
+    if (zLen < 1e-10) {
+      return mat4Identity();
+    }
+    const invZ = 1 / zLen;
+    zAxis.x *= invZ;
+    zAxis.y *= invZ;
+    zAxis.z *= invZ;
+    const xAxis = {
+      x: up.y * zAxis.z - up.z * zAxis.y,
+      y: up.z * zAxis.x - up.x * zAxis.z,
+      z: up.x * zAxis.y - up.y * zAxis.x
+    };
+    const xLen = Math.sqrt(xAxis.x * xAxis.x + xAxis.y * xAxis.y + xAxis.z * xAxis.z);
+    if (xLen < 1e-10) {
+      return mat4Identity();
+    }
+    const invX = 1 / xLen;
+    xAxis.x *= invX;
+    xAxis.y *= invX;
+    xAxis.z *= invX;
+    const yAxis = {
+      x: zAxis.y * xAxis.z - zAxis.z * xAxis.y,
+      y: zAxis.z * xAxis.x - zAxis.x * xAxis.z,
+      z: zAxis.x * xAxis.y - zAxis.y * xAxis.x
+    };
+    return new F32([
+      xAxis.x,
+      yAxis.x,
+      zAxis.x,
+      0,
+      xAxis.y,
+      yAxis.y,
+      zAxis.y,
+      0,
+      xAxis.z,
+      yAxis.z,
+      zAxis.z,
+      0,
+      -(xAxis.x * eye.x + xAxis.y * eye.y + xAxis.z * eye.z),
+      -(yAxis.x * eye.x + yAxis.y * eye.y + yAxis.z * eye.z),
+      -(zAxis.x * eye.x + zAxis.y * eye.y + zAxis.z * eye.z),
+      1
+    ]);
+  }
+  var init_mat4_look_at_lh = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-look-at-lh.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_mat4_identity();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/vec3-up.ts
+  var Vec3Up;
+  var init_vec3_up = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/vec3-up.ts"() {
+      "use strict";
+      Vec3Up = { x: 0, y: 1, z: 0 };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/world-matrix-state.ts
+  function attachWorldMatrixState(host, state) {
+    host[WM_STATE] = state;
+  }
+  function peekWorldMatrixState(p) {
+    if (p === null) {
+      return null;
+    }
+    const s = p[WM_STATE];
+    return s ?? null;
+  }
+  function createWorldMatrixState(getLocalMatrix) {
+    let _worldVersion = 0;
+    let _lastSeenParentVersion = -1;
+    let _cachedWorld = null;
+    const _ownedWorld = allocateMat4();
+    let _parent = null;
+    let _parentState = null;
+    const _children = [];
+    function invalidate() {
+      _cachedWorld = null;
+      _worldVersion++;
+      for (const child of _children) {
+        child._invalidate();
+      }
+    }
+    function pollForeignParent() {
+      const pv = _parent.worldMatrixVersion;
+      if (pv !== _lastSeenParentVersion) {
+        _lastSeenParentVersion = pv;
+        invalidate();
+      }
+    }
+    const state = {
+      get parent() {
+        return _parent;
+      },
+      set parent(p) {
+        if (p === _parent) {
+          return;
+        }
+        if (_parentState !== null) {
+          _parentState._removeChild(state);
+        }
+        _parent = p;
+        _parentState = peekWorldMatrixState(p);
+        if (_parentState !== null) {
+          _parentState._addChild(state);
+        }
+        _lastSeenParentVersion = -1;
+        invalidate();
+      },
+      markLocalDirty() {
+        invalidate();
+      },
+      getWorldMatrix() {
+        if (_parentState === null && _parent !== null) {
+          pollForeignParent();
+        }
+        if (_cachedWorld !== null) {
+          return _cachedWorld;
+        }
+        const local = getLocalMatrix();
+        if (_parent !== null) {
+          const pw = _parent.worldMatrix;
+          mat4MultiplyInto(_ownedWorld, 0, pw, 0, local, 0);
+          _cachedWorld = _ownedWorld;
+        } else {
+          _cachedWorld = local;
+        }
+        return _cachedWorld;
+      },
+      getWorldMatrixVersion() {
+        if (_parentState === null && _parent !== null) {
+          pollForeignParent();
+        }
+        return _worldVersion;
+      },
+      _invalidate() {
+        invalidate();
+      },
+      _addChild(child) {
+        _children.push(child);
+      },
+      _removeChild(child) {
+        const i = _children.indexOf(child);
+        if (i >= 0) {
+          _children.splice(i, 1);
+        }
+      }
+    };
+    return state;
+  }
+  var WM_STATE;
+  var init_world_matrix_state = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/world-matrix-state.ts"() {
+      "use strict";
+      init_mat4_multiply_into();
+      init_matrix_allocator();
+      WM_STATE = Symbol("wmState");
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/observable-vec3.ts
+  var ObservableVec3;
+  var init_observable_vec3 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/observable-vec3.ts"() {
+      "use strict";
+      ObservableVec3 = class {
+        constructor(x, y, z, onDirty) {
+          __publicField(this, "_x");
+          __publicField(this, "_y");
+          __publicField(this, "_z");
+          __publicField(this, "_onDirty");
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._onDirty = onDirty;
+        }
+        get x() {
+          return this._x;
+        }
+        set x(v) {
+          if (this._x !== v) {
+            this._x = v;
+            this._onDirty();
+          }
+        }
+        get y() {
+          return this._y;
+        }
+        set y(v) {
+          if (this._y !== v) {
+            this._y = v;
+            this._onDirty();
+          }
+        }
+        get z() {
+          return this._z;
+        }
+        set z(v) {
+          if (this._z !== v) {
+            this._z = v;
+            this._onDirty();
+          }
+        }
+        /** Bulk set — one dirty notification instead of three. */
+        set(x, y, z) {
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._onDirty();
+        }
+        /** Copy values from another vector. */
+        copyFrom(v) {
+          this.set(v.x, v.y, v.z);
+        }
+        /** Copy into a Float32Array at offset. */
+        toArray(out, offset = 0) {
+          out[offset] = this._x;
+          out[offset + 1] = this._y;
+          out[offset + 2] = this._z;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-pool.ts
+  function texRefs() {
+    if (!_texRefs) {
+      _texRefs = /* @__PURE__ */ new WeakMap();
+    }
+    return _texRefs;
+  }
+  function acquireTexture(tex) {
+    const m = texRefs();
+    m.set(tex.texture, (m.get(tex.texture) ?? 0) + 1);
+  }
+  function releaseTexture(tex) {
+    const m = texRefs();
+    const c = (m.get(tex.texture) ?? 1) - 1;
+    if (c <= 0) {
+      tex.texture.destroy();
+      m.delete(tex.texture);
+      return true;
+    }
+    m.set(tex.texture, c);
+    return false;
+  }
+  function samplerKey(desc) {
+    return `${desc.minFilter ?? "nearest"}:${desc.magFilter ?? "nearest"}:${desc.mipmapFilter ?? "nearest"}:${desc.addressModeU ?? "clamp-to-edge"}:${desc.addressModeV ?? "clamp-to-edge"}:${desc.addressModeW ?? "clamp-to-edge"}:${desc.maxAnisotropy ?? 1}`;
+  }
+  function getOrCreateSampler(engine, desc = {}) {
+    const device = engine._device;
+    if (!_samplerCache) {
+      _samplerCache = /* @__PURE__ */ new WeakMap();
+    }
+    let dc = _samplerCache.get(device);
+    if (!dc) {
+      dc = /* @__PURE__ */ new Map();
+      _samplerCache.set(device, dc);
+    }
+    const key = samplerKey(desc);
+    let s = dc.get(key);
+    if (!s) {
+      s = device.createSampler(desc);
+      dc.set(key, s);
+    }
+    return s;
+  }
+  function clearSamplerCache(engine) {
+    const device = engine._device;
+    _samplerCache?.delete(device);
+  }
+  var _texRefs, _samplerCache;
+  var init_gpu_pool = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-pool.ts"() {
+      "use strict";
+      _texRefs = null;
+      _samplerCache = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/samplers.ts
+  function getBilinearSampler(engine) {
+    return getOrCreateSampler(engine, _bilinearDesc);
+  }
+  var _bilinearDesc;
+  var init_samplers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/samplers.ts"() {
+      "use strict";
+      init_gpu_pool();
+      _bilinearDesc = { magFilter: "linear", minFilter: "linear" };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/generate-mipmaps.ts
+  var generate_mipmaps_exports = {};
+  __export(generate_mipmaps_exports, {
+    generateMipmaps: () => generateMipmaps,
+    recordMipmaps: () => recordMipmaps
+  });
+  function clearCache() {
+    pipelineCache?.clear();
+    pipelineCache = null;
+    shaderModule = null;
+    linearSampler = null;
+    bindGroupLayout = null;
+    cachedDevice = null;
+  }
+  function ensureResources(engine) {
+    const device = engine._device;
+    if (device !== cachedDevice) {
+      clearCache();
+      cachedDevice = device;
+    }
+    shaderModule ?? (shaderModule = device.createShaderModule({ code: BLIT_SHADER }));
+    linearSampler ?? (linearSampler = getBilinearSampler(engine));
+    bindGroupLayout ?? (bindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: SS.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: SS.FRAGMENT, sampler: {} }
+      ]
+    }));
+  }
+  function getPipeline(engine, format) {
+    const device = engine._device;
+    ensureResources(engine);
+    pipelineCache ?? (pipelineCache = /* @__PURE__ */ new Map());
+    let pipeline = pipelineCache.get(format);
+    if (!pipeline) {
+      pipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+        vertex: { module: shaderModule, entryPoint: "vs" },
+        fragment: { module: shaderModule, entryPoint: "fs", targets: [{ format }] },
+        primitive: { topology: "triangle-list" }
+      });
+      pipelineCache.set(format, pipeline);
+    }
+    return pipeline;
+  }
+  function generateMipmaps(engine, texture, face) {
+    const device = engine._device;
+    const encoder = device.createCommandEncoder();
+    recordMipmaps(engine, texture, encoder, face);
+    device.queue.submit([encoder.finish()]);
+  }
+  function recordMipmaps(engine, texture, encoder, face) {
+    if (texture.mipLevelCount <= 1) {
+      return;
+    }
+    const device = engine._device;
+    const pipeline = getPipeline(engine, texture.format);
+    const vp = face != null ? { dimension: "2d", baseArrayLayer: face, arrayLayerCount: 1 } : {};
+    for (let mip = 1; mip < texture.mipLevelCount; mip++) {
+      const srcView = texture.createView({ baseMipLevel: mip - 1, mipLevelCount: 1, ...vp });
+      const dstView = texture.createView({ baseMipLevel: mip, mipLevelCount: 1, ...vp });
+      const bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+          { binding: 0, resource: srcView },
+          { binding: 1, resource: linearSampler }
+        ]
+      });
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{ view: dstView, loadOp: "clear", storeOp: "store", clearValue: { r: 0, g: 0, b: 0, a: 0 } }]
+      });
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(3);
+      pass.end();
+    }
+  }
+  var BLIT_SHADER, pipelineCache, shaderModule, linearSampler, bindGroupLayout, cachedDevice;
+  var init_generate_mipmaps = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/generate-mipmaps.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_samplers();
+      BLIT_SHADER = `@group(0)@binding(0)var t:texture_2d<f32>;@group(0)@binding(1)var s:sampler;
+struct V{@builtin(position)p:vec4f,@location(0)u:vec2f};
+@vertex fn vs(@builtin(vertex_index)i:u32)->V{let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3))[i];return V(vec4f(p,0,1),p*vec2f(.5,-.5)+.5);}
+@fragment fn fs(v:V)->@location(0)vec4f{return textureSample(t,s,v.u);}`;
+      pipelineCache = null;
+      shaderModule = null;
+      linearSampler = null;
+      bindGroupLayout = null;
+      cachedDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-invert.ts
+  function mat4Invert(input) {
+    const m = input;
+    const a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3];
+    const a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7];
+    const a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11];
+    const a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15];
+    const b00 = a00 * a11 - a01 * a10;
+    const b01 = a00 * a12 - a02 * a10;
+    const b02 = a00 * a13 - a03 * a10;
+    const b03 = a01 * a12 - a02 * a11;
+    const b04 = a01 * a13 - a03 * a11;
+    const b05 = a02 * a13 - a03 * a12;
+    const b06 = a20 * a31 - a21 * a30;
+    const b07 = a20 * a32 - a22 * a30;
+    const b08 = a20 * a33 - a23 * a30;
+    const b09 = a21 * a32 - a22 * a31;
+    const b10 = a21 * a33 - a23 * a31;
+    const b11 = a22 * a33 - a23 * a32;
+    let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    if (Math.abs(det) < 1e-10) {
+      return null;
+    }
+    det = 1 / det;
+    const out = new F32(16);
+    out[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+    out[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+    out[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+    out[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+    out[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+    out[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+    out[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+    out[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+    out[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+    out[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+    out[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+    out[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+    out[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
+    out[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+    out[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+    out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+    return out;
+  }
+  var init_mat4_invert = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-invert.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/light-base.ts
+  function createLightBase(getLocalMatrix) {
+    const wm = createWorldMatrixState(getLocalMatrix);
+    const lvs = {
+      _lightVersion: 0,
+      bump() {
+        lvs._lightVersion++;
+      }
+    };
+    const onDirty = () => {
+      wm.markLocalDirty();
+      lvs._lightVersion++;
+    };
+    return { wm, onDirty, lvs };
+  }
+  function applyWorldMatrixAccessors(target, wm, lvs) {
+    Object.defineProperties(target, {
+      parent: {
+        get() {
+          return wm.parent;
+        },
+        set(v) {
+          wm.parent = v;
+        },
+        enumerable: true,
+        configurable: true
+      },
+      worldMatrix: {
+        get() {
+          return wm.getWorldMatrix();
+        },
+        enumerable: true,
+        configurable: true
+      },
+      worldMatrixVersion: {
+        get() {
+          return wm.getWorldMatrixVersion();
+        },
+        enumerable: true,
+        configurable: true
+      }
+    });
+    if (lvs) {
+      Object.defineProperty(target, "_lightVersion", {
+        get() {
+          return lvs._lightVersion;
+        },
+        enumerable: false,
+        configurable: true
+      });
+    }
+    attachWorldMatrixState(target, wm);
+    return target;
+  }
+  var init_light_base = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/light-base.ts"() {
+      "use strict";
+      init_world_matrix_state();
+      init_observable_vec3();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/light-matrix.ts
+  function localMatrixFromDirection(dx, dy, dz, px = 0, py = 0, pz = 0, out) {
+    const flen = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const fx = dx / flen, fy = dy / flen, fz = dz / flen;
+    let rx = -fz, rz = fx;
+    const ry = 0;
+    const rlen = Math.sqrt(rx * rx + ry * ry + rz * rz) || 1;
+    rx /= rlen;
+    rz /= rlen;
+    const ux = fy * rz - fz * ry, uy = fz * rx - fx * rz, uz = fx * ry - fy * rx;
+    const out4 = out ?? new F32(16);
+    const m = out4;
+    m[0] = rx;
+    m[1] = ry;
+    m[2] = rz;
+    m[3] = 0;
+    m[4] = ux;
+    m[5] = uy;
+    m[6] = uz;
+    m[7] = 0;
+    m[8] = fx;
+    m[9] = fy;
+    m[10] = fz;
+    m[11] = 0;
+    m[12] = px;
+    m[13] = py;
+    m[14] = pz;
+    m[15] = 1;
+    return out4;
+  }
+  var init_light_matrix = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/light-matrix.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose-into.ts
+  function mat4ComposeInto(dst, off, tx, ty, tz, qx, qy, qz, qw, sx, sy, sz) {
+    const xx = qx * qx, yy = qy * qy, zz = qz * qz;
+    const xy = qx * qy, xz = qx * qz, yz = qy * qz;
+    const wx = qw * qx, wy = qw * qy, wz = qw * qz;
+    dst[off] = (1 - 2 * (yy + zz)) * sx;
+    dst[off + 1] = 2 * (xy + wz) * sx;
+    dst[off + 2] = 2 * (xz - wy) * sx;
+    dst[off + 3] = 0;
+    dst[off + 4] = 2 * (xy - wz) * sy;
+    dst[off + 5] = (1 - 2 * (xx + zz)) * sy;
+    dst[off + 6] = 2 * (yz + wx) * sy;
+    dst[off + 7] = 0;
+    dst[off + 8] = 2 * (xz + wy) * sz;
+    dst[off + 9] = 2 * (yz - wx) * sz;
+    dst[off + 10] = (1 - 2 * (xx + yy)) * sz;
+    dst[off + 11] = 0;
+    dst[off + 12] = tx;
+    dst[off + 13] = ty;
+    dst[off + 14] = tz;
+    dst[off + 15] = 1;
+  }
+  var init_mat4_compose_into = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose-into.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose.ts
+  function mat4Compose(tx, ty, tz, qx, qy, qz, qw, sx, sy, sz) {
+    const out = new F32(16);
+    mat4ComposeInto(out, 0, tx, ty, tz, qx, qy, qz, qw, sx, sy, sz);
+    return out;
+  }
+  var init_mat4_compose = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_mat4_compose_into();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/observable-quat.ts
+  var ObservableQuat;
+  var init_observable_quat = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/observable-quat.ts"() {
+      "use strict";
+      ObservableQuat = class {
+        constructor(x, y, z, w, onDirty) {
+          __publicField(this, "_x");
+          __publicField(this, "_y");
+          __publicField(this, "_z");
+          __publicField(this, "_w");
+          __publicField(this, "_onDirty");
+          /** Bumped on every value change. Lets derived caches (e.g. the Euler proxy) detect
+           *  external quaternion writes and re-sync only when needed. */
+          __publicField(this, "_version", 0);
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._w = w;
+          this._onDirty = onDirty;
+        }
+        /** Monotonic change counter — incremented whenever any component changes. */
+        get version() {
+          return this._version;
+        }
+        get x() {
+          return this._x;
+        }
+        set x(v) {
+          if (this._x !== v) {
+            this._x = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        get y() {
+          return this._y;
+        }
+        set y(v) {
+          if (this._y !== v) {
+            this._y = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        get z() {
+          return this._z;
+        }
+        set z(v) {
+          if (this._z !== v) {
+            this._z = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        get w() {
+          return this._w;
+        }
+        set w(v) {
+          if (this._w !== v) {
+            this._w = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        /** Bulk set — one dirty notification instead of four. */
+        set(x, y, z, w) {
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._w = w;
+          this._version++;
+          this._onDirty();
+        }
+        /** Copy values from another quaternion. */
+        copyFrom(q) {
+          this.set(q.x, q.y, q.z, q.w);
+        }
+        /** Copy into a Float32Array at offset. */
+        toArray(out, offset = 0) {
+          out[offset] = this._x;
+          out[offset + 1] = this._y;
+          out[offset + 2] = this._z;
+          out[offset + 3] = this._w;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-node.ts
+  function eulerToQuat(rx, ry, rz) {
+    const cx = Math.cos(rx * 0.5), sx_ = Math.sin(rx * 0.5);
+    const cy = Math.cos(ry * 0.5), sy_ = Math.sin(ry * 0.5);
+    const cz = Math.cos(rz * 0.5), sz_ = Math.sin(rz * 0.5);
+    return [sx_ * cy * cz + cx * sy_ * sz_, cx * sy_ * cz - sx_ * cy * sz_, cx * cy * sz_ + sx_ * sy_ * cz, cx * cy * cz - sx_ * sy_ * sz_];
+  }
+  function quatToEulerXYZ(qx, qy, qz, qw) {
+    const sinY = 2 * (qx * qz + qw * qy);
+    const ry = Math.asin(Math.max(-1, Math.min(1, sinY)));
+    const rx = Math.atan2(-(2 * (qy * qz - qw * qx)), 1 - 2 * (qx * qx + qy * qy));
+    const rz = Math.atan2(-(2 * (qx * qy - qw * qz)), 1 - 2 * (qy * qy + qz * qz));
+    return [rx, ry, rz];
+  }
+  function createEulerProxy(rq) {
+    let ex = 0;
+    let ey = 0;
+    let ez = 0;
+    let syncedVersion = -1;
+    const sync = () => {
+      if (rq.version !== syncedVersion) {
+        const e = quatToEulerXYZ(rq.x, rq.y, rq.z, rq.w);
+        ex = e[0];
+        ey = e[1];
+        ez = e[2];
+        syncedVersion = rq.version;
+      }
+    };
+    const apply = (x, y, z) => {
+      ex = x;
+      ey = y;
+      ez = z;
+      const [a, b, c, d] = eulerToQuat(x, y, z);
+      rq.set(a, b, c, d);
+      syncedVersion = rq.version;
+    };
+    return {
+      get x() {
+        sync();
+        return ex;
+      },
+      set x(v) {
+        sync();
+        apply(v, ey, ez);
+      },
+      get y() {
+        sync();
+        return ey;
+      },
+      set y(v) {
+        sync();
+        apply(ex, v, ez);
+      },
+      get z() {
+        sync();
+        return ez;
+      },
+      set z(v) {
+        sync();
+        apply(ex, ey, v);
+      },
+      set: apply
+    };
+  }
+  var init_scene_node = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-node.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/mesh.ts
+  function initMeshTransform(mesh, px = 0, py = 0, pz = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+    const wm = createWorldMatrixState(() => {
+      const p = mesh.position, rq2 = mesh.rotationQuaternion, s = mesh.scaling;
+      const isIdentity = p.x === 0 && p.y === 0 && p.z === 0 && rq2.x === 0 && rq2.y === 0 && rq2.z === 0 && rq2.w === 1 && s.x === 1 && s.y === 1 && s.z === 1;
+      return isIdentity ? mat4Identity() : mat4Compose(p.x, p.y, p.z, rq2.x, rq2.y, rq2.z, rq2.w, s.x, s.y, s.z);
+    });
+    const onWmDirty = () => wm.markLocalDirty();
+    const [iqx, iqy, iqz, iqw] = eulerToQuat(rx, ry, rz);
+    const rq = new ObservableQuat(iqx, iqy, iqz, iqw, onWmDirty);
+    mesh.rotationQuaternion = rq;
+    mesh.rotation = createEulerProxy(rq);
+    mesh.position = new ObservableVec3(px, py, pz, onWmDirty);
+    mesh.scaling = new ObservableVec3(sx, sy, sz, onWmDirty);
+    if (!mesh.children) {
+      mesh.children = [];
+    }
+    Object.defineProperty(mesh, "parent", {
+      get() {
+        return wm.parent;
+      },
+      set(v) {
+        wm.parent = v;
+      },
+      configurable: true,
+      enumerable: true
+    });
+    Object.defineProperty(mesh, "worldMatrix", {
+      get() {
+        return wm.getWorldMatrix();
+      },
+      configurable: true,
+      enumerable: false
+    });
+    Object.defineProperty(mesh, "worldMatrixVersion", {
+      get() {
+        return wm.getWorldMatrixVersion();
+      },
+      configurable: true,
+      enumerable: false
+    });
+    attachWorldMatrixState(mesh, wm);
+  }
+  function uploadMeshToGPU(engine, positions, normals, indices, uvs, uvs2, tangents, colors) {
+    const device = engine._device;
+    const positionBuffer = createMappedBuffer(engine, positions, BU.VERTEX);
+    const normalBuffer = createMappedBuffer(engine, normals, BU.VERTEX);
+    const indexBuffer = createMappedBuffer(engine, indices, BU.INDEX);
+    let uvBuffer;
+    if (uvs && uvs.length > 0) {
+      uvBuffer = createMappedBuffer(engine, uvs, BU.VERTEX);
+    } else {
+      uvBuffer = device.createBuffer({
+        size: positions.length / 3 * 8,
+        usage: BU.VERTEX,
+        mappedAtCreation: true
+      });
+      uvBuffer.unmap();
+    }
+    let uv2Buffer = null;
+    if (uvs2 && uvs2.length > 0) {
+      uv2Buffer = createMappedBuffer(engine, uvs2, BU.VERTEX);
+    }
+    const tangentBuffer = tangents && tangents.length > 0 ? createMappedBuffer(engine, tangents, BU.VERTEX) : null;
+    const colorBuffer = colors && colors.length > 0 ? createMappedBuffer(engine, colors, BU.VERTEX) : null;
+    return {
+      positionBuffer,
+      normalBuffer,
+      uvBuffer,
+      uv2Buffer,
+      tangentBuffer,
+      colorBuffer,
+      hasUv: !!uvs && uvs.length > 0,
+      hasUv2: !!uvs2 && uvs2.length > 0,
+      hasTangent: !!tangents && tangents.length > 0,
+      hasColor: !!colors && colors.length > 0,
+      indexBuffer,
+      indexCount: indices.length,
+      indexFormat: "uint32"
+    };
+  }
+  var init_mesh = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/mesh.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_gpu_buffers();
+      init_mat4_compose();
+      init_mat4_identity();
+      init_observable_vec3();
+      init_observable_quat();
+      init_world_matrix_state();
+      init_scene_node();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/compute-aabb.ts
+  function computeAabb(positions, world) {
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    if (world) {
+      const m0 = world[0], m1 = world[1], m2 = world[2], m4 = world[4], m5 = world[5], m6 = world[6], m8 = world[8], m9 = world[9], m10 = world[10], m12 = world[12], m13 = world[13], m14 = world[14];
+      for (let i = 0; i < positions.length; i += 3) {
+        const lx = positions[i];
+        const ly = positions[i + 1];
+        const lz = positions[i + 2];
+        const x = m0 * lx + m4 * ly + m8 * lz + m12;
+        const y = m1 * lx + m5 * ly + m9 * lz + m13;
+        const z = m2 * lx + m6 * ly + m10 * lz + m14;
+        if (x < minX) {
+          minX = x;
+        }
+        if (x > maxX) {
+          maxX = x;
+        }
+        if (y < minY) {
+          minY = y;
+        }
+        if (y > maxY) {
+          maxY = y;
+        }
+        if (z < minZ) {
+          minZ = z;
+        }
+        if (z > maxZ) {
+          maxZ = z;
+        }
+      }
+    } else {
+      for (let i = 0; i < positions.length; i += 3) {
+        const x = positions[i];
+        const y = positions[i + 1];
+        const z = positions[i + 2];
+        if (x < minX) {
+          minX = x;
+        }
+        if (x > maxX) {
+          maxX = x;
+        }
+        if (y < minY) {
+          minY = y;
+        }
+        if (y > maxY) {
+          maxY = y;
+        }
+        if (z < minZ) {
+          minZ = z;
+        }
+        if (z > maxZ) {
+          maxZ = z;
+        }
+      }
+    }
+    return [
+      [minX, minY, minZ],
+      [maxX, maxY, maxZ]
+    ];
+  }
+  var init_compute_aabb = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/compute-aabb.ts"() {
+      "use strict";
+    }
+  });
+
+  // stub-empty:module
+  var module_exports = {};
+  __export(module_exports, {
+    createRequire: () => createRequire,
+    default: () => module_default
+  });
+  var module_default, createRequire;
+  var init_module = __esm({
+    "stub-empty:module"() {
+      module_default = {};
+      createRequire = () => () => ({});
+    }
+  });
+
+  // ../../../Babylon-Lite/node_modules/.pnpm/manifold-3d@3.4.0_@gltf-transform+core@4.3.0_@gltf-transform+extensions@4.3.0_@gltf-transform_twef4a2jpcrh2yefaqofadqrqa/node_modules/manifold-3d/manifold.js
+  var manifold_exports = {};
+  __export(manifold_exports, {
+    default: () => manifold_default
+  });
+  var Module, manifold_default;
+  var init_manifold = __esm({
+    "../../../Babylon-Lite/node_modules/.pnpm/manifold-3d@3.4.0_@gltf-transform+core@4.3.0_@gltf-transform+extensions@4.3.0_@gltf-transform_twef4a2jpcrh2yefaqofadqrqa/node_modules/manifold-3d/manifold.js"() {
+      Module = /* @__PURE__ */ (() => {
+        var _scriptName = "file:///app/";
+        return async function(moduleArg = {}) {
+          var moduleRtn;
+          var Module2 = moduleArg;
+          var readyPromiseResolve, readyPromiseReject;
+          var readyPromise = new Promise((resolve, reject) => {
+            readyPromiseResolve = resolve;
+            readyPromiseReject = reject;
+          });
+          var ENVIRONMENT_IS_WEB = typeof window == "object";
+          var ENVIRONMENT_IS_WORKER = typeof WorkerGlobalScope != "undefined";
+          var ENVIRONMENT_IS_NODE = typeof process == "object" && typeof process.versions == "object" && typeof process.versions.node == "string" && process.type != "renderer";
+          if (ENVIRONMENT_IS_NODE) {
+            const { createRequire: createRequire2 } = await Promise.resolve().then(() => (init_module(), module_exports));
+            var require2 = createRequire2("file:///app/");
+          }
+          var _ManifoldInitialized = false;
+          Module2.setup = function() {
+            if (_ManifoldInitialized) return;
+            _ManifoldInitialized = true;
+            Module2.initTBB();
+            function toVec(vec, list, f = (x) => x) {
+              if (list) {
+                for (let x of list) {
+                  vec.push_back(f(x));
+                }
+              }
+              return vec;
+            }
+            function fromVec(vec, f = (x) => x) {
+              const result = [];
+              const size = vec.size();
+              for (let i = 0; i < size; i++) result.push(f(vec.get(i)));
+              return result;
+            }
+            function vec2polygons(vec, f = (x) => x) {
+              const result = [];
+              const nPoly = vec.size();
+              for (let i = 0; i < nPoly; i++) {
+                const v = vec.get(i);
+                const nPts = v.size();
+                const poly = [];
+                for (let j = 0; j < nPts; j++) {
+                  poly.push(f(v.get(j)));
+                }
+                result.push(poly);
+              }
+              return result;
+            }
+            function polygons2vec(polygons) {
+              if (polygons[0].length < 3) {
+                polygons = [polygons];
+              }
+              return toVec(
+                new Module2.Vector2_vec2(),
+                polygons,
+                (poly) => toVec(new Module2.Vector_vec2(), poly, (p) => {
+                  if (p instanceof Array) return { x: p[0], y: p[1] };
+                  return p;
+                })
+              );
+            }
+            function disposePolygons(polygonsVec) {
+              for (let i = 0; i < polygonsVec.size(); i++)
+                polygonsVec.get(i).delete();
+              polygonsVec.delete();
+            }
+            function vararg2vec2(vec) {
+              if (vec[0] instanceof Array) return { x: vec[0][0], y: vec[0][1] };
+              if (typeof vec[0] == "number") return { x: vec[0] || 0, y: vec[1] || 0 };
+              return vec[0];
+            }
+            function vararg2vec3(vec) {
+              if (vec[0] instanceof Array)
+                return { x: vec[0][0], y: vec[0][1], z: vec[0][2] };
+              if (typeof vec[0] == "number")
+                return { x: vec[0] || 0, y: vec[1] || 0, z: vec[2] || 0 };
+              return vec[0];
+            }
+            function fillRuleToInt(fillRule) {
+              return fillRule == "EvenOdd" ? 0 : fillRule == "NonZero" ? 1 : fillRule == "Negative" ? 3 : 2;
+            }
+            function joinTypeToInt(joinType) {
+              return joinType == "Round" ? 1 : joinType == "Miter" ? 2 : 0;
+            }
+            const CrossSectionCtor = Module2.CrossSection;
+            function cross(polygons, fillRule = "Positive") {
+              if (polygons instanceof CrossSectionCtor) {
+                return polygons;
+              } else {
+                const polygonsVec = polygons2vec(polygons);
+                const cs = new CrossSectionCtor(polygonsVec, fillRuleToInt(fillRule));
+                disposePolygons(polygonsVec);
+                return cs;
+              }
+            }
+            Module2.CrossSection.prototype.translate = function(...vec) {
+              return this._Translate(vararg2vec2(vec));
+            };
+            Module2.CrossSection.prototype.scale = function(vec) {
+              if (typeof vec == "number") {
+                return this._Scale({ x: vec, y: vec });
+              }
+              return this._Scale(vararg2vec2([vec]));
+            };
+            Module2.CrossSection.prototype.mirror = function(vec) {
+              return this._Mirror(vararg2vec2([vec]));
+            };
+            Module2.CrossSection.prototype.warp = function(func) {
+              const wasmFuncPtr = addFunction(function(vec2Ptr) {
+                const x = getValue(vec2Ptr, "double");
+                const y = getValue(vec2Ptr + 8, "double");
+                const vert = [x, y];
+                func(vert);
+                setValue(vec2Ptr, vert[0], "double");
+                setValue(vec2Ptr + 8, vert[1], "double");
+              }, "vi");
+              const out2 = this._Warp(wasmFuncPtr);
+              removeFunction(wasmFuncPtr);
+              return out2;
+            };
+            Module2.CrossSection.prototype.decompose = function() {
+              const vec = this._Decompose();
+              const result = fromVec(vec);
+              vec.delete();
+              return result;
+            };
+            Module2.CrossSection.prototype.bounds = function() {
+              const result = this._Bounds();
+              return {
+                min: ["x", "y"].map((f) => result.min[f]),
+                max: ["x", "y"].map((f) => result.max[f])
+              };
+            };
+            Module2.CrossSection.prototype.offset = function(delta, joinType = "Square", miterLimit = 2, circularSegments = 0) {
+              return this._Offset(
+                delta,
+                joinTypeToInt(joinType),
+                miterLimit,
+                circularSegments
+              );
+            };
+            Module2.CrossSection.prototype.simplify = function(epsilon = 1e-6) {
+              return this._Simplify(epsilon);
+            };
+            Module2.CrossSection.prototype.extrude = function(height, nDivisions = 0, twistDegrees = 0, scaleTop = [1, 1], center = false) {
+              scaleTop = vararg2vec2([scaleTop]);
+              const man = Module2._Extrude(
+                this._ToPolygons(),
+                height,
+                nDivisions,
+                twistDegrees,
+                scaleTop
+              );
+              return center ? man.translate([0, 0, -height / 2]) : man;
+            };
+            Module2.CrossSection.prototype.revolve = function(circularSegments = 0, revolveDegrees = 360) {
+              return Module2._Revolve(
+                this._ToPolygons(),
+                circularSegments,
+                revolveDegrees
+              );
+            };
+            Module2.CrossSection.prototype.add = function(other) {
+              return this._add(cross(other));
+            };
+            Module2.CrossSection.prototype.subtract = function(other) {
+              return this._subtract(cross(other));
+            };
+            Module2.CrossSection.prototype.intersect = function(other) {
+              return this._intersect(cross(other));
+            };
+            Module2.CrossSection.prototype.toPolygons = function() {
+              const vec = this._ToPolygons();
+              const result = vec2polygons(vec, (v) => [v.x, v.y]);
+              vec.delete();
+              return result;
+            };
+            Module2.Manifold.prototype.smoothOut = function(minSharpAngle = 60, minSmoothness = 0) {
+              return this._SmoothOut(minSharpAngle, minSmoothness);
+            };
+            Module2.Manifold.prototype.warp = function(func) {
+              const wasmFuncPtr = addFunction(function(vec3Ptr) {
+                const x = getValue(vec3Ptr, "double");
+                const y = getValue(vec3Ptr + 8, "double");
+                const z = getValue(vec3Ptr + 16, "double");
+                const vert = [x, y, z];
+                func(vert);
+                setValue(vec3Ptr, vert[0], "double");
+                setValue(vec3Ptr + 8, vert[1], "double");
+                setValue(vec3Ptr + 16, vert[2], "double");
+              }, "vi");
+              const out2 = this._Warp(wasmFuncPtr);
+              removeFunction(wasmFuncPtr);
+              const status = out2.status();
+              if (status.value !== 0) {
+                throw new Module2.ManifoldError(status.value);
+              }
+              return out2;
+            };
+            Module2.Manifold.prototype.calculateNormals = function(normalIdx, minSharpAngle = 60) {
+              return this._CalculateNormals(normalIdx, minSharpAngle);
+            };
+            Module2.Manifold.prototype.setProperties = function(numProp, func) {
+              const oldNumProp = this.numProp();
+              const wasmFuncPtr = addFunction(function(newPtr, vec3Ptr, oldPtr) {
+                const newProp = [];
+                for (let i = 0; i < numProp; ++i) {
+                  newProp[i] = getValue(newPtr + 8 * i, "double");
+                }
+                const pos = [];
+                for (let i = 0; i < 3; ++i) {
+                  pos[i] = getValue(vec3Ptr + 8 * i, "double");
+                }
+                const oldProp = [];
+                for (let i = 0; i < oldNumProp; ++i) {
+                  oldProp[i] = getValue(oldPtr + 8 * i, "double");
+                }
+                func(newProp, pos, oldProp);
+                for (let i = 0; i < numProp; ++i) {
+                  setValue(newPtr + 8 * i, newProp[i], "double");
+                }
+              }, "viii");
+              const out2 = this._SetProperties(numProp, wasmFuncPtr);
+              removeFunction(wasmFuncPtr);
+              return out2;
+            };
+            Module2.Manifold.prototype.translate = function(...vec) {
+              return this._Translate(vararg2vec3(vec));
+            };
+            Module2.Manifold.prototype.rotate = function(xOrVec, y, z) {
+              if (Array.isArray(xOrVec)) {
+                return this._Rotate(...xOrVec);
+              } else {
+                return this._Rotate(xOrVec, y || 0, z || 0);
+              }
+            };
+            Module2.Manifold.prototype.scale = function(vec) {
+              if (typeof vec == "number") {
+                return this._Scale({ x: vec, y: vec, z: vec });
+              }
+              return this._Scale(vararg2vec3([vec]));
+            };
+            Module2.Manifold.prototype.mirror = function(vec) {
+              return this._Mirror(vararg2vec3([vec]));
+            };
+            Module2.Manifold.prototype.trimByPlane = function(normal, offset = 0) {
+              return this._TrimByPlane(vararg2vec3([normal]), offset);
+            };
+            Module2.Manifold.prototype.slice = function(height = 0) {
+              const polygonsVec = this._Slice(height);
+              const result = new CrossSectionCtor(polygonsVec, fillRuleToInt("Positive"));
+              disposePolygons(polygonsVec);
+              return result;
+            };
+            Module2.Manifold.prototype.project = function() {
+              const polygonsVec = this._Project();
+              const result = new CrossSectionCtor(polygonsVec, fillRuleToInt("Positive"));
+              disposePolygons(polygonsVec);
+              return result;
+            };
+            Module2.Manifold.prototype.split = function(manifold) {
+              const vec = this._Split(manifold);
+              const result = fromVec(vec);
+              vec.delete();
+              return result;
+            };
+            Module2.Manifold.prototype.splitByPlane = function(normal, offset = 0) {
+              const vec = this._SplitByPlane(vararg2vec3([normal]), offset);
+              const result = fromVec(vec);
+              vec.delete();
+              return result;
+            };
+            Module2.Manifold.prototype.decompose = function() {
+              const vec = this._Decompose();
+              const result = fromVec(vec);
+              vec.delete();
+              return result;
+            };
+            Module2.Manifold.prototype.boundingBox = function() {
+              const result = this._boundingBox();
+              return {
+                min: ["x", "y", "z"].map((f) => result.min[f]),
+                max: ["x", "y", "z"].map((f) => result.max[f])
+              };
+            };
+            class Mesh {
+              constructor({
+                numProp = 3,
+                triVerts = new Uint32Array(),
+                vertProperties = new Float32Array(),
+                mergeFromVert,
+                mergeToVert,
+                runIndex,
+                runOriginalID,
+                faceID,
+                halfedgeTangent,
+                runTransform
+              } = {}) {
+                this.numProp = numProp;
+                this.triVerts = triVerts;
+                this.vertProperties = vertProperties;
+                this.mergeFromVert = mergeFromVert;
+                this.mergeToVert = mergeToVert;
+                this.runIndex = runIndex;
+                this.runOriginalID = runOriginalID;
+                this.faceID = faceID;
+                this.halfedgeTangent = halfedgeTangent;
+                this.runTransform = runTransform;
+              }
+              get numTri() {
+                return this.triVerts.length / 3;
+              }
+              get numVert() {
+                return this.vertProperties.length / this.numProp;
+              }
+              get numRun() {
+                return this.runOriginalID.length;
+              }
+              merge() {
+                const { changed, mesh } = Module2._Merge(this);
+                Object.assign(this, { ...mesh });
+                return changed;
+              }
+              verts(tri) {
+                return this.triVerts.subarray(3 * tri, 3 * (tri + 1));
+              }
+              position(vert) {
+                return this.vertProperties.subarray(
+                  this.numProp * vert,
+                  this.numProp * vert + 3
+                );
+              }
+              extras(vert) {
+                return this.vertProperties.subarray(
+                  this.numProp * vert + 3,
+                  this.numProp * (vert + 1)
+                );
+              }
+              tangent(halfedge) {
+                return this.halfedgeTangent.subarray(4 * halfedge, 4 * (halfedge + 1));
+              }
+              transform(run2) {
+                const mat4 = new Array(16);
+                for (const col of [0, 1, 2, 3]) {
+                  for (const row of [0, 1, 2]) {
+                    mat4[4 * col + row] = this.runTransform[12 * run2 + 3 * col + row];
+                  }
+                }
+                mat4[15] = 1;
+                return mat4;
+              }
+            }
+            Module2.Mesh = Mesh;
+            Module2.Manifold.prototype.getMesh = function(normalIdx = -1) {
+              return new Mesh(this._GetMeshJS(normalIdx));
+            };
+            Module2.ManifoldError = function ManifoldError(code, ...args) {
+              let message = "Unknown error";
+              switch (code) {
+                case Module2.status.NonFiniteVertex.value:
+                  message = "Non-finite vertex";
+                  break;
+                case Module2.status.NotManifold.value:
+                  message = "Not manifold";
+                  break;
+                case Module2.status.VertexOutOfBounds.value:
+                  message = "Vertex index out of bounds";
+                  break;
+                case Module2.status.PropertiesWrongLength.value:
+                  message = "Properties have wrong length";
+                  break;
+                case Module2.status.MissingPositionProperties.value:
+                  message = "Less than three properties";
+                  break;
+                case Module2.status.MergeVectorsDifferentLengths.value:
+                  message = "Merge vectors have different lengths";
+                  break;
+                case Module2.status.MergeIndexOutOfBounds.value:
+                  message = "Merge index out of bounds";
+                  break;
+                case Module2.status.TransformWrongLength.value:
+                  message = "Transform vector has wrong length";
+                  break;
+                case Module2.status.RunIndexWrongLength.value:
+                  message = "Run index vector has wrong length";
+                  break;
+                case Module2.status.FaceIDWrongLength.value:
+                  message = "Face ID vector has wrong length";
+                case Module2.status.InvalidConstruction.value:
+                  message = "Manifold constructed with invalid parameters";
+              }
+              const base = Error.apply(this, [message, ...args]);
+              base.name = this.name = "ManifoldError";
+              this.message = base.message;
+              this.stack = base.stack;
+              this.code = code;
+            };
+            Module2.ManifoldError.prototype = Object.create(Error.prototype, {
+              constructor: { value: Module2.ManifoldError, writable: true, configurable: true }
+            });
+            Module2.CrossSection = function(polygons, fillRule = "Positive") {
+              const polygonsVec = polygons2vec(polygons);
+              const cs = new CrossSectionCtor(polygonsVec, fillRuleToInt(fillRule));
+              disposePolygons(polygonsVec);
+              return cs;
+            };
+            Module2.CrossSection.ofPolygons = function(polygons, fillRule = "Positive") {
+              return new Module2.CrossSection(polygons, fillRule);
+            };
+            Module2.CrossSection.square = function(...args) {
+              let size = void 0;
+              if (args.length == 0)
+                size = { x: 1, y: 1 };
+              else if (typeof args[0] == "number")
+                size = { x: args[0], y: args[0] };
+              else
+                size = vararg2vec2(args);
+              const center = args[1] || false;
+              return Module2._Square(size, center);
+            };
+            Module2.CrossSection.circle = function(radius, circularSegments = 0) {
+              return Module2._Circle(radius, circularSegments);
+            };
+            function crossSectionBatchbool(name) {
+              return function(...args) {
+                if (args.length == 1) args = args[0];
+                const v = new Module2.Vector_crossSection();
+                for (const cs of args) v.push_back(cross(cs));
+                const result = Module2["_crossSection" + name](v);
+                v.delete();
+                return result;
+              };
+            }
+            Module2.CrossSection.compose = crossSectionBatchbool("Compose");
+            Module2.CrossSection.union = crossSectionBatchbool("UnionN");
+            Module2.CrossSection.difference = crossSectionBatchbool("DifferenceN");
+            Module2.CrossSection.intersection = crossSectionBatchbool("IntersectionN");
+            function pushVec2(vec, ps) {
+              toVec(vec, ps, (p) => {
+                if (p instanceof Array) return { x: p[0], y: p[1] };
+                return p;
+              });
+            }
+            Module2.CrossSection.hull = function(...args) {
+              if (args.length == 1) args = args[0];
+              let pts = new Module2.Vector_vec2();
+              for (const cs of args) {
+                if (cs instanceof CrossSectionCtor) {
+                  Module2._crossSectionCollectVertices(pts, cs);
+                } else if (cs instanceof Array && cs.length == 2 && typeof cs[0] == "number") {
+                  pts.push_back({ x: cs[0], y: cs[1] });
+                } else if (cs.x) {
+                  pts.push_back(cs);
+                } else {
+                  const wrap = cs[0].length == 2 && typeof cs[0][0] == "number" || cs[0].x;
+                  const polys = wrap ? [cs] : cs;
+                  for (const poly of polys) pushVec2(pts, poly);
+                }
+              }
+              const result = Module2._crossSectionHullPoints(pts);
+              pts.delete();
+              return result;
+            };
+            Module2.CrossSection.prototype = Object.create(CrossSectionCtor.prototype);
+            Object.defineProperty(
+              Module2.CrossSection,
+              Symbol.hasInstance,
+              { get: () => (t) => t instanceof CrossSectionCtor }
+            );
+            const ManifoldCtor = Module2.Manifold;
+            Module2.Manifold = function(mesh) {
+              const manifold = new ManifoldCtor(mesh);
+              const status = manifold.status();
+              if (status.value !== 0) {
+                throw new Module2.ManifoldError(status.value);
+              }
+              return manifold;
+            };
+            Module2.Manifold.ofMesh = function(mesh) {
+              return new Module2.Manifold(mesh);
+            };
+            Module2.Manifold.tetrahedron = function() {
+              return Module2._Tetrahedron();
+            };
+            Module2.Manifold.cube = function(...args) {
+              let size = void 0;
+              if (args.length == 0)
+                size = { x: 1, y: 1, z: 1 };
+              else if (typeof args[0] == "number")
+                size = { x: args[0], y: args[0], z: args[0] };
+              else
+                size = vararg2vec3(args);
+              const center = args[1] || false;
+              return Module2._Cube(size, center);
+            };
+            Module2.Manifold.cylinder = function(height, radiusLow, radiusHigh = -1, circularSegments = 0, center = false) {
+              return Module2._Cylinder(
+                height,
+                radiusLow,
+                radiusHigh,
+                circularSegments,
+                center
+              );
+            };
+            Module2.Manifold.sphere = function(radius, circularSegments = 0) {
+              return Module2._Sphere(radius, circularSegments);
+            };
+            Module2.Manifold.smooth = function(mesh, sharpenedEdges = []) {
+              const sharp = new Module2.Vector_smoothness();
+              toVec(sharp, sharpenedEdges);
+              const result = Module2._Smooth(mesh, sharp);
+              sharp.delete();
+              return result;
+            };
+            Module2.Manifold.extrude = function(polygons, height, nDivisions = 0, twistDegrees = 0, scaleTop = [1, 1], center = false) {
+              const cs = polygons instanceof CrossSectionCtor ? polygons : Module2.CrossSection(polygons, "Positive");
+              return cs.extrude(height, nDivisions, twistDegrees, scaleTop, center);
+            };
+            Module2.Manifold.revolve = function(polygons, circularSegments = 0, revolveDegrees = 360) {
+              const cs = polygons instanceof CrossSectionCtor ? polygons : Module2.CrossSection(polygons, "Positive");
+              return cs.revolve(circularSegments, revolveDegrees);
+            };
+            Module2.Manifold.reserveIDs = function(n) {
+              return Module2._ReserveIDs(n);
+            };
+            Module2.Manifold.compose = function(manifolds) {
+              const vec = new Module2.Vector_manifold();
+              toVec(vec, manifolds);
+              const result = Module2._manifoldCompose(vec);
+              vec.delete();
+              return result;
+            };
+            function manifoldBatchbool(name) {
+              return function(...args) {
+                if (args.length == 1) args = args[0];
+                const v = new Module2.Vector_manifold();
+                for (const m of args) v.push_back(m);
+                const result = Module2["_manifold" + name + "N"](v);
+                v.delete();
+                return result;
+              };
+            }
+            Module2.Manifold.union = manifoldBatchbool("Union");
+            Module2.Manifold.difference = manifoldBatchbool("Difference");
+            Module2.Manifold.intersection = manifoldBatchbool("Intersection");
+            Module2.Manifold.levelSet = function(sdf, bounds, edgeLength, level = 0, tolerance = -1) {
+              const bounds2 = {
+                min: { x: bounds.min[0], y: bounds.min[1], z: bounds.min[2] },
+                max: { x: bounds.max[0], y: bounds.max[1], z: bounds.max[2] }
+              };
+              const wasmFuncPtr = addFunction(function(vec3Ptr) {
+                const x = getValue(vec3Ptr, "double");
+                const y = getValue(vec3Ptr + 8, "double");
+                const z = getValue(vec3Ptr + 16, "double");
+                const vert = [x, y, z];
+                return sdf(vert);
+              }, "di");
+              const out2 = Module2._LevelSet(
+                wasmFuncPtr,
+                bounds2,
+                edgeLength,
+                level,
+                tolerance
+              );
+              removeFunction(wasmFuncPtr);
+              return out2;
+            };
+            function pushVec3(vec, ps) {
+              toVec(vec, ps, (p) => {
+                if (p instanceof Array) return { x: p[0], y: p[1], z: p[2] };
+                return p;
+              });
+            }
+            Module2.Manifold.hull = function(...args) {
+              if (args.length == 1) args = args[0];
+              let pts = new Module2.Vector_vec3();
+              for (const m of args) {
+                if (m instanceof ManifoldCtor) {
+                  Module2._manifoldCollectVertices(pts, m);
+                } else if (m instanceof Array && m.length == 3 && typeof m[0] == "number") {
+                  pts.push_back({ x: m[0], y: m[1], z: m[2] });
+                } else if (m.x) {
+                  pts.push_back(m);
+                } else {
+                  pushVec3(pts, m);
+                }
+              }
+              const result = Module2._manifoldHullPoints(pts);
+              pts.delete();
+              return result;
+            };
+            Module2.Manifold.prototype = Object.create(ManifoldCtor.prototype);
+            Object.defineProperty(
+              Module2.Manifold,
+              Symbol.hasInstance,
+              { get: () => (t) => t instanceof ManifoldCtor }
+            );
+            Module2.triangulate = function(polygons, epsilon = -1, allowConvex = true) {
+              const polygonsVec = polygons2vec(polygons);
+              const result = fromVec(
+                Module2._Triangulate(polygonsVec, epsilon, allowConvex),
+                (x) => [x[0], x[1], x[2]]
+              );
+              disposePolygons(polygonsVec);
+              return result;
+            };
+          };
+          var moduleOverrides = { ...Module2 };
+          var arguments_ = [];
+          var thisProgram = "./this.program";
+          var quit_ = (status, toThrow) => {
+            throw toThrow;
+          };
+          var scriptDirectory = "";
+          function locateFile(path) {
+            if (Module2["locateFile"]) {
+              return Module2["locateFile"](path, scriptDirectory);
+            }
+            return scriptDirectory + path;
+          }
+          var readAsync, readBinary;
+          if (ENVIRONMENT_IS_NODE) {
+            var fs = require2("fs");
+            var nodePath = require2("path");
+            if (!"file:///app/".startsWith("data:")) {
+              scriptDirectory = nodePath.dirname(require2("url").fileURLToPath("file:///app/")) + "/";
+            }
+            readBinary = (filename) => {
+              filename = isFileURI(filename) ? new URL(filename) : filename;
+              var ret = fs.readFileSync(filename);
+              return ret;
+            };
+            readAsync = async (filename, binary = true) => {
+              filename = isFileURI(filename) ? new URL(filename) : filename;
+              var ret = fs.readFileSync(filename, binary ? void 0 : "utf8");
+              return ret;
+            };
+            if (!Module2["thisProgram"] && process.argv.length > 1) {
+              thisProgram = process.argv[1].replace(/\\/g, "/");
+            }
+            arguments_ = process.argv.slice(2);
+            quit_ = (status, toThrow) => {
+              process.exitCode = status;
+              throw toThrow;
+            };
+          } else if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
+            if (ENVIRONMENT_IS_WORKER) {
+              scriptDirectory = self.location.href;
+            } else if (typeof document != "undefined" && document.currentScript) {
+              scriptDirectory = document.currentScript.src;
+            }
+            if (_scriptName) {
+              scriptDirectory = _scriptName;
+            }
+            if (scriptDirectory.startsWith("blob:")) {
+              scriptDirectory = "";
+            } else {
+              scriptDirectory = scriptDirectory.slice(
+                0,
+                scriptDirectory.replace(/[?#].*/, "").lastIndexOf("/") + 1
+              );
+            }
+            {
+              if (ENVIRONMENT_IS_WORKER) {
+                readBinary = (url) => {
+                  var xhr = new XMLHttpRequest();
+                  xhr.open("GET", url, false);
+                  xhr.responseType = "arraybuffer";
+                  xhr.send(null);
+                  return new Uint8Array(xhr.response);
+                };
+              }
+              readAsync = async (url) => {
+                if (isFileURI(url)) {
+                  return new Promise((resolve, reject) => {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open("GET", url, true);
+                    xhr.responseType = "arraybuffer";
+                    xhr.onload = () => {
+                      if (xhr.status == 200 || xhr.status == 0 && xhr.response) {
+                        resolve(xhr.response);
+                        return;
+                      }
+                      reject(xhr.status);
+                    };
+                    xhr.onerror = reject;
+                    xhr.send(null);
+                  });
+                }
+                var response = await fetch(url, { credentials: "same-origin" });
+                if (response.ok) {
+                  return response.arrayBuffer();
+                }
+                throw new Error(response.status + " : " + response.url);
+              };
+            }
+          } else {
+          }
+          var out = Module2["print"] || console.log.bind(console);
+          var err = Module2["printErr"] || console.error.bind(console);
+          Object.assign(Module2, moduleOverrides);
+          moduleOverrides = null;
+          if (Module2["arguments"]) arguments_ = Module2["arguments"];
+          if (Module2["thisProgram"]) thisProgram = Module2["thisProgram"];
+          var wasmBinary = Module2["wasmBinary"];
+          var wasmMemory;
+          var ABORT = false;
+          var HEAP8, HEAPU8, HEAP16, HEAPU16, HEAP32, HEAPU32, HEAPF32, HEAP64, HEAPU64, HEAPF64;
+          var runtimeInitialized = false;
+          var isFileURI = (filename) => filename.startsWith("file://");
+          function updateMemoryViews() {
+            var b = wasmMemory.buffer;
+            Module2["HEAP8"] = HEAP8 = new Int8Array(b);
+            Module2["HEAP16"] = HEAP16 = new Int16Array(b);
+            Module2["HEAPU8"] = HEAPU8 = new Uint8Array(b);
+            Module2["HEAPU16"] = HEAPU16 = new Uint16Array(b);
+            Module2["HEAP32"] = HEAP32 = new Int32Array(b);
+            Module2["HEAPU32"] = HEAPU32 = new Uint32Array(b);
+            Module2["HEAPF32"] = HEAPF32 = new Float32Array(b);
+            Module2["HEAPF64"] = HEAPF64 = new Float64Array(b);
+            Module2["HEAP64"] = HEAP64 = new BigInt64Array(b);
+            Module2["HEAPU64"] = HEAPU64 = new BigUint64Array(b);
+          }
+          function preRun() {
+            if (Module2["preRun"]) {
+              if (typeof Module2["preRun"] == "function")
+                Module2["preRun"] = [Module2["preRun"]];
+              while (Module2["preRun"].length) {
+                addOnPreRun(Module2["preRun"].shift());
+              }
+            }
+            callRuntimeCallbacks(onPreRuns);
+          }
+          function initRuntime() {
+            runtimeInitialized = true;
+            wasmExports["J"]();
+          }
+          function postRun() {
+            if (Module2["postRun"]) {
+              if (typeof Module2["postRun"] == "function")
+                Module2["postRun"] = [Module2["postRun"]];
+              while (Module2["postRun"].length) {
+                addOnPostRun(Module2["postRun"].shift());
+              }
+            }
+            callRuntimeCallbacks(onPostRuns);
+          }
+          var runDependencies = 0;
+          var dependenciesFulfilled = null;
+          function addRunDependency(id) {
+            runDependencies++;
+            Module2["monitorRunDependencies"]?.(runDependencies);
+          }
+          function removeRunDependency(id) {
+            runDependencies--;
+            Module2["monitorRunDependencies"]?.(runDependencies);
+            if (runDependencies == 0) {
+              if (dependenciesFulfilled) {
+                var callback = dependenciesFulfilled;
+                dependenciesFulfilled = null;
+                callback();
+              }
+            }
+          }
+          function abort(what) {
+            Module2["onAbort"]?.(what);
+            what = "Aborted(" + what + ")";
+            err(what);
+            ABORT = true;
+            what += ". Build with -sASSERTIONS for more info.";
+            var e = new WebAssembly.RuntimeError(what);
+            readyPromiseReject(e);
+            throw e;
+          }
+          var wasmBinaryFile;
+          function findWasmBinary() {
+            if (Module2["locateFile"]) {
+              return locateFile("manifold.wasm");
+            }
+            return new URL("manifold.wasm", "file:///app/").href;
+          }
+          function getBinarySync(file) {
+            if (file == wasmBinaryFile && wasmBinary) {
+              return new Uint8Array(wasmBinary);
+            }
+            if (readBinary) {
+              return readBinary(file);
+            }
+            throw "both async and sync fetching of the wasm failed";
+          }
+          async function getWasmBinary(binaryFile) {
+            if (!wasmBinary) {
+              try {
+                var response = await readAsync(binaryFile);
+                return new Uint8Array(response);
+              } catch {
+              }
+            }
+            return getBinarySync(binaryFile);
+          }
+          async function instantiateArrayBuffer(binaryFile, imports) {
+            try {
+              var binary = await getWasmBinary(binaryFile);
+              var instance = await WebAssembly.instantiate(binary, imports);
+              return instance;
+            } catch (reason) {
+              err(`failed to asynchronously prepare wasm: ${reason}`);
+              abort(reason);
+            }
+          }
+          async function instantiateAsync(binary, binaryFile, imports) {
+            if (!binary && typeof WebAssembly.instantiateStreaming == "function" && !isFileURI(binaryFile) && !ENVIRONMENT_IS_NODE) {
+              try {
+                var response = fetch(binaryFile, { credentials: "same-origin" });
+                var instantiationResult = await WebAssembly.instantiateStreaming(response, imports);
+                return instantiationResult;
+              } catch (reason) {
+                err(`wasm streaming compile failed: ${reason}`);
+                err("falling back to ArrayBuffer instantiation");
+              }
+            }
+            return instantiateArrayBuffer(binaryFile, imports);
+          }
+          function getWasmImports() {
+            return {
+              a: wasmImports
+            };
+          }
+          async function createWasm() {
+            function receiveInstance(instance, module) {
+              wasmExports = instance.exports;
+              wasmExports = applySignatureConversions(wasmExports);
+              wasmMemory = wasmExports["I"];
+              updateMemoryViews();
+              wasmTable = wasmExports["L"];
+              removeRunDependency("wasm-instantiate");
+              return wasmExports;
+            }
+            addRunDependency("wasm-instantiate");
+            function receiveInstantiationResult(result2) {
+              return receiveInstance(result2["instance"]);
+            }
+            var info = getWasmImports();
+            if (Module2["instantiateWasm"]) {
+              return new Promise(
+                (resolve, reject) => {
+                  Module2["instantiateWasm"](info, (mod, inst) => {
+                    receiveInstance(mod, inst);
+                    resolve(mod.exports);
+                  });
+                }
+              );
+            }
+            wasmBinaryFile ?? (wasmBinaryFile = findWasmBinary());
+            try {
+              var result = await instantiateAsync(wasmBinary, wasmBinaryFile, info);
+              var exports = receiveInstantiationResult(result);
+              return exports;
+            } catch (e) {
+              readyPromiseReject(e);
+              return Promise.reject(e);
+            }
+          }
+          class ExitStatus {
+            constructor(status) {
+              __publicField(this, "name", "ExitStatus");
+              this.message = `Program terminated with exit(${status})`;
+              this.status = status;
+            }
+          }
+          var callRuntimeCallbacks = (callbacks) => {
+            while (callbacks.length > 0) {
+              callbacks.shift()(Module2);
+            }
+          };
+          var onPostRuns = [];
+          var addOnPostRun = (cb) => onPostRuns.unshift(cb);
+          var onPreRuns = [];
+          var addOnPreRun = (cb) => onPreRuns.unshift(cb);
+          function getValue(ptr, type = "i8") {
+            if (type.endsWith("*")) type = "*";
+            switch (type) {
+              case "i1":
+                return HEAP8[ptr >>> 0];
+              case "i8":
+                return HEAP8[ptr >>> 0];
+              case "i16":
+                return HEAP16[ptr >>> 1 >>> 0];
+              case "i32":
+                return HEAP32[ptr >>> 2 >>> 0];
+              case "i64":
+                return HEAP64[ptr >>> 3];
+              case "float":
+                return HEAPF32[ptr >>> 2 >>> 0];
+              case "double":
+                return HEAPF64[ptr >>> 3 >>> 0];
+              case "*":
+                return HEAPU32[ptr >>> 2 >>> 0];
+              default:
+                abort(`invalid type for getValue: ${type}`);
+            }
+          }
+          var noExitRuntime = Module2["noExitRuntime"] || true;
+          function setValue(ptr, value, type = "i8") {
+            if (type.endsWith("*")) type = "*";
+            switch (type) {
+              case "i1":
+                HEAP8[ptr >>> 0] = value;
+                break;
+              case "i8":
+                HEAP8[ptr >>> 0] = value;
+                break;
+              case "i16":
+                HEAP16[ptr >>> 1 >>> 0] = value;
+                break;
+              case "i32":
+                HEAP32[ptr >>> 2 >>> 0] = value;
+                break;
+              case "i64":
+                HEAP64[ptr >>> 3] = BigInt(value);
+                break;
+              case "float":
+                HEAPF32[ptr >>> 2 >>> 0] = value;
+                break;
+              case "double":
+                HEAPF64[ptr >>> 3 >>> 0] = value;
+                break;
+              case "*":
+                HEAPU32[ptr >>> 2 >>> 0] = value;
+                break;
+              default:
+                abort(`invalid type for setValue: ${type}`);
+            }
+          }
+          class ExceptionInfo {
+            constructor(excPtr) {
+              this.excPtr = excPtr;
+              this.ptr = excPtr - 24;
+            }
+            set_type(type) {
+              HEAPU32[this.ptr + 4 >>> 2 >>> 0] = type;
+            }
+            get_type() {
+              return HEAPU32[this.ptr + 4 >>> 2 >>> 0];
+            }
+            set_destructor(destructor) {
+              HEAPU32[this.ptr + 8 >>> 2 >>> 0] = destructor;
+            }
+            get_destructor() {
+              return HEAPU32[this.ptr + 8 >>> 2 >>> 0];
+            }
+            set_caught(caught) {
+              caught = caught ? 1 : 0;
+              HEAP8[this.ptr + 12 >>> 0] = caught;
+            }
+            get_caught() {
+              return HEAP8[this.ptr + 12 >>> 0] != 0;
+            }
+            set_rethrown(rethrown) {
+              rethrown = rethrown ? 1 : 0;
+              HEAP8[this.ptr + 13 >>> 0] = rethrown;
+            }
+            get_rethrown() {
+              return HEAP8[this.ptr + 13 >>> 0] != 0;
+            }
+            init(type, destructor) {
+              this.set_adjusted_ptr(0);
+              this.set_type(type);
+              this.set_destructor(destructor);
+            }
+            set_adjusted_ptr(adjustedPtr) {
+              HEAPU32[this.ptr + 16 >>> 2 >>> 0] = adjustedPtr;
+            }
+            get_adjusted_ptr() {
+              return HEAPU32[this.ptr + 16 >>> 2 >>> 0];
+            }
+          }
+          var exceptionLast = 0;
+          var uncaughtExceptionCount = 0;
+          function ___cxa_throw(ptr, type, destructor) {
+            ptr >>>= 0;
+            type >>>= 0;
+            destructor >>>= 0;
+            var info = new ExceptionInfo(ptr);
+            info.init(type, destructor);
+            exceptionLast = ptr;
+            uncaughtExceptionCount++;
+            throw exceptionLast;
+          }
+          var __abort_js = () => abort("");
+          var structRegistrations = {};
+          var runDestructors = (destructors) => {
+            while (destructors.length) {
+              var ptr = destructors.pop();
+              var del = destructors.pop();
+              del(ptr);
+            }
+          };
+          function readPointer(pointer) {
+            return this["fromWireType"](HEAPU32[pointer >>> 2 >>> 0]);
+          }
+          var awaitingDependencies = {};
+          var registeredTypes = {};
+          var typeDependencies = {};
+          var InternalError = Module2["InternalError"] = class InternalError extends Error {
+            constructor(message) {
+              super(message);
+              this.name = "InternalError";
+            }
+          };
+          var throwInternalError = (message) => {
+            throw new InternalError(message);
+          };
+          var whenDependentTypesAreResolved = (myTypes, dependentTypes, getTypeConverters) => {
+            myTypes.forEach((type) => typeDependencies[type] = dependentTypes);
+            function onComplete(typeConverters2) {
+              var myTypeConverters = getTypeConverters(typeConverters2);
+              if (myTypeConverters.length !== myTypes.length) {
+                throwInternalError("Mismatched type converter count");
+              }
+              for (var i = 0; i < myTypes.length; ++i) {
+                registerType(myTypes[i], myTypeConverters[i]);
+              }
+            }
+            var typeConverters = new Array(dependentTypes.length);
+            var unregisteredTypes = [];
+            var registered = 0;
+            dependentTypes.forEach((dt, i) => {
+              if (registeredTypes.hasOwnProperty(dt)) {
+                typeConverters[i] = registeredTypes[dt];
+              } else {
+                unregisteredTypes.push(dt);
+                if (!awaitingDependencies.hasOwnProperty(dt)) {
+                  awaitingDependencies[dt] = [];
+                }
+                awaitingDependencies[dt].push(() => {
+                  typeConverters[i] = registeredTypes[dt];
+                  ++registered;
+                  if (registered === unregisteredTypes.length) {
+                    onComplete(typeConverters);
+                  }
+                });
+              }
+            });
+            if (0 === unregisteredTypes.length) {
+              onComplete(typeConverters);
+            }
+          };
+          var __embind_finalize_value_object = function(structType) {
+            structType >>>= 0;
+            var reg = structRegistrations[structType];
+            delete structRegistrations[structType];
+            var rawConstructor = reg.rawConstructor;
+            var rawDestructor = reg.rawDestructor;
+            var fieldRecords = reg.fields;
+            var fieldTypes = fieldRecords.map((field) => field.getterReturnType).concat(fieldRecords.map((field) => field.setterArgumentType));
+            whenDependentTypesAreResolved([structType], fieldTypes, (fieldTypes2) => {
+              var fields = {};
+              fieldRecords.forEach((field, i) => {
+                var fieldName = field.fieldName;
+                var getterReturnType = fieldTypes2[i];
+                var optional = fieldTypes2[i].optional;
+                var getter = field.getter;
+                var getterContext = field.getterContext;
+                var setterArgumentType = fieldTypes2[i + fieldRecords.length];
+                var setter = field.setter;
+                var setterContext = field.setterContext;
+                fields[fieldName] = {
+                  read: (ptr) => getterReturnType["fromWireType"](getter(getterContext, ptr)),
+                  write: (ptr, o) => {
+                    var destructors = [];
+                    setter(
+                      setterContext,
+                      ptr,
+                      setterArgumentType["toWireType"](destructors, o)
+                    );
+                    runDestructors(destructors);
+                  },
+                  optional
+                };
+              });
+              return [{
+                name: reg.name,
+                fromWireType: (ptr) => {
+                  var rv = {};
+                  for (var i in fields) {
+                    rv[i] = fields[i].read(ptr);
+                  }
+                  rawDestructor(ptr);
+                  return rv;
+                },
+                toWireType: (destructors, o) => {
+                  for (var fieldName in fields) {
+                    if (!(fieldName in o) && !fields[fieldName].optional) {
+                      throw new TypeError(`Missing field: "${fieldName}"`);
+                    }
+                  }
+                  var ptr = rawConstructor();
+                  for (fieldName in fields) {
+                    fields[fieldName].write(ptr, o[fieldName]);
+                  }
+                  if (destructors !== null) {
+                    destructors.push(rawDestructor, ptr);
+                  }
+                  return ptr;
+                },
+                argPackAdvance: GenericWireTypeSize,
+                readValueFromPointer: readPointer,
+                destructorFunction: rawDestructor
+              }];
+            });
+          };
+          var embindRepr = (v) => {
+            if (v === null) {
+              return "null";
+            }
+            var t = typeof v;
+            if (t === "object" || t === "array" || t === "function") {
+              return v.toString();
+            } else {
+              return "" + v;
+            }
+          };
+          var embind_init_charCodes = () => {
+            var codes = new Array(256);
+            for (var i = 0; i < 256; ++i) {
+              codes[i] = String.fromCharCode(i);
+            }
+            embind_charCodes = codes;
+          };
+          var embind_charCodes;
+          var readLatin1String = (ptr) => {
+            var ret = "";
+            var c = ptr;
+            while (HEAPU8[c >>> 0]) {
+              ret += embind_charCodes[HEAPU8[c++ >>> 0]];
+            }
+            return ret;
+          };
+          var BindingError = Module2["BindingError"] = class BindingError extends Error {
+            constructor(message) {
+              super(message);
+              this.name = "BindingError";
+            }
+          };
+          var throwBindingError = (message) => {
+            throw new BindingError(message);
+          };
+          function sharedRegisterType(rawType, registeredInstance, options = {}) {
+            var name = registeredInstance.name;
+            if (!rawType) {
+              throwBindingError(
+                `type "${name}" must have a positive integer typeid pointer`
+              );
+            }
+            if (registeredTypes.hasOwnProperty(rawType)) {
+              if (options.ignoreDuplicateRegistrations) {
+                return;
+              } else {
+                throwBindingError(`Cannot register type '${name}' twice`);
+              }
+            }
+            registeredTypes[rawType] = registeredInstance;
+            delete typeDependencies[rawType];
+            if (awaitingDependencies.hasOwnProperty(rawType)) {
+              var callbacks = awaitingDependencies[rawType];
+              delete awaitingDependencies[rawType];
+              callbacks.forEach((cb) => cb());
+            }
+          }
+          function registerType(rawType, registeredInstance, options = {}) {
+            return sharedRegisterType(rawType, registeredInstance, options);
+          }
+          var integerReadValueFromPointer = (name, width, signed) => {
+            switch (width) {
+              case 1:
+                return signed ? (pointer) => HEAP8[pointer >>> 0] : (pointer) => HEAPU8[pointer >>> 0];
+              case 2:
+                return signed ? (pointer) => HEAP16[pointer >>> 1 >>> 0] : (pointer) => HEAPU16[pointer >>> 1 >>> 0];
+              case 4:
+                return signed ? (pointer) => HEAP32[pointer >>> 2 >>> 0] : (pointer) => HEAPU32[pointer >>> 2 >>> 0];
+              case 8:
+                return signed ? (pointer) => HEAP64[pointer >>> 3] : (pointer) => HEAPU64[pointer >>> 3];
+              default:
+                throw new TypeError(`invalid integer width (${width}): ${name}`);
+            }
+          };
+          function __embind_register_bigint(primitiveType, name, size, minRange, maxRange) {
+            primitiveType >>>= 0;
+            name >>>= 0;
+            size >>>= 0;
+            name = readLatin1String(name);
+            var isUnsignedType = name.indexOf("u") != -1;
+            if (isUnsignedType) {
+              maxRange = (1n << 64n) - 1n;
+            }
+            registerType(primitiveType, {
+              name,
+              fromWireType: (value) => value,
+              toWireType: function(destructors, value) {
+                if (typeof value != "bigint" && typeof value != "number") {
+                  throw new TypeError(
+                    `Cannot convert "${embindRepr(value)}" to ${this.name}`
+                  );
+                }
+                if (typeof value == "number") {
+                  value = BigInt(value);
+                }
+                return value;
+              },
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: integerReadValueFromPointer(name, size, !isUnsignedType),
+              destructorFunction: null
+            });
+          }
+          var GenericWireTypeSize = 8;
+          function __embind_register_bool(rawType, name, trueValue, falseValue) {
+            rawType >>>= 0;
+            name >>>= 0;
+            name = readLatin1String(name);
+            registerType(rawType, {
+              name,
+              fromWireType: function(wt) {
+                return !!wt;
+              },
+              toWireType: function(destructors, o) {
+                return o ? trueValue : falseValue;
+              },
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: function(pointer) {
+                return this["fromWireType"](HEAPU8[pointer >>> 0]);
+              },
+              destructorFunction: null
+            });
+          }
+          var shallowCopyInternalPointer = (o) => ({
+            count: o.count,
+            deleteScheduled: o.deleteScheduled,
+            preservePointerOnDelete: o.preservePointerOnDelete,
+            ptr: o.ptr,
+            ptrType: o.ptrType,
+            smartPtr: o.smartPtr,
+            smartPtrType: o.smartPtrType
+          });
+          var throwInstanceAlreadyDeleted = (obj) => {
+            function getInstanceTypeName(handle) {
+              return handle.$$.ptrType.registeredClass.name;
+            }
+            throwBindingError(getInstanceTypeName(obj) + " instance already deleted");
+          };
+          var finalizationRegistry = false;
+          var detachFinalizer = (handle) => {
+          };
+          var runDestructor = ($$) => {
+            if ($$.smartPtr) {
+              $$.smartPtrType.rawDestructor($$.smartPtr);
+            } else {
+              $$.ptrType.registeredClass.rawDestructor($$.ptr);
+            }
+          };
+          var releaseClassHandle = ($$) => {
+            $$.count.value -= 1;
+            var toDelete = 0 === $$.count.value;
+            if (toDelete) {
+              runDestructor($$);
+            }
+          };
+          var attachFinalizer = (handle) => {
+            if ("undefined" === typeof FinalizationRegistry) {
+              attachFinalizer = (handle2) => handle2;
+              return handle;
+            }
+            finalizationRegistry = new FinalizationRegistry((info) => {
+              releaseClassHandle(info.$$);
+            });
+            attachFinalizer = (handle2) => {
+              var $$ = handle2.$$;
+              var hasSmartPtr = !!$$.smartPtr;
+              if (hasSmartPtr) {
+                var info = { $$ };
+                finalizationRegistry.register(handle2, info, handle2);
+              }
+              return handle2;
+            };
+            detachFinalizer = (handle2) => finalizationRegistry.unregister(handle2);
+            return attachFinalizer(handle);
+          };
+          var deletionQueue = [];
+          var flushPendingDeletes = () => {
+            while (deletionQueue.length) {
+              var obj = deletionQueue.pop();
+              obj.$$.deleteScheduled = false;
+              obj["delete"]();
+            }
+          };
+          var delayFunction;
+          var init_ClassHandle = () => {
+            let proto = ClassHandle.prototype;
+            Object.assign(proto, {
+              isAliasOf(other) {
+                if (!(this instanceof ClassHandle)) {
+                  return false;
+                }
+                if (!(other instanceof ClassHandle)) {
+                  return false;
+                }
+                var leftClass = this.$$.ptrType.registeredClass;
+                var left = this.$$.ptr;
+                other.$$ = other.$$;
+                var rightClass = other.$$.ptrType.registeredClass;
+                var right = other.$$.ptr;
+                while (leftClass.baseClass) {
+                  left = leftClass.upcast(left);
+                  leftClass = leftClass.baseClass;
+                }
+                while (rightClass.baseClass) {
+                  right = rightClass.upcast(right);
+                  rightClass = rightClass.baseClass;
+                }
+                return leftClass === rightClass && left === right;
+              },
+              clone() {
+                if (!this.$$.ptr) {
+                  throwInstanceAlreadyDeleted(this);
+                }
+                if (this.$$.preservePointerOnDelete) {
+                  this.$$.count.value += 1;
+                  return this;
+                } else {
+                  var clone = attachFinalizer(Object.create(
+                    Object.getPrototypeOf(this),
+                    { $$: { value: shallowCopyInternalPointer(this.$$) } }
+                  ));
+                  clone.$$.count.value += 1;
+                  clone.$$.deleteScheduled = false;
+                  return clone;
+                }
+              },
+              delete() {
+                if (!this.$$.ptr) {
+                  throwInstanceAlreadyDeleted(this);
+                }
+                if (this.$$.deleteScheduled && !this.$$.preservePointerOnDelete) {
+                  throwBindingError("Object already scheduled for deletion");
+                }
+                detachFinalizer(this);
+                releaseClassHandle(this.$$);
+                if (!this.$$.preservePointerOnDelete) {
+                  this.$$.smartPtr = void 0;
+                  this.$$.ptr = void 0;
+                }
+              },
+              isDeleted() {
+                return !this.$$.ptr;
+              },
+              deleteLater() {
+                if (!this.$$.ptr) {
+                  throwInstanceAlreadyDeleted(this);
+                }
+                if (this.$$.deleteScheduled && !this.$$.preservePointerOnDelete) {
+                  throwBindingError("Object already scheduled for deletion");
+                }
+                deletionQueue.push(this);
+                if (deletionQueue.length === 1 && delayFunction) {
+                  delayFunction(flushPendingDeletes);
+                }
+                this.$$.deleteScheduled = true;
+                return this;
+              }
+            });
+            const symbolDispose = Symbol.dispose;
+            if (symbolDispose) {
+              proto[symbolDispose] = proto["delete"];
+            }
+          };
+          function ClassHandle() {
+          }
+          var createNamedFunction = (name, func) => Object.defineProperty(func, "name", { value: name });
+          var registeredPointers = {};
+          var ensureOverloadTable = (proto, methodName, humanName) => {
+            if (void 0 === proto[methodName].overloadTable) {
+              var prevFunc = proto[methodName];
+              proto[methodName] = function(...args) {
+                if (!proto[methodName].overloadTable.hasOwnProperty(args.length)) {
+                  throwBindingError(`Function '${humanName}' called with an invalid number of arguments (${args.length}) - expects one of (${proto[methodName].overloadTable})!`);
+                }
+                return proto[methodName].overloadTable[args.length].apply(this, args);
+              };
+              proto[methodName].overloadTable = [];
+              proto[methodName].overloadTable[prevFunc.argCount] = prevFunc;
+            }
+          };
+          var exposePublicSymbol = (name, value, numArguments) => {
+            if (Module2.hasOwnProperty(name)) {
+              if (void 0 === numArguments || void 0 !== Module2[name].overloadTable && void 0 !== Module2[name].overloadTable[numArguments]) {
+                throwBindingError(`Cannot register public name '${name}' twice`);
+              }
+              ensureOverloadTable(Module2, name, name);
+              if (Module2[name].overloadTable.hasOwnProperty(numArguments)) {
+                throwBindingError(
+                  `Cannot register multiple overloads of a function with the same number of arguments (${numArguments})!`
+                );
+              }
+              Module2[name].overloadTable[numArguments] = value;
+            } else {
+              Module2[name] = value;
+              Module2[name].argCount = numArguments;
+            }
+          };
+          var char_0 = 48;
+          var char_9 = 57;
+          var makeLegalFunctionName = (name) => {
+            name = name.replace(/[^a-zA-Z0-9_]/g, "$");
+            var f = name.charCodeAt(0);
+            if (f >= char_0 && f <= char_9) {
+              return `_${name}`;
+            }
+            return name;
+          };
+          function RegisteredClass(name, constructor, instancePrototype, rawDestructor, baseClass, getActualType, upcast, downcast) {
+            this.name = name;
+            this.constructor = constructor;
+            this.instancePrototype = instancePrototype;
+            this.rawDestructor = rawDestructor;
+            this.baseClass = baseClass;
+            this.getActualType = getActualType;
+            this.upcast = upcast;
+            this.downcast = downcast;
+            this.pureVirtualFunctions = [];
+          }
+          var upcastPointer = (ptr, ptrClass, desiredClass) => {
+            while (ptrClass !== desiredClass) {
+              if (!ptrClass.upcast) {
+                throwBindingError(`Expected null or instance of ${desiredClass.name}, got an instance of ${ptrClass.name}`);
+              }
+              ptr = ptrClass.upcast(ptr);
+              ptrClass = ptrClass.baseClass;
+            }
+            return ptr;
+          };
+          function constNoSmartPtrRawPointerToWireType(destructors, handle) {
+            if (handle === null) {
+              if (this.isReference) {
+                throwBindingError(`null is not a valid ${this.name}`);
+              }
+              return 0;
+            }
+            if (!handle.$$) {
+              throwBindingError(
+                `Cannot pass "${embindRepr(handle)}" as a ${this.name}`
+              );
+            }
+            if (!handle.$$.ptr) {
+              throwBindingError(
+                `Cannot pass deleted object as a pointer of type ${this.name}`
+              );
+            }
+            var handleClass = handle.$$.ptrType.registeredClass;
+            var ptr = upcastPointer(handle.$$.ptr, handleClass, this.registeredClass);
+            return ptr;
+          }
+          function genericPointerToWireType(destructors, handle) {
+            var ptr;
+            if (handle === null) {
+              if (this.isReference) {
+                throwBindingError(`null is not a valid ${this.name}`);
+              }
+              if (this.isSmartPointer) {
+                ptr = this.rawConstructor();
+                if (destructors !== null) {
+                  destructors.push(this.rawDestructor, ptr);
+                }
+                return ptr;
+              } else {
+                return 0;
+              }
+            }
+            if (!handle || !handle.$$) {
+              throwBindingError(
+                `Cannot pass "${embindRepr(handle)}" as a ${this.name}`
+              );
+            }
+            if (!handle.$$.ptr) {
+              throwBindingError(
+                `Cannot pass deleted object as a pointer of type ${this.name}`
+              );
+            }
+            if (!this.isConst && handle.$$.ptrType.isConst) {
+              throwBindingError(`Cannot convert argument of type ${handle.$$.smartPtrType ? handle.$$.smartPtrType.name : handle.$$.ptrType.name} to parameter type ${this.name}`);
+            }
+            var handleClass = handle.$$.ptrType.registeredClass;
+            ptr = upcastPointer(handle.$$.ptr, handleClass, this.registeredClass);
+            if (this.isSmartPointer) {
+              if (void 0 === handle.$$.smartPtr) {
+                throwBindingError("Passing raw pointer to smart pointer is illegal");
+              }
+              switch (this.sharingPolicy) {
+                case 0:
+                  if (handle.$$.smartPtrType === this) {
+                    ptr = handle.$$.smartPtr;
+                  } else {
+                    throwBindingError(`Cannot convert argument of type ${handle.$$.smartPtrType ? handle.$$.smartPtrType.name : handle.$$.ptrType.name} to parameter type ${this.name}`);
+                  }
+                  break;
+                case 1:
+                  ptr = handle.$$.smartPtr;
+                  break;
+                case 2:
+                  if (handle.$$.smartPtrType === this) {
+                    ptr = handle.$$.smartPtr;
+                  } else {
+                    var clonedHandle = handle["clone"]();
+                    ptr = this.rawShare(
+                      ptr,
+                      Emval.toHandle(() => clonedHandle["delete"]())
+                    );
+                    if (destructors !== null) {
+                      destructors.push(this.rawDestructor, ptr);
+                    }
+                  }
+                  break;
+                default:
+                  throwBindingError("Unsupporting sharing policy");
+              }
+            }
+            return ptr;
+          }
+          function nonConstNoSmartPtrRawPointerToWireType(destructors, handle) {
+            if (handle === null) {
+              if (this.isReference) {
+                throwBindingError(`null is not a valid ${this.name}`);
+              }
+              return 0;
+            }
+            if (!handle.$$) {
+              throwBindingError(
+                `Cannot pass "${embindRepr(handle)}" as a ${this.name}`
+              );
+            }
+            if (!handle.$$.ptr) {
+              throwBindingError(
+                `Cannot pass deleted object as a pointer of type ${this.name}`
+              );
+            }
+            if (handle.$$.ptrType.isConst) {
+              throwBindingError(`Cannot convert argument of type ${handle.$$.ptrType.name} to parameter type ${this.name}`);
+            }
+            var handleClass = handle.$$.ptrType.registeredClass;
+            var ptr = upcastPointer(handle.$$.ptr, handleClass, this.registeredClass);
+            return ptr;
+          }
+          var downcastPointer = (ptr, ptrClass, desiredClass) => {
+            if (ptrClass === desiredClass) {
+              return ptr;
+            }
+            if (void 0 === desiredClass.baseClass) {
+              return null;
+            }
+            var rv = downcastPointer(ptr, ptrClass, desiredClass.baseClass);
+            if (rv === null) {
+              return null;
+            }
+            return desiredClass.downcast(rv);
+          };
+          var registeredInstances = {};
+          var getBasestPointer = (class_, ptr) => {
+            if (ptr === void 0) {
+              throwBindingError("ptr should not be undefined");
+            }
+            while (class_.baseClass) {
+              ptr = class_.upcast(ptr);
+              class_ = class_.baseClass;
+            }
+            return ptr;
+          };
+          var getInheritedInstance = (class_, ptr) => {
+            ptr = getBasestPointer(class_, ptr);
+            return registeredInstances[ptr];
+          };
+          var makeClassHandle = (prototype, record) => {
+            if (!record.ptrType || !record.ptr) {
+              throwInternalError("makeClassHandle requires ptr and ptrType");
+            }
+            var hasSmartPtrType = !!record.smartPtrType;
+            var hasSmartPtr = !!record.smartPtr;
+            if (hasSmartPtrType !== hasSmartPtr) {
+              throwInternalError("Both smartPtrType and smartPtr must be specified");
+            }
+            record.count = { value: 1 };
+            return attachFinalizer(
+              Object.create(prototype, { $$: { value: record, writable: true } })
+            );
+          };
+          function RegisteredPointer_fromWireType(ptr) {
+            var rawPointer = this.getPointee(ptr);
+            if (!rawPointer) {
+              this.destructor(ptr);
+              return null;
+            }
+            var registeredInstance = getInheritedInstance(this.registeredClass, rawPointer);
+            if (void 0 !== registeredInstance) {
+              if (0 === registeredInstance.$$.count.value) {
+                registeredInstance.$$.ptr = rawPointer;
+                registeredInstance.$$.smartPtr = ptr;
+                return registeredInstance["clone"]();
+              } else {
+                var rv = registeredInstance["clone"]();
+                this.destructor(ptr);
+                return rv;
+              }
+            }
+            function makeDefaultHandle() {
+              if (this.isSmartPointer) {
+                return makeClassHandle(this.registeredClass.instancePrototype, {
+                  ptrType: this.pointeeType,
+                  ptr: rawPointer,
+                  smartPtrType: this,
+                  smartPtr: ptr
+                });
+              } else {
+                return makeClassHandle(
+                  this.registeredClass.instancePrototype,
+                  { ptrType: this, ptr }
+                );
+              }
+            }
+            var actualType = this.registeredClass.getActualType(rawPointer);
+            var registeredPointerRecord = registeredPointers[actualType];
+            if (!registeredPointerRecord) {
+              return makeDefaultHandle.call(this);
+            }
+            var toType;
+            if (this.isConst) {
+              toType = registeredPointerRecord.constPointerType;
+            } else {
+              toType = registeredPointerRecord.pointerType;
+            }
+            var dp = downcastPointer(
+              rawPointer,
+              this.registeredClass,
+              toType.registeredClass
+            );
+            if (dp === null) {
+              return makeDefaultHandle.call(this);
+            }
+            if (this.isSmartPointer) {
+              return makeClassHandle(
+                toType.registeredClass.instancePrototype,
+                { ptrType: toType, ptr: dp, smartPtrType: this, smartPtr: ptr }
+              );
+            } else {
+              return makeClassHandle(
+                toType.registeredClass.instancePrototype,
+                { ptrType: toType, ptr: dp }
+              );
+            }
+          }
+          var init_RegisteredPointer = () => {
+            Object.assign(RegisteredPointer.prototype, {
+              getPointee(ptr) {
+                if (this.rawGetPointee) {
+                  ptr = this.rawGetPointee(ptr);
+                }
+                return ptr;
+              },
+              destructor(ptr) {
+                this.rawDestructor?.(ptr);
+              },
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: readPointer,
+              fromWireType: RegisteredPointer_fromWireType
+            });
+          };
+          function RegisteredPointer(name, registeredClass, isReference, isConst, isSmartPointer, pointeeType, sharingPolicy, rawGetPointee, rawConstructor, rawShare, rawDestructor) {
+            this.name = name;
+            this.registeredClass = registeredClass;
+            this.isReference = isReference;
+            this.isConst = isConst;
+            this.isSmartPointer = isSmartPointer;
+            this.pointeeType = pointeeType;
+            this.sharingPolicy = sharingPolicy;
+            this.rawGetPointee = rawGetPointee;
+            this.rawConstructor = rawConstructor;
+            this.rawShare = rawShare;
+            this.rawDestructor = rawDestructor;
+            if (!isSmartPointer && registeredClass.baseClass === void 0) {
+              if (isConst) {
+                this["toWireType"] = constNoSmartPtrRawPointerToWireType;
+                this.destructorFunction = null;
+              } else {
+                this["toWireType"] = nonConstNoSmartPtrRawPointerToWireType;
+                this.destructorFunction = null;
+              }
+            } else {
+              this["toWireType"] = genericPointerToWireType;
+            }
+          }
+          var replacePublicSymbol = (name, value, numArguments) => {
+            if (!Module2.hasOwnProperty(name)) {
+              throwInternalError("Replacing nonexistent public symbol");
+            }
+            if (void 0 !== Module2[name].overloadTable && void 0 !== numArguments) {
+              Module2[name].overloadTable[numArguments] = value;
+            } else {
+              Module2[name] = value;
+              Module2[name].argCount = numArguments;
+            }
+          };
+          var wasmTable;
+          var getWasmTableEntry = (funcPtr) => wasmTable.get(funcPtr);
+          var dynCall = (sig, ptr, args = [], promising = false) => {
+            var func = getWasmTableEntry(ptr);
+            var rtn = func(...args);
+            return sig[0] == "p" ? rtn >>> 0 : rtn;
+          };
+          var getDynCaller = (sig, ptr, promising = false) => (...args) => dynCall(sig, ptr, args, promising);
+          var embind__requireFunction = (signature, rawFunction, isAsync = false) => {
+            signature = readLatin1String(signature);
+            function makeDynCaller() {
+              if (signature.includes("p")) {
+                return getDynCaller(signature, rawFunction, isAsync);
+              }
+              var rtn = getWasmTableEntry(rawFunction);
+              return rtn;
+            }
+            var fp = makeDynCaller();
+            if (typeof fp != "function") {
+              throwBindingError(`unknown function pointer with signature ${signature}: ${rawFunction}`);
+            }
+            return fp;
+          };
+          class UnboundTypeError extends Error {
+          }
+          var getTypeName = (type) => {
+            var ptr = ___getTypeName(type);
+            var rv = readLatin1String(ptr);
+            _free(ptr);
+            return rv;
+          };
+          var throwUnboundTypeError = (message, types) => {
+            var unboundTypes = [];
+            var seen = {};
+            function visit(type) {
+              if (seen[type]) {
+                return;
+              }
+              if (registeredTypes[type]) {
+                return;
+              }
+              if (typeDependencies[type]) {
+                typeDependencies[type].forEach(visit);
+                return;
+              }
+              unboundTypes.push(type);
+              seen[type] = true;
+            }
+            types.forEach(visit);
+            throw new UnboundTypeError(
+              `${message}: ` + unboundTypes.map(getTypeName).join([", "])
+            );
+          };
+          function __embind_register_class(rawType, rawPointerType, rawConstPointerType, baseClassRawType, getActualTypeSignature, getActualType, upcastSignature, upcast, downcastSignature, downcast, name, destructorSignature, rawDestructor) {
+            rawType >>>= 0;
+            rawPointerType >>>= 0;
+            rawConstPointerType >>>= 0;
+            baseClassRawType >>>= 0;
+            getActualTypeSignature >>>= 0;
+            getActualType >>>= 0;
+            upcastSignature >>>= 0;
+            upcast >>>= 0;
+            downcastSignature >>>= 0;
+            downcast >>>= 0;
+            name >>>= 0;
+            destructorSignature >>>= 0;
+            rawDestructor >>>= 0;
+            name = readLatin1String(name);
+            getActualType = embind__requireFunction(getActualTypeSignature, getActualType);
+            upcast && (upcast = embind__requireFunction(upcastSignature, upcast));
+            downcast && (downcast = embind__requireFunction(downcastSignature, downcast));
+            rawDestructor = embind__requireFunction(destructorSignature, rawDestructor);
+            var legalFunctionName = makeLegalFunctionName(name);
+            exposePublicSymbol(legalFunctionName, function() {
+              throwUnboundTypeError(
+                `Cannot construct ${name} due to unbound types`,
+                [baseClassRawType]
+              );
+            });
+            whenDependentTypesAreResolved(
+              [rawType, rawPointerType, rawConstPointerType],
+              baseClassRawType ? [baseClassRawType] : [],
+              (base) => {
+                var _a;
+                base = base[0];
+                var baseClass;
+                var basePrototype;
+                if (baseClassRawType) {
+                  baseClass = base.registeredClass;
+                  basePrototype = baseClass.instancePrototype;
+                } else {
+                  basePrototype = ClassHandle.prototype;
+                }
+                var constructor = createNamedFunction(name, function(...args) {
+                  if (Object.getPrototypeOf(this) !== instancePrototype) {
+                    throw new BindingError(`Use 'new' to construct ${name}`);
+                  }
+                  if (void 0 === registeredClass.constructor_body) {
+                    throw new BindingError(`${name} has no accessible constructor`);
+                  }
+                  var body = registeredClass.constructor_body[args.length];
+                  if (void 0 === body) {
+                    throw new BindingError(`Tried to invoke ctor of ${name} with invalid number of parameters (${args.length}) - expected (${Object.keys(registeredClass.constructor_body).toString()}) parameters instead!`);
+                  }
+                  return body.apply(this, args);
+                });
+                var instancePrototype = Object.create(
+                  basePrototype,
+                  { constructor: { value: constructor } }
+                );
+                constructor.prototype = instancePrototype;
+                var registeredClass = new RegisteredClass(
+                  name,
+                  constructor,
+                  instancePrototype,
+                  rawDestructor,
+                  baseClass,
+                  getActualType,
+                  upcast,
+                  downcast
+                );
+                if (registeredClass.baseClass) {
+                  (_a = registeredClass.baseClass).__derivedClasses ?? (_a.__derivedClasses = []);
+                  registeredClass.baseClass.__derivedClasses.push(registeredClass);
+                }
+                var referenceConverter = new RegisteredPointer(
+                  name,
+                  registeredClass,
+                  true,
+                  false,
+                  false
+                );
+                var pointerConverter = new RegisteredPointer(
+                  name + "*",
+                  registeredClass,
+                  false,
+                  false,
+                  false
+                );
+                var constPointerConverter = new RegisteredPointer(
+                  name + " const*",
+                  registeredClass,
+                  false,
+                  true,
+                  false
+                );
+                registeredPointers[rawType] = {
+                  pointerType: pointerConverter,
+                  constPointerType: constPointerConverter
+                };
+                replacePublicSymbol(legalFunctionName, constructor);
+                return [referenceConverter, pointerConverter, constPointerConverter];
+              }
+            );
+          }
+          var heap32VectorToArray = (count, firstElement) => {
+            var array = [];
+            for (var i = 0; i < count; i++) {
+              array.push(HEAPU32[firstElement + i * 4 >>> 2 >>> 0]);
+            }
+            return array;
+          };
+          function usesDestructorStack(argTypes) {
+            for (var i = 1; i < argTypes.length; ++i) {
+              if (argTypes[i] !== null && argTypes[i].destructorFunction === void 0) {
+                return true;
+              }
+            }
+            return false;
+          }
+          function createJsInvoker(argTypes, isClassMethodFunc, returns, isAsync) {
+            var needsDestructorStack = usesDestructorStack(argTypes);
+            var argCount = argTypes.length - 2;
+            var argsList = [];
+            var argsListWired = ["fn"];
+            if (isClassMethodFunc) {
+              argsListWired.push("thisWired");
+            }
+            for (var i = 0; i < argCount; ++i) {
+              argsList.push(`arg${i}`);
+              argsListWired.push(`arg${i}Wired`);
+            }
+            argsList = argsList.join(",");
+            argsListWired = argsListWired.join(",");
+            var invokerFnBody = `return function (${argsList}) {
+`;
+            if (needsDestructorStack) {
+              invokerFnBody += "var destructors = [];\n";
+            }
+            var dtorStack = needsDestructorStack ? "destructors" : "null";
+            var args1 = [
+              "humanName",
+              "throwBindingError",
+              "invoker",
+              "fn",
+              "runDestructors",
+              "retType",
+              "classParam"
+            ];
+            if (isClassMethodFunc) {
+              invokerFnBody += `var thisWired = classParam['toWireType'](${dtorStack}, this);
+`;
+            }
+            for (var i = 0; i < argCount; ++i) {
+              invokerFnBody += `var arg${i}Wired = argType${i}['toWireType'](${dtorStack}, arg${i});
+`;
+              args1.push(`argType${i}`);
+            }
+            invokerFnBody += (returns || isAsync ? "var rv = " : "") + `invoker(${argsListWired});
+`;
+            if (needsDestructorStack) {
+              invokerFnBody += "runDestructors(destructors);\n";
+            } else {
+              for (var i = isClassMethodFunc ? 1 : 2; i < argTypes.length; ++i) {
+                var paramName = i === 1 ? "thisWired" : "arg" + (i - 2) + "Wired";
+                if (argTypes[i].destructorFunction !== null) {
+                  invokerFnBody += `${paramName}_dtor(${paramName});
+`;
+                  args1.push(`${paramName}_dtor`);
+                }
+              }
+            }
+            if (returns) {
+              invokerFnBody += "var ret = retType['fromWireType'](rv);\nreturn ret;\n";
+            } else {
+            }
+            invokerFnBody += "}\n";
+            return [args1, invokerFnBody];
+          }
+          function craftInvokerFunction(humanName, argTypes, classType, cppInvokerFunc, cppTargetFunc, isAsync) {
+            var argCount = argTypes.length;
+            if (argCount < 2) {
+              throwBindingError(
+                "argTypes array size mismatch! Must at least get return value and 'this' types!"
+              );
+            }
+            var isClassMethodFunc = argTypes[1] !== null && classType !== null;
+            var needsDestructorStack = usesDestructorStack(argTypes);
+            var returns = argTypes[0].name !== "void";
+            var closureArgs = [
+              humanName,
+              throwBindingError,
+              cppInvokerFunc,
+              cppTargetFunc,
+              runDestructors,
+              argTypes[0],
+              argTypes[1]
+            ];
+            for (var i = 0; i < argCount - 2; ++i) {
+              closureArgs.push(argTypes[i + 2]);
+            }
+            if (!needsDestructorStack) {
+              for (var i = isClassMethodFunc ? 1 : 2; i < argTypes.length; ++i) {
+                if (argTypes[i].destructorFunction !== null) {
+                  closureArgs.push(argTypes[i].destructorFunction);
+                }
+              }
+            }
+            let [args, invokerFnBody] = createJsInvoker(argTypes, isClassMethodFunc, returns, isAsync);
+            var invokerFn = new Function(...args, invokerFnBody)(...closureArgs);
+            return createNamedFunction(humanName, invokerFn);
+          }
+          var __embind_register_class_constructor = function(rawClassType, argCount, rawArgTypesAddr, invokerSignature, invoker, rawConstructor) {
+            rawClassType >>>= 0;
+            rawArgTypesAddr >>>= 0;
+            invokerSignature >>>= 0;
+            invoker >>>= 0;
+            rawConstructor >>>= 0;
+            var rawArgTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
+            invoker = embind__requireFunction(invokerSignature, invoker);
+            whenDependentTypesAreResolved([], [rawClassType], (classType) => {
+              classType = classType[0];
+              var humanName = `constructor ${classType.name}`;
+              if (void 0 === classType.registeredClass.constructor_body) {
+                classType.registeredClass.constructor_body = [];
+              }
+              if (void 0 !== classType.registeredClass.constructor_body[argCount - 1]) {
+                throw new BindingError(
+                  `Cannot register multiple constructors with identical number of parameters (${argCount - 1}) for class '${classType.name}'! Overload resolution is currently only performed using the parameter count, not actual type info!`
+                );
+              }
+              classType.registeredClass.constructor_body[argCount - 1] = () => {
+                throwUnboundTypeError(
+                  `Cannot construct ${classType.name} due to unbound types`,
+                  rawArgTypes
+                );
+              };
+              whenDependentTypesAreResolved([], rawArgTypes, (argTypes) => {
+                argTypes.splice(1, 0, null);
+                classType.registeredClass.constructor_body[argCount - 1] = craftInvokerFunction(
+                  humanName,
+                  argTypes,
+                  null,
+                  invoker,
+                  rawConstructor
+                );
+                return [];
+              });
+              return [];
+            });
+          };
+          var getFunctionName = (signature) => {
+            signature = signature.trim();
+            const argsIndex = signature.indexOf("(");
+            if (argsIndex === -1) return signature;
+            return signature.slice(0, argsIndex);
+          };
+          var __embind_register_class_function = function(rawClassType, methodName, argCount, rawArgTypesAddr, invokerSignature, rawInvoker, context, isPureVirtual, isAsync, isNonnullReturn) {
+            rawClassType >>>= 0;
+            methodName >>>= 0;
+            rawArgTypesAddr >>>= 0;
+            invokerSignature >>>= 0;
+            rawInvoker >>>= 0;
+            context >>>= 0;
+            var rawArgTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
+            methodName = readLatin1String(methodName);
+            methodName = getFunctionName(methodName);
+            rawInvoker = embind__requireFunction(invokerSignature, rawInvoker, isAsync);
+            whenDependentTypesAreResolved([], [rawClassType], (classType) => {
+              classType = classType[0];
+              var humanName = `${classType.name}.${methodName}`;
+              if (methodName.startsWith("@@")) {
+                methodName = Symbol[methodName.substring(2)];
+              }
+              if (isPureVirtual) {
+                classType.registeredClass.pureVirtualFunctions.push(methodName);
+              }
+              function unboundTypesHandler() {
+                throwUnboundTypeError(
+                  `Cannot call ${humanName} due to unbound types`,
+                  rawArgTypes
+                );
+              }
+              var proto = classType.registeredClass.instancePrototype;
+              var method = proto[methodName];
+              if (void 0 === method || void 0 === method.overloadTable && method.className !== classType.name && method.argCount === argCount - 2) {
+                unboundTypesHandler.argCount = argCount - 2;
+                unboundTypesHandler.className = classType.name;
+                proto[methodName] = unboundTypesHandler;
+              } else {
+                ensureOverloadTable(proto, methodName, humanName);
+                proto[methodName].overloadTable[argCount - 2] = unboundTypesHandler;
+              }
+              whenDependentTypesAreResolved([], rawArgTypes, (argTypes) => {
+                var memberFunction = craftInvokerFunction(
+                  humanName,
+                  argTypes,
+                  classType,
+                  rawInvoker,
+                  context,
+                  isAsync
+                );
+                if (void 0 === proto[methodName].overloadTable) {
+                  memberFunction.argCount = argCount - 2;
+                  proto[methodName] = memberFunction;
+                } else {
+                  proto[methodName].overloadTable[argCount - 2] = memberFunction;
+                }
+                return [];
+              });
+              return [];
+            });
+          };
+          var emval_freelist = [];
+          var emval_handles = [];
+          function __emval_decref(handle) {
+            handle >>>= 0;
+            if (handle > 9 && 0 === --emval_handles[handle + 1]) {
+              emval_handles[handle] = void 0;
+              emval_freelist.push(handle);
+            }
+          }
+          var count_emval_handles = () => emval_handles.length / 2 - 5 - emval_freelist.length;
+          var init_emval = () => {
+            emval_handles.push(0, 1, void 0, 1, null, 1, true, 1, false, 1);
+            Module2["count_emval_handles"] = count_emval_handles;
+          };
+          var Emval = {
+            toValue: (handle) => {
+              if (!handle) {
+                throwBindingError(`Cannot use deleted val. handle = ${handle}`);
+              }
+              return emval_handles[handle];
+            },
+            toHandle: (value) => {
+              switch (value) {
+                case void 0:
+                  return 2;
+                case null:
+                  return 4;
+                case true:
+                  return 6;
+                case false:
+                  return 8;
+                default: {
+                  const handle = emval_freelist.pop() || emval_handles.length;
+                  emval_handles[handle] = value;
+                  emval_handles[handle + 1] = 1;
+                  return handle;
+                }
+              }
+            }
+          };
+          var EmValType = {
+            name: "emscripten::val",
+            fromWireType: (handle) => {
+              var rv = Emval.toValue(handle);
+              __emval_decref(handle);
+              return rv;
+            },
+            toWireType: (destructors, value) => Emval.toHandle(value),
+            argPackAdvance: GenericWireTypeSize,
+            readValueFromPointer: readPointer,
+            destructorFunction: null
+          };
+          function __embind_register_emval(rawType) {
+            rawType >>>= 0;
+            return registerType(rawType, EmValType);
+          }
+          var enumReadValueFromPointer = (name, width, signed) => {
+            switch (width) {
+              case 1:
+                return signed ? function(pointer) {
+                  return this["fromWireType"](HEAP8[pointer >>> 0]);
+                } : function(pointer) {
+                  return this["fromWireType"](HEAPU8[pointer >>> 0]);
+                };
+              case 2:
+                return signed ? function(pointer) {
+                  return this["fromWireType"](HEAP16[pointer >>> 1 >>> 0]);
+                } : function(pointer) {
+                  return this["fromWireType"](HEAPU16[pointer >>> 1 >>> 0]);
+                };
+              case 4:
+                return signed ? function(pointer) {
+                  return this["fromWireType"](HEAP32[pointer >>> 2 >>> 0]);
+                } : function(pointer) {
+                  return this["fromWireType"](HEAPU32[pointer >>> 2 >>> 0]);
+                };
+              default:
+                throw new TypeError(`invalid integer width (${width}): ${name}`);
+            }
+          };
+          function __embind_register_enum(rawType, name, size, isSigned) {
+            rawType >>>= 0;
+            name >>>= 0;
+            size >>>= 0;
+            name = readLatin1String(name);
+            function ctor() {
+            }
+            ctor.values = {};
+            registerType(rawType, {
+              name,
+              constructor: ctor,
+              fromWireType: function(c) {
+                return this.constructor.values[c];
+              },
+              toWireType: (destructors, c) => c.value,
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: enumReadValueFromPointer(name, size, isSigned),
+              destructorFunction: null
+            });
+            exposePublicSymbol(name, ctor);
+          }
+          var requireRegisteredType = (rawType, humanName) => {
+            var impl = registeredTypes[rawType];
+            if (void 0 === impl) {
+              throwBindingError(
+                `${humanName} has unknown type ${getTypeName(rawType)}`
+              );
+            }
+            return impl;
+          };
+          function __embind_register_enum_value(rawEnumType, name, enumValue) {
+            rawEnumType >>>= 0;
+            name >>>= 0;
+            var enumType = requireRegisteredType(rawEnumType, "enum");
+            name = readLatin1String(name);
+            var Enum = enumType.constructor;
+            var Value = Object.create(enumType.constructor.prototype, {
+              value: { value: enumValue },
+              constructor: {
+                value: createNamedFunction(`${enumType.name}_${name}`, function() {
+                })
+              }
+            });
+            Enum.values[enumValue] = Value;
+            Enum[name] = Value;
+          }
+          var floatReadValueFromPointer = (name, width) => {
+            switch (width) {
+              case 4:
+                return function(pointer) {
+                  return this["fromWireType"](HEAPF32[pointer >>> 2 >>> 0]);
+                };
+              case 8:
+                return function(pointer) {
+                  return this["fromWireType"](HEAPF64[pointer >>> 3 >>> 0]);
+                };
+              default:
+                throw new TypeError(`invalid float width (${width}): ${name}`);
+            }
+          };
+          var __embind_register_float = function(rawType, name, size) {
+            rawType >>>= 0;
+            name >>>= 0;
+            size >>>= 0;
+            name = readLatin1String(name);
+            registerType(rawType, {
+              name,
+              fromWireType: (value) => value,
+              toWireType: (destructors, value) => value,
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: floatReadValueFromPointer(name, size),
+              destructorFunction: null
+            });
+          };
+          function __embind_register_function(name, argCount, rawArgTypesAddr, signature, rawInvoker, fn, isAsync, isNonnullReturn) {
+            name >>>= 0;
+            rawArgTypesAddr >>>= 0;
+            signature >>>= 0;
+            rawInvoker >>>= 0;
+            fn >>>= 0;
+            var argTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
+            name = readLatin1String(name);
+            name = getFunctionName(name);
+            rawInvoker = embind__requireFunction(signature, rawInvoker, isAsync);
+            exposePublicSymbol(name, function() {
+              throwUnboundTypeError(
+                `Cannot call ${name} due to unbound types`,
+                argTypes
+              );
+            }, argCount - 1);
+            whenDependentTypesAreResolved([], argTypes, (argTypes2) => {
+              var invokerArgsArray = [argTypes2[0], null].concat(argTypes2.slice(1));
+              replacePublicSymbol(
+                name,
+                craftInvokerFunction(
+                  name,
+                  invokerArgsArray,
+                  null,
+                  rawInvoker,
+                  fn,
+                  isAsync
+                ),
+                argCount - 1
+              );
+              return [];
+            });
+          }
+          function __embind_register_integer(primitiveType, name, size, minRange, maxRange) {
+            primitiveType >>>= 0;
+            name >>>= 0;
+            size >>>= 0;
+            name = readLatin1String(name);
+            if (maxRange === -1) {
+              maxRange = 4294967295;
+            }
+            var fromWireType = (value) => value;
+            if (minRange === 0) {
+              var bitshift = 32 - 8 * size;
+              fromWireType = (value) => value << bitshift >>> bitshift;
+            }
+            var isUnsignedType = name.includes("unsigned");
+            var checkAssertions = (value, toTypeName) => {
+            };
+            var toWireType;
+            if (isUnsignedType) {
+              toWireType = function(destructors, value) {
+                checkAssertions(value, this.name);
+                return value >>> 0;
+              };
+            } else {
+              toWireType = function(destructors, value) {
+                checkAssertions(value, this.name);
+                return value;
+              };
+            }
+            registerType(primitiveType, {
+              name,
+              fromWireType,
+              toWireType,
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: integerReadValueFromPointer(name, size, minRange !== 0),
+              destructorFunction: null
+            });
+          }
+          function __embind_register_memory_view(rawType, dataTypeIndex, name) {
+            rawType >>>= 0;
+            name >>>= 0;
+            var typeMapping = [
+              Int8Array,
+              Uint8Array,
+              Int16Array,
+              Uint16Array,
+              Int32Array,
+              Uint32Array,
+              Float32Array,
+              Float64Array,
+              BigInt64Array,
+              BigUint64Array
+            ];
+            var TA = typeMapping[dataTypeIndex];
+            function decodeMemoryView(handle) {
+              var size = HEAPU32[handle >>> 2 >>> 0];
+              var data = HEAPU32[handle + 4 >>> 2 >>> 0];
+              return new TA(HEAP8.buffer, data, size);
+            }
+            name = readLatin1String(name);
+            registerType(
+              rawType,
+              {
+                name,
+                fromWireType: decodeMemoryView,
+                argPackAdvance: GenericWireTypeSize,
+                readValueFromPointer: decodeMemoryView
+              },
+              { ignoreDuplicateRegistrations: true }
+            );
+          }
+          var EmValOptionalType = Object.assign({ optional: true }, EmValType);
+          function __embind_register_optional(rawOptionalType, rawType) {
+            rawOptionalType >>>= 0;
+            rawType >>>= 0;
+            registerType(rawOptionalType, EmValOptionalType);
+          }
+          var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
+            outIdx >>>= 0;
+            if (!(maxBytesToWrite > 0)) return 0;
+            var startIdx = outIdx;
+            var endIdx = outIdx + maxBytesToWrite - 1;
+            for (var i = 0; i < str.length; ++i) {
+              var u = str.charCodeAt(i);
+              if (u >= 55296 && u <= 57343) {
+                var u1 = str.charCodeAt(++i);
+                u = 65536 + ((u & 1023) << 10) | u1 & 1023;
+              }
+              if (u <= 127) {
+                if (outIdx >= endIdx) break;
+                heap[outIdx++ >>> 0] = u;
+              } else if (u <= 2047) {
+                if (outIdx + 1 >= endIdx) break;
+                heap[outIdx++ >>> 0] = 192 | u >> 6;
+                heap[outIdx++ >>> 0] = 128 | u & 63;
+              } else if (u <= 65535) {
+                if (outIdx + 2 >= endIdx) break;
+                heap[outIdx++ >>> 0] = 224 | u >> 12;
+                heap[outIdx++ >>> 0] = 128 | u >> 6 & 63;
+                heap[outIdx++ >>> 0] = 128 | u & 63;
+              } else {
+                if (outIdx + 3 >= endIdx) break;
+                heap[outIdx++ >>> 0] = 240 | u >> 18;
+                heap[outIdx++ >>> 0] = 128 | u >> 12 & 63;
+                heap[outIdx++ >>> 0] = 128 | u >> 6 & 63;
+                heap[outIdx++ >>> 0] = 128 | u & 63;
+              }
+            }
+            heap[outIdx >>> 0] = 0;
+            return outIdx - startIdx;
+          };
+          var stringToUTF8 = (str, outPtr, maxBytesToWrite) => stringToUTF8Array(str, HEAPU8, outPtr, maxBytesToWrite);
+          var lengthBytesUTF8 = (str) => {
+            var len = 0;
+            for (var i = 0; i < str.length; ++i) {
+              var c = str.charCodeAt(i);
+              if (c <= 127) {
+                len++;
+              } else if (c <= 2047) {
+                len += 2;
+              } else if (c >= 55296 && c <= 57343) {
+                len += 4;
+                ++i;
+              } else {
+                len += 3;
+              }
+            }
+            return len;
+          };
+          var UTF8Decoder = typeof TextDecoder != "undefined" ? new TextDecoder() : void 0;
+          var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead = NaN) => {
+            idx >>>= 0;
+            var endIdx = idx + maxBytesToRead;
+            var endPtr = idx;
+            while (heapOrArray[endPtr] && !(endPtr >= endIdx)) ++endPtr;
+            if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
+              return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
+            }
+            var str = "";
+            while (idx < endPtr) {
+              var u0 = heapOrArray[idx++];
+              if (!(u0 & 128)) {
+                str += String.fromCharCode(u0);
+                continue;
+              }
+              var u1 = heapOrArray[idx++] & 63;
+              if ((u0 & 224) == 192) {
+                str += String.fromCharCode((u0 & 31) << 6 | u1);
+                continue;
+              }
+              var u2 = heapOrArray[idx++] & 63;
+              if ((u0 & 240) == 224) {
+                u0 = (u0 & 15) << 12 | u1 << 6 | u2;
+              } else {
+                u0 = (u0 & 7) << 18 | u1 << 12 | u2 << 6 | heapOrArray[idx++] & 63;
+              }
+              if (u0 < 65536) {
+                str += String.fromCharCode(u0);
+              } else {
+                var ch = u0 - 65536;
+                str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023);
+              }
+            }
+            return str;
+          };
+          var UTF8ToString = (ptr, maxBytesToRead) => {
+            ptr >>>= 0;
+            return ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead) : "";
+          };
+          function __embind_register_std_string(rawType, name) {
+            rawType >>>= 0;
+            name >>>= 0;
+            name = readLatin1String(name);
+            var stdStringIsUTF8 = true;
+            registerType(rawType, {
+              name,
+              fromWireType(value) {
+                var length = HEAPU32[value >>> 2 >>> 0];
+                var payload = value + 4;
+                var str;
+                if (stdStringIsUTF8) {
+                  var decodeStartPtr = payload;
+                  for (var i = 0; i <= length; ++i) {
+                    var currentBytePtr = payload + i;
+                    if (i == length || HEAPU8[currentBytePtr >>> 0] == 0) {
+                      var maxRead = currentBytePtr - decodeStartPtr;
+                      var stringSegment = UTF8ToString(decodeStartPtr, maxRead);
+                      if (str === void 0) {
+                        str = stringSegment;
+                      } else {
+                        str += String.fromCharCode(0);
+                        str += stringSegment;
+                      }
+                      decodeStartPtr = currentBytePtr + 1;
+                    }
+                  }
+                } else {
+                  var a = new Array(length);
+                  for (var i = 0; i < length; ++i) {
+                    a[i] = String.fromCharCode(HEAPU8[payload + i >>> 0]);
+                  }
+                  str = a.join("");
+                }
+                _free(value);
+                return str;
+              },
+              toWireType(destructors, value) {
+                if (value instanceof ArrayBuffer) {
+                  value = new Uint8Array(value);
+                }
+                var length;
+                var valueIsOfTypeString = typeof value == "string";
+                if (!(valueIsOfTypeString || ArrayBuffer.isView(value) && value.BYTES_PER_ELEMENT == 1)) {
+                  throwBindingError("Cannot pass non-string to std::string");
+                }
+                if (stdStringIsUTF8 && valueIsOfTypeString) {
+                  length = lengthBytesUTF8(value);
+                } else {
+                  length = value.length;
+                }
+                var base = _malloc(4 + length + 1);
+                var ptr = base + 4;
+                HEAPU32[base >>> 2 >>> 0] = length;
+                if (valueIsOfTypeString) {
+                  if (stdStringIsUTF8) {
+                    stringToUTF8(value, ptr, length + 1);
+                  } else {
+                    for (var i = 0; i < length; ++i) {
+                      var charCode = value.charCodeAt(i);
+                      if (charCode > 255) {
+                        _free(base);
+                        throwBindingError(
+                          "String has UTF-16 code units that do not fit in 8 bits"
+                        );
+                      }
+                      HEAPU8[ptr + i >>> 0] = charCode;
+                    }
+                  }
+                } else {
+                  HEAPU8.set(value, ptr >>> 0);
+                }
+                if (destructors !== null) {
+                  destructors.push(_free, base);
+                }
+                return base;
+              },
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: readPointer,
+              destructorFunction(ptr) {
+                _free(ptr);
+              }
+            });
+          }
+          var UTF16Decoder = typeof TextDecoder != "undefined" ? new TextDecoder("utf-16le") : void 0;
+          var UTF16ToString = (ptr, maxBytesToRead) => {
+            var endPtr = ptr;
+            var idx = endPtr >> 1;
+            var maxIdx = idx + maxBytesToRead / 2;
+            while (!(idx >= maxIdx) && HEAPU16[idx >>> 0]) ++idx;
+            endPtr = idx << 1;
+            if (endPtr - ptr > 32 && UTF16Decoder)
+              return UTF16Decoder.decode(HEAPU8.subarray(ptr >>> 0, endPtr >>> 0));
+            var str = "";
+            for (var i = 0; !(i >= maxBytesToRead / 2); ++i) {
+              var codeUnit = HEAP16[ptr + i * 2 >>> 1 >>> 0];
+              if (codeUnit == 0) break;
+              str += String.fromCharCode(codeUnit);
+            }
+            return str;
+          };
+          var stringToUTF16 = (str, outPtr, maxBytesToWrite) => {
+            maxBytesToWrite ?? (maxBytesToWrite = 2147483647);
+            if (maxBytesToWrite < 2) return 0;
+            maxBytesToWrite -= 2;
+            var startPtr = outPtr;
+            var numCharsToWrite = maxBytesToWrite < str.length * 2 ? maxBytesToWrite / 2 : str.length;
+            for (var i = 0; i < numCharsToWrite; ++i) {
+              var codeUnit = str.charCodeAt(i);
+              HEAP16[outPtr >>> 1 >>> 0] = codeUnit;
+              outPtr += 2;
+            }
+            HEAP16[outPtr >>> 1 >>> 0] = 0;
+            return outPtr - startPtr;
+          };
+          var lengthBytesUTF16 = (str) => str.length * 2;
+          var UTF32ToString = (ptr, maxBytesToRead) => {
+            var i = 0;
+            var str = "";
+            while (!(i >= maxBytesToRead / 4)) {
+              var utf32 = HEAP32[ptr + i * 4 >>> 2 >>> 0];
+              if (utf32 == 0) break;
+              ++i;
+              if (utf32 >= 65536) {
+                var ch = utf32 - 65536;
+                str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023);
+              } else {
+                str += String.fromCharCode(utf32);
+              }
+            }
+            return str;
+          };
+          var stringToUTF32 = (str, outPtr, maxBytesToWrite) => {
+            outPtr >>>= 0;
+            maxBytesToWrite ?? (maxBytesToWrite = 2147483647);
+            if (maxBytesToWrite < 4) return 0;
+            var startPtr = outPtr;
+            var endPtr = startPtr + maxBytesToWrite - 4;
+            for (var i = 0; i < str.length; ++i) {
+              var codeUnit = str.charCodeAt(i);
+              if (codeUnit >= 55296 && codeUnit <= 57343) {
+                var trailSurrogate = str.charCodeAt(++i);
+                codeUnit = 65536 + ((codeUnit & 1023) << 10) | trailSurrogate & 1023;
+              }
+              HEAP32[outPtr >>> 2 >>> 0] = codeUnit;
+              outPtr += 4;
+              if (outPtr + 4 > endPtr) break;
+            }
+            HEAP32[outPtr >>> 2 >>> 0] = 0;
+            return outPtr - startPtr;
+          };
+          var lengthBytesUTF32 = (str) => {
+            var len = 0;
+            for (var i = 0; i < str.length; ++i) {
+              var codeUnit = str.charCodeAt(i);
+              if (codeUnit >= 55296 && codeUnit <= 57343) ++i;
+              len += 4;
+            }
+            return len;
+          };
+          var __embind_register_std_wstring = function(rawType, charSize, name) {
+            rawType >>>= 0;
+            charSize >>>= 0;
+            name >>>= 0;
+            name = readLatin1String(name);
+            var decodeString, encodeString, readCharAt, lengthBytesUTF;
+            if (charSize === 2) {
+              decodeString = UTF16ToString;
+              encodeString = stringToUTF16;
+              lengthBytesUTF = lengthBytesUTF16;
+              readCharAt = (pointer) => HEAPU16[pointer >>> 1 >>> 0];
+            } else if (charSize === 4) {
+              decodeString = UTF32ToString;
+              encodeString = stringToUTF32;
+              lengthBytesUTF = lengthBytesUTF32;
+              readCharAt = (pointer) => HEAPU32[pointer >>> 2 >>> 0];
+            }
+            registerType(rawType, {
+              name,
+              fromWireType: (value) => {
+                var length = HEAPU32[value >>> 2 >>> 0];
+                var str;
+                var decodeStartPtr = value + 4;
+                for (var i = 0; i <= length; ++i) {
+                  var currentBytePtr = value + 4 + i * charSize;
+                  if (i == length || readCharAt(currentBytePtr) == 0) {
+                    var maxReadBytes = currentBytePtr - decodeStartPtr;
+                    var stringSegment = decodeString(decodeStartPtr, maxReadBytes);
+                    if (str === void 0) {
+                      str = stringSegment;
+                    } else {
+                      str += String.fromCharCode(0);
+                      str += stringSegment;
+                    }
+                    decodeStartPtr = currentBytePtr + charSize;
+                  }
+                }
+                _free(value);
+                return str;
+              },
+              toWireType: (destructors, value) => {
+                if (!(typeof value == "string")) {
+                  throwBindingError(
+                    `Cannot pass non-string to C++ string type ${name}`
+                  );
+                }
+                var length = lengthBytesUTF(value);
+                var ptr = _malloc(4 + length + charSize);
+                HEAPU32[ptr >>> 2 >>> 0] = length / charSize;
+                encodeString(value, ptr + 4, length + charSize);
+                if (destructors !== null) {
+                  destructors.push(_free, ptr);
+                }
+                return ptr;
+              },
+              argPackAdvance: GenericWireTypeSize,
+              readValueFromPointer: readPointer,
+              destructorFunction(ptr) {
+                _free(ptr);
+              }
+            });
+          };
+          function __embind_register_value_object(rawType, name, constructorSignature, rawConstructor, destructorSignature, rawDestructor) {
+            rawType >>>= 0;
+            name >>>= 0;
+            constructorSignature >>>= 0;
+            rawConstructor >>>= 0;
+            destructorSignature >>>= 0;
+            rawDestructor >>>= 0;
+            structRegistrations[rawType] = {
+              name: readLatin1String(name),
+              rawConstructor: embind__requireFunction(constructorSignature, rawConstructor),
+              rawDestructor: embind__requireFunction(destructorSignature, rawDestructor),
+              fields: []
+            };
+          }
+          function __embind_register_value_object_field(structType, fieldName, getterReturnType, getterSignature, getter, getterContext, setterArgumentType, setterSignature, setter, setterContext) {
+            structType >>>= 0;
+            fieldName >>>= 0;
+            getterReturnType >>>= 0;
+            getterSignature >>>= 0;
+            getter >>>= 0;
+            getterContext >>>= 0;
+            setterArgumentType >>>= 0;
+            setterSignature >>>= 0;
+            setter >>>= 0;
+            setterContext >>>= 0;
+            structRegistrations[structType].fields.push({
+              fieldName: readLatin1String(fieldName),
+              getterReturnType,
+              getter: embind__requireFunction(getterSignature, getter),
+              getterContext,
+              setterArgumentType,
+              setter: embind__requireFunction(setterSignature, setter),
+              setterContext
+            });
+          }
+          var __embind_register_void = function(rawType, name) {
+            rawType >>>= 0;
+            name >>>= 0;
+            name = readLatin1String(name);
+            registerType(rawType, {
+              isVoid: true,
+              name,
+              argPackAdvance: 0,
+              fromWireType: () => void 0,
+              toWireType: (destructors, o) => void 0
+            });
+          };
+          var emval_returnValue = (returnType, destructorsRef, handle) => {
+            var destructors = [];
+            var result = returnType["toWireType"](destructors, handle);
+            if (destructors.length) {
+              HEAPU32[destructorsRef >>> 2 >>> 0] = Emval.toHandle(destructors);
+            }
+            return result;
+          };
+          function __emval_as(handle, returnType, destructorsRef) {
+            handle >>>= 0;
+            returnType >>>= 0;
+            destructorsRef >>>= 0;
+            handle = Emval.toValue(handle);
+            returnType = requireRegisteredType(returnType, "emval::as");
+            return emval_returnValue(returnType, destructorsRef, handle);
+          }
+          var emval_symbols = {};
+          var getStringOrSymbol = (address) => {
+            var symbol = emval_symbols[address];
+            if (symbol === void 0) {
+              return readLatin1String(address);
+            }
+            return symbol;
+          };
+          var emval_methodCallers = [];
+          function __emval_call_method(caller, objHandle, methodName, destructorsRef, args) {
+            caller >>>= 0;
+            objHandle >>>= 0;
+            methodName >>>= 0;
+            destructorsRef >>>= 0;
+            args >>>= 0;
+            caller = emval_methodCallers[caller];
+            objHandle = Emval.toValue(objHandle);
+            methodName = getStringOrSymbol(methodName);
+            return caller(objHandle, objHandle[methodName], destructorsRef, args);
+          }
+          function __emval_equals(first, second) {
+            first >>>= 0;
+            second >>>= 0;
+            first = Emval.toValue(first);
+            second = Emval.toValue(second);
+            return first == second;
+          }
+          var emval_addMethodCaller = (caller) => {
+            var id = emval_methodCallers.length;
+            emval_methodCallers.push(caller);
+            return id;
+          };
+          var emval_lookupTypes = (argCount, argTypes) => {
+            var a = new Array(argCount);
+            for (var i = 0; i < argCount; ++i) {
+              a[i] = requireRegisteredType(
+                HEAPU32[argTypes + i * 4 >>> 2 >>> 0],
+                `parameter ${i}`
+              );
+            }
+            return a;
+          };
+          function __emval_get_method_caller(argCount, argTypes, kind) {
+            argTypes >>>= 0;
+            var types = emval_lookupTypes(argCount, argTypes);
+            var retType = types.shift();
+            argCount--;
+            var functionBody = `return function (obj, func, destructorsRef, args) {
+`;
+            var offset = 0;
+            var argsList = [];
+            if (kind === 0) {
+              argsList.push("obj");
+            }
+            var params = ["retType"];
+            var args = [retType];
+            for (var i = 0; i < argCount; ++i) {
+              argsList.push(`arg${i}`);
+              params.push(`argType${i}`);
+              args.push(types[i]);
+              functionBody += `  var arg${i} = argType${i}.readValueFromPointer(args${offset ? "+" + offset : ""});
+`;
+              offset += types[i].argPackAdvance;
+            }
+            var invoker = kind === 1 ? "new func" : "func.call";
+            functionBody += `  var rv = ${invoker}(${argsList.join(", ")});
+`;
+            if (!retType.isVoid) {
+              params.push("emval_returnValue");
+              args.push(emval_returnValue);
+              functionBody += "  return emval_returnValue(retType, destructorsRef, rv);\n";
+            }
+            functionBody += "};\n";
+            var invokerFunction = new Function(...params, functionBody)(...args);
+            var functionName = `methodCaller<(${types.map((t) => t.name).join(", ")}) => ${retType.name}>`;
+            return emval_addMethodCaller(
+              createNamedFunction(functionName, invokerFunction)
+            );
+          }
+          function __emval_get_property(handle, key) {
+            handle >>>= 0;
+            key >>>= 0;
+            handle = Emval.toValue(handle);
+            key = Emval.toValue(key);
+            return Emval.toHandle(handle[key]);
+          }
+          function __emval_incref(handle) {
+            handle >>>= 0;
+            if (handle > 9) {
+              emval_handles[handle + 1] += 1;
+            }
+          }
+          function __emval_new_cstring(v) {
+            v >>>= 0;
+            return Emval.toHandle(getStringOrSymbol(v));
+          }
+          function __emval_new_object() {
+            return Emval.toHandle({});
+          }
+          function __emval_run_destructors(handle) {
+            handle >>>= 0;
+            var destructors = Emval.toValue(handle);
+            runDestructors(destructors);
+            __emval_decref(handle);
+          }
+          function __emval_set_property(handle, key, value) {
+            handle >>>= 0;
+            key >>>= 0;
+            value >>>= 0;
+            handle = Emval.toValue(handle);
+            key = Emval.toValue(key);
+            value = Emval.toValue(value);
+            handle[key] = value;
+          }
+          function __emval_take_value(type, arg) {
+            type >>>= 0;
+            arg >>>= 0;
+            type = requireRegisteredType(type, "_emval_take_value");
+            var v = type["readValueFromPointer"](arg);
+            return Emval.toHandle(v);
+          }
+          var getHeapMax = () => 4294901760;
+          var alignMemory = (size, alignment) => Math.ceil(size / alignment) * alignment;
+          var growMemory = (size) => {
+            var b = wasmMemory.buffer;
+            var pages = (size - b.byteLength + 65535) / 65536 | 0;
+            try {
+              wasmMemory.grow(pages);
+              updateMemoryViews();
+              return 1;
+            } catch (e) {
+            }
+          };
+          function _emscripten_resize_heap(requestedSize) {
+            requestedSize >>>= 0;
+            var oldSize = HEAPU8.length;
+            var maxHeapSize = getHeapMax();
+            if (requestedSize > maxHeapSize) {
+              return false;
+            }
+            for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
+              var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown);
+              overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296);
+              var newSize = Math.min(
+                maxHeapSize,
+                alignMemory(Math.max(requestedSize, overGrownHeapSize), 65536)
+              );
+              var replacement = growMemory(newSize);
+              if (replacement) {
+                return true;
+              }
+            }
+            return false;
+          }
+          var uleb128Encode = (n, target) => {
+            if (n < 128) {
+              target.push(n);
+            } else {
+              target.push(n % 128 | 128, n >> 7);
+            }
+          };
+          var sigToWasmTypes = (sig) => {
+            var typeNames = { i: "i32", j: "i64", f: "f32", d: "f64", e: "externref", p: "i32" };
+            var type = {
+              parameters: [],
+              results: sig[0] == "v" ? [] : [typeNames[sig[0]]]
+            };
+            for (var i = 1; i < sig.length; ++i) {
+              type.parameters.push(typeNames[sig[i]]);
+            }
+            return type;
+          };
+          var generateFuncType = (sig, target) => {
+            var sigRet = sig.slice(0, 1);
+            var sigParam = sig.slice(1);
+            var typeCodes = { i: 127, p: 127, j: 126, f: 125, d: 124, e: 111 };
+            target.push(96);
+            uleb128Encode(sigParam.length, target);
+            for (var paramType of sigParam) {
+              target.push(typeCodes[paramType]);
+            }
+            if (sigRet == "v") {
+              target.push(0);
+            } else {
+              target.push(1, typeCodes[sigRet]);
+            }
+          };
+          var convertJsFunctionToWasm = (func, sig) => {
+            if (typeof WebAssembly.Function == "function") {
+              return new WebAssembly.Function(sigToWasmTypes(sig), func);
+            }
+            var typeSectionBody = [1];
+            generateFuncType(sig, typeSectionBody);
+            var bytes = [0, 97, 115, 109, 1, 0, 0, 0, 1];
+            uleb128Encode(typeSectionBody.length, bytes);
+            bytes.push(...typeSectionBody);
+            bytes.push(2, 7, 1, 1, 101, 1, 102, 0, 0, 7, 5, 1, 1, 102, 0, 0);
+            var module = new WebAssembly.Module(new Uint8Array(bytes));
+            var instance = new WebAssembly.Instance(module, { e: { f: func } });
+            var wrappedFunc = instance.exports["f"];
+            return wrappedFunc;
+          };
+          var updateTableMap = (offset, count) => {
+            if (functionsInTableMap) {
+              for (var i = offset; i < offset + count; i++) {
+                var item = getWasmTableEntry(i);
+                if (item) {
+                  functionsInTableMap.set(item, i);
+                }
+              }
+            }
+          };
+          var functionsInTableMap;
+          var getFunctionAddress = (func) => {
+            if (!functionsInTableMap) {
+              functionsInTableMap = /* @__PURE__ */ new WeakMap();
+              updateTableMap(0, wasmTable.length);
+            }
+            return functionsInTableMap.get(func) || 0;
+          };
+          var freeTableIndexes = [];
+          var getEmptyTableSlot = () => {
+            if (freeTableIndexes.length) {
+              return freeTableIndexes.pop();
+            }
+            try {
+              wasmTable.grow(1);
+            } catch (err2) {
+              if (!(err2 instanceof RangeError)) {
+                throw err2;
+              }
+              throw "Unable to grow wasm table. Set ALLOW_TABLE_GROWTH.";
+            }
+            return wasmTable.length - 1;
+          };
+          var setWasmTableEntry = (idx, func) => wasmTable.set(idx, func);
+          var addFunction = (func, sig) => {
+            var rtn = getFunctionAddress(func);
+            if (rtn) {
+              return rtn;
+            }
+            var ret = getEmptyTableSlot();
+            try {
+              setWasmTableEntry(ret, func);
+            } catch (err2) {
+              if (!(err2 instanceof TypeError)) {
+                throw err2;
+              }
+              var wrapped = convertJsFunctionToWasm(func, sig);
+              setWasmTableEntry(ret, wrapped);
+            }
+            functionsInTableMap.set(func, ret);
+            return ret;
+          };
+          var removeFunction = (index) => {
+            functionsInTableMap.delete(getWasmTableEntry(index));
+            setWasmTableEntry(index, null);
+            freeTableIndexes.push(index);
+          };
+          embind_init_charCodes();
+          init_ClassHandle();
+          init_RegisteredPointer();
+          init_emval();
+          var wasmImports = {
+            i: ___cxa_throw,
+            C: __abort_js,
+            n: __embind_finalize_value_object,
+            x: __embind_register_bigint,
+            G: __embind_register_bool,
+            h: __embind_register_class,
+            g: __embind_register_class_constructor,
+            a: __embind_register_class_function,
+            E: __embind_register_emval,
+            t: __embind_register_enum,
+            f: __embind_register_enum_value,
+            w: __embind_register_float,
+            c: __embind_register_function,
+            j: __embind_register_integer,
+            e: __embind_register_memory_view,
+            k: __embind_register_optional,
+            F: __embind_register_std_string,
+            s: __embind_register_std_wstring,
+            o: __embind_register_value_object,
+            l: __embind_register_value_object_field,
+            H: __embind_register_void,
+            v: __emval_as,
+            z: __emval_call_method,
+            b: __emval_decref,
+            m: __emval_equals,
+            y: __emval_get_method_caller,
+            B: __emval_get_property,
+            u: __emval_incref,
+            q: __emval_new_cstring,
+            A: __emval_new_object,
+            p: __emval_run_destructors,
+            r: __emval_set_property,
+            d: __emval_take_value,
+            D: _emscripten_resize_heap
+          };
+          var wasmExports = await createWasm();
+          var ___wasm_call_ctors = wasmExports["J"];
+          var ___getTypeName = wasmExports["K"];
+          var _free = wasmExports["M"];
+          var _malloc = wasmExports["N"];
+          function applySignatureConversions(wasmExports2) {
+            wasmExports2 = Object.assign({}, wasmExports2);
+            var makeWrapper_pp = (f) => (a0) => f(a0) >>> 0;
+            var makeWrapper_p = (f) => () => f() >>> 0;
+            wasmExports2["K"] = makeWrapper_pp(wasmExports2["K"]);
+            wasmExports2["N"] = makeWrapper_pp(wasmExports2["N"]);
+            wasmExports2["_emscripten_stack_alloc"] = makeWrapper_pp(wasmExports2["_emscripten_stack_alloc"]);
+            wasmExports2["emscripten_stack_get_current"] = makeWrapper_p(wasmExports2["emscripten_stack_get_current"]);
+            return wasmExports2;
+          }
+          Module2["addFunction"] = addFunction;
+          Module2["removeFunction"] = removeFunction;
+          function run() {
+            if (runDependencies > 0) {
+              dependenciesFulfilled = run;
+              return;
+            }
+            preRun();
+            if (runDependencies > 0) {
+              dependenciesFulfilled = run;
+              return;
+            }
+            function doRun() {
+              Module2["calledRun"] = true;
+              if (ABORT) return;
+              initRuntime();
+              readyPromiseResolve(Module2);
+              Module2["onRuntimeInitialized"]?.();
+              postRun();
+            }
+            if (Module2["setStatus"]) {
+              Module2["setStatus"]("Running...");
+              setTimeout(() => {
+                setTimeout(() => Module2["setStatus"](""), 1);
+                doRun();
+              }, 1);
+            } else {
+              doRun();
+            }
+          }
+          if (Module2["preInit"]) {
+            if (typeof Module2["preInit"] == "function")
+              Module2["preInit"] = [Module2["preInit"]];
+            while (Module2["preInit"].length > 0) {
+              Module2["preInit"].pop()();
+            }
+          }
+          run();
+          moduleRtn = readyPromise;
+          return moduleRtn;
+        };
+      })();
+      manifold_default = Module;
+    }
+  });
+
+  // vite-url:manifold-3d/manifold.wasm
+  var manifold_exports2 = {};
+  __export(manifold_exports2, {
+    default: () => manifold_default2
+  });
+  var manifold_default2;
+  var init_manifold2 = __esm({
+    "vite-url:manifold-3d/manifold.wasm"() {
+      manifold_default2 = "./manifold.wasm";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/texture-2d.ts
+  function loadTexture2D(engine, url, opts = {}) {
+    const device = engine._device;
+    if (!_tex2dCache) {
+      _tex2dCache = /* @__PURE__ */ new WeakMap();
+    }
+    let dc = _tex2dCache.get(device);
+    if (!dc) {
+      dc = /* @__PURE__ */ new Map();
+      _tex2dCache.set(device, dc);
+    }
+    const key = `${url}\0${opts.mipMaps ?? true}\0${opts.addressModeU ?? "repeat"}\0${opts.addressModeV ?? "repeat"}\0${opts.minFilter ?? "linear"}\0${opts.magFilter ?? "linear"}\0${opts.invertY ?? true}\0${opts.srgb ?? false}\0${opts.premultiplyAlpha ?? false}`;
+    const hit = dc.get(key);
+    if (hit) {
+      return hit;
+    }
+    const map = dc;
+    const p = loadTexture2DImpl(engine, url, opts);
+    map.set(key, p);
+    p.catch(() => map.delete(key));
+    return p;
+  }
+  async function loadTexture2DImpl(engine, url, opts) {
+    const device = engine._device;
+    const mipMaps = opts.mipMaps ?? true;
+    const addressModeU = opts.addressModeU ?? "repeat";
+    const addressModeV = opts.addressModeV ?? "repeat";
+    const invertY = opts.invertY ?? true;
+    const srgb = opts.srgb ?? false;
+    const premultiplyAlpha = opts.premultiplyAlpha ?? false;
+    const format = srgb ? "rgba8unorm-srgb" : "rgba8unorm";
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const imageBitmap = await createImageBitmap(blob, {
+      premultiplyAlpha: premultiplyAlpha ? "premultiply" : "none",
+      colorSpaceConversion: "none"
+    });
+    const width = imageBitmap.width;
+    const height = imageBitmap.height;
+    const mipLevelCount = mipMaps ? Math.floor(Math.log2(Math.max(width, height))) + 1 : 1;
+    const texture = device.createTexture({
+      size: { width, height },
+      format,
+      mipLevelCount,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT
+    });
+    device.queue.copyExternalImageToTexture({ source: imageBitmap, flipY: invertY }, { texture, premultipliedAlpha: premultiplyAlpha }, { width, height });
+    imageBitmap.close();
+    if (mipMaps && mipLevelCount > 1) {
+      const { generateMipmaps: generateMipmaps2 } = await Promise.resolve().then(() => (init_generate_mipmaps(), generate_mipmaps_exports));
+      generateMipmaps2(engine, texture);
+    }
+    const minF = opts.minFilter ?? "linear";
+    const magF = opts.magFilter ?? "linear";
+    const mipF = mipMaps ? "linear" : "nearest";
+    const allLinear = minF === "linear" && magF === "linear" && mipF === "linear";
+    const sampler = getOrCreateSampler(engine, {
+      addressModeU,
+      addressModeV,
+      minFilter: minF,
+      magFilter: magF,
+      mipmapFilter: mipF,
+      maxAnisotropy: allLinear ? 4 : 1
+    });
+    const tex2d = { texture, view: texture.createView(), sampler, width, height };
+    engine._dlr?.u(tex2d, url, opts);
+    acquireTexture(tex2d);
+    return tex2d;
+  }
+  var _tex2dCache;
+  var init_texture_2d = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/texture-2d.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_gpu_pool();
+      _tex2dCache = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-flags.ts
+  function _registerStdExt(ext) {
+    (_stdExts ?? (_stdExts = /* @__PURE__ */ new Map())).set(ext._id, ext);
+    _stdExtsSorted = null;
+  }
+  function _getStdExts() {
+    return _stdExts ?? (_stdExts = /* @__PURE__ */ new Map());
+  }
+  function _getStdExtsSorted() {
+    if (!_stdExtsSorted) {
+      const map = _stdExts;
+      _stdExtsSorted = map ? Array.from(map.values()).sort((a, b) => a._id.localeCompare(b._id)) : [];
+    }
+    return _stdExtsSorted;
+  }
+  var HAS_DIFFUSE_TEXTURE, HAS_EMISSIVE_TEXTURE, HAS_BUMP_TEXTURE, HAS_SPECULAR_TEXTURE, HAS_AMBIENT_TEXTURE, HAS_LIGHTMAP_TEXTURE, HAS_OPACITY_TEXTURE, LIGHTMAP_USES_UV2, AMBIENT_USES_UV2, DOUBLE_SIDED, DIFFUSE_USES_UV2, SPECULAR_USES_UV2, OPACITY_FROM_RGB, HAS_REFLECTION_TEXTURE, DISABLE_LIGHTING, MATERIAL_ALPHA_BLEND, HAS_CUBE_REFLECTION, NO_COLOR_OUTPUT, HAS_DEPTH_EMISSIVE_TEXTURE, ESM_SHADOW_OUTPUT, GEOMETRY_OUTPUT, LIGHTMAP_SHADOWMAP, LIGHTMAP_FLIP_V, _stdExts, _stdExtsSorted, NEEDS_UV, NEEDS_UV2;
+  var init_standard_flags = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-flags.ts"() {
+      "use strict";
+      HAS_DIFFUSE_TEXTURE = 1 << 0;
+      HAS_EMISSIVE_TEXTURE = 1 << 1;
+      HAS_BUMP_TEXTURE = 1 << 2;
+      HAS_SPECULAR_TEXTURE = 1 << 3;
+      HAS_AMBIENT_TEXTURE = 1 << 4;
+      HAS_LIGHTMAP_TEXTURE = 1 << 5;
+      HAS_OPACITY_TEXTURE = 1 << 6;
+      LIGHTMAP_USES_UV2 = 1 << 7;
+      AMBIENT_USES_UV2 = 1 << 8;
+      DOUBLE_SIDED = 1 << 9;
+      DIFFUSE_USES_UV2 = 1 << 10;
+      SPECULAR_USES_UV2 = 1 << 11;
+      OPACITY_FROM_RGB = 1 << 12;
+      HAS_REFLECTION_TEXTURE = 1 << 13;
+      DISABLE_LIGHTING = 1 << 14;
+      MATERIAL_ALPHA_BLEND = 1 << 16;
+      HAS_CUBE_REFLECTION = 1 << 17;
+      NO_COLOR_OUTPUT = 1 << 18;
+      HAS_DEPTH_EMISSIVE_TEXTURE = 1 << 19;
+      ESM_SHADOW_OUTPUT = 1 << 20;
+      GEOMETRY_OUTPUT = 1 << 21;
+      LIGHTMAP_SHADOWMAP = 1 << 15;
+      LIGHTMAP_FLIP_V = 1 << 22;
+      _stdExts = null;
+      _stdExtsSorted = null;
+      NEEDS_UV = HAS_DIFFUSE_TEXTURE | HAS_EMISSIVE_TEXTURE | HAS_BUMP_TEXTURE | HAS_SPECULAR_TEXTURE | HAS_AMBIENT_TEXTURE | HAS_LIGHTMAP_TEXTURE | HAS_OPACITY_TEXTURE;
+      NEEDS_UV2 = LIGHTMAP_USES_UV2 | AMBIENT_USES_UV2 | DIFFUSE_USES_UV2 | SPECULAR_USES_UV2;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/wgsl-helpers.ts
+  var WGSL_PERTURB_NORMAL, WGSL_FOG;
+  var init_wgsl_helpers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/wgsl-helpers.ts"() {
+      "use strict";
+      WGSL_PERTURB_NORMAL = `
+fn perturbNormal(vNormalW: vec3<f32>, positionW: vec3<f32>, uv: vec2<f32>, bumpScale: f32) -> vec3<f32> {
+let normalSample = textureSample(bT, bS, uv).rgb * 2.0 - 1.0;
+let N = normalize(vNormalW) * bumpScale;
+let dp1 = dpdx(positionW);
+let dp2 = -dpdy(positionW);
+let duv1 = dpdx(uv);
+let duv2 = -dpdy(uv);
+let dp2perp = cross(dp2, N);
+let dp1perp = cross(N, dp1);
+var tangent = dp2perp * duv1.x + dp1perp * duv2.x;
+var bitangent = dp2perp * duv1.y + dp1perp * duv2.y;
+let det = max(dot(tangent, tangent), dot(bitangent, bitangent));
+let invmax = select(inverseSqrt(det), 0.0, det == 0.0);
+let cotangentFrame = mat3x3<f32>(tangent * invmax, bitangent * invmax, N);
+return normalize(cotangentFrame * normalSample);
+}
+`;
+      WGSL_FOG = `
+const E_FOG: f32 = 2.71828;
+fn calcFogFactor(fogDistance: vec3<f32>) -> f32 {
+var fogCoeff: f32 = 1.0;
+let fogMode = scene.vFogInfos.x;
+let fogStart = scene.vFogInfos.y;
+let fogEnd = scene.vFogInfos.z;
+let fogDensity = scene.vFogInfos.w;
+let dist = length(fogDistance);
+if (fogMode == 3.0) { fogCoeff = (fogEnd - dist) / (fogEnd - fogStart); }
+else if (fogMode == 1.0) { fogCoeff = 1.0 / pow(E_FOG, dist * fogDensity); }
+else if (fogMode == 2.0) { fogCoeff = 1.0 / pow(E_FOG, dist * dist * fogDensity * fogDensity); }
+return clamp(fogCoeff, 0.0, 1.0);
+}
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/normal-map-fragment.ts
+  var normal_map_fragment_exports = {};
+  __export(normal_map_fragment_exports, {
+    bumpStdExt: () => bumpStdExt,
+    createNormalMapFragment: () => createNormalMapFragment
+  });
+  function createNormalMapFragment() {
+    return {
+      _id: "normal-map",
+      _bindings: [
+        { _name: "bT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT },
+        { _name: "bS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT }
+      ],
+      _helperFunctions: WGSL_PERTURB_NORMAL,
+      _fragmentSlots: {
+        AC: `normalW = perturbNormal(input.vn, input.vp, input.vu, mat.bs);`
+      }
+    };
+  }
+  var STAGE_FRAGMENT, bumpStdExt;
+  var init_normal_map_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/normal-map-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      init_wgsl_helpers();
+      STAGE_FRAGMENT = 2;
+      bumpStdExt = {
+        _id: "normal-map",
+        _phase: "mesh",
+        _feature: HAS_BUMP_TEXTURE,
+        _frag: createNormalMapFragment,
+        _bind(mat, entries, b) {
+          const tex = mat.bumpTexture;
+          entries.push({ binding: b++, resource: tex.texture.createView() });
+          entries.push({ binding: b++, resource: tex.sampler });
+          return b;
+        },
+        _textures(mat, out) {
+          if (mat.bumpTexture) {
+            out.push(mat.bumpTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-emissive-fragment.ts
+  var std_emissive_fragment_exports = {};
+  __export(std_emissive_fragment_exports, {
+    createStdEmissiveFragment: () => createStdEmissiveFragment,
+    stdEmissiveExt: () => stdEmissiveExt
+  });
+  function createStdEmissiveFragment(depthTexture) {
+    return {
+      _id: "std-emissive",
+      _bindings: [
+        {
+          _name: "eT",
+          _type: { _kind: "texture", _textureType: "texture_2d<f32>", _sampleType: depthTexture ? "unfilterable-float" : void 0 },
+          _visibility: STAGE_FRAGMENT2
+        },
+        { _name: "eS", _type: { _kind: "sampler", _samplerType: depthTexture ? "sampler_non_filtering" : "sampler" }, _visibility: STAGE_FRAGMENT2 }
+      ],
+      _fragmentSlots: {
+        AT: `emissiveContrib = mat.ec + textureSample(eT, eS, input.vu).rgb * mat.tl;`
+      }
+    };
+  }
+  var STAGE_FRAGMENT2, stdEmissiveExt;
+  var init_std_emissive_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-emissive-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      STAGE_FRAGMENT2 = 2;
+      stdEmissiveExt = {
+        _id: "std-emissive",
+        _phase: "mesh",
+        _feature: HAS_EMISSIVE_TEXTURE,
+        _frag: (features) => createStdEmissiveFragment((features & HAS_DEPTH_EMISSIVE_TEXTURE) !== 0),
+        _bind(mat, entries, b) {
+          const tex = mat.emissiveTexture;
+          entries.push({ binding: b++, resource: tex.view });
+          entries.push({ binding: b++, resource: tex.sampler });
+          return b;
+        },
+        _textures(mat, out) {
+          if (mat.emissiveTexture) {
+            out.push(mat.emissiveTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-specular-fragment.ts
+  var std_specular_fragment_exports = {};
+  __export(std_specular_fragment_exports, {
+    createStdSpecularFragment: () => createStdSpecularFragment,
+    stdSpecularExt: () => stdSpecularExt
+  });
+  function createStdSpecularFragment(usesUV2) {
+    const uv = usesUV2 ? "input.vv" : "input.vu";
+    return {
+      _id: "std-specular",
+      _bindings: [
+        { _name: "sT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT3 },
+        { _name: "sS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT3 }
+      ],
+      _fragmentSlots: {
+        AT: `specularColor = textureSample(sT, sS, ${uv}).rgb;`
+      }
+    };
+  }
+  var STAGE_FRAGMENT3, stdSpecularExt;
+  var init_std_specular_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-specular-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      STAGE_FRAGMENT3 = 2;
+      stdSpecularExt = {
+        _id: "std-specular",
+        _phase: "mesh",
+        _feature: HAS_SPECULAR_TEXTURE,
+        _frag: (features) => createStdSpecularFragment((features & SPECULAR_USES_UV2) !== 0),
+        _bind(mat, entries, b) {
+          const tex = mat.specularTexture;
+          entries.push({ binding: b++, resource: tex.texture.createView() });
+          entries.push({ binding: b++, resource: tex.sampler });
+          return b;
+        },
+        _textures(mat, out) {
+          if (mat.specularTexture) {
+            out.push(mat.specularTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-ambient-fragment.ts
+  var std_ambient_fragment_exports = {};
+  __export(std_ambient_fragment_exports, {
+    createStdAmbientFragment: () => createStdAmbientFragment,
+    stdAmbientExt: () => stdAmbientExt
+  });
+  function createStdAmbientFragment(usesUV2) {
+    const uv = usesUV2 ? "input.vv" : "input.vu";
+    return {
+      _id: "std-ambient",
+      _bindings: [
+        { _name: "aT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT4 },
+        { _name: "aS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT4 }
+      ],
+      _fragmentSlots: {
+        AD: `baseAmbientColor = textureSample(aT, aS, ${uv}).rgb * mat.ambTexLvl;`
+      }
+    };
+  }
+  var STAGE_FRAGMENT4, stdAmbientExt;
+  var init_std_ambient_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-ambient-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      STAGE_FRAGMENT4 = 2;
+      stdAmbientExt = {
+        _id: "std-ambient",
+        _phase: "mesh",
+        _feature: HAS_AMBIENT_TEXTURE,
+        _frag: (features) => createStdAmbientFragment((features & AMBIENT_USES_UV2) !== 0),
+        _bind(mat, entries, b) {
+          const tex = mat.ambientTexture;
+          entries.push({ binding: b++, resource: tex.texture.createView() });
+          entries.push({ binding: b++, resource: tex.sampler });
+          return b;
+        },
+        _textures(mat, out) {
+          if (mat.ambientTexture) {
+            out.push(mat.ambientTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-lightmap-fragment.ts
+  var std_lightmap_fragment_exports = {};
+  __export(std_lightmap_fragment_exports, {
+    createStdLightmapFragment: () => createStdLightmapFragment,
+    stdLightmapExt: () => stdLightmapExt
+  });
+  function createStdLightmapFragment(usesUV2, shadowmap, flipV) {
+    const baseUv = usesUV2 ? "input.vv" : "input.vu";
+    const uv = flipV ? `vec2<f32>(${baseUv}.x, 1.0 - ${baseUv}.y)` : baseUv;
+    const lm = `textureSample(lT, lS, ${uv}).rgb * mat.lmLvl`;
+    const apply = shadowmap ? `color.rgb * (${lm})` : `color.rgb + ${lm}`;
+    return {
+      _id: "std-lightmap",
+      _bindings: [
+        { _name: "lT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT5 },
+        { _name: "lS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT5 }
+      ],
+      _fragmentSlots: {
+        BC: `color = vec4<f32>(${apply}, color.a);`
+      }
+    };
+  }
+  var STAGE_FRAGMENT5, stdLightmapExt;
+  var init_std_lightmap_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-lightmap-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      STAGE_FRAGMENT5 = 2;
+      stdLightmapExt = {
+        _id: "std-lightmap",
+        _phase: "mesh",
+        _feature: HAS_LIGHTMAP_TEXTURE,
+        _frag: (features) => createStdLightmapFragment((features & LIGHTMAP_USES_UV2) !== 0, (features & LIGHTMAP_SHADOWMAP) !== 0, (features & LIGHTMAP_FLIP_V) !== 0),
+        _bind(mat, entries, b) {
+          const tex = mat.lightmapTexture;
+          entries.push({ binding: b++, resource: tex.texture.createView() });
+          entries.push({ binding: b++, resource: tex.sampler });
+          return b;
+        },
+        _textures(mat, out) {
+          if (mat.lightmapTexture) {
+            out.push(mat.lightmapTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-opacity-fragment.ts
+  var std_opacity_fragment_exports = {};
+  __export(std_opacity_fragment_exports, {
+    createStdOpacityFragment: () => createStdOpacityFragment,
+    stdOpacityExt: () => stdOpacityExt
+  });
+  function createStdOpacityFragment(fromRGB) {
+    const opacityCalc = fromRGB ? `{ let opSample = textureSample(oT, oS, input.vu); alpha *= dot(opSample.rgb, vec3<f32>(0.3, 0.59, 0.11)) * mat.opLvl; }` : `alpha *= textureSample(oT, oS, input.vu).a * mat.opLvl;`;
+    return {
+      _id: "std-opacity",
+      _bindings: [
+        { _name: "oT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT6 },
+        { _name: "oS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT6 }
+      ],
+      _fragmentSlots: {
+        AT: opacityCalc
+      }
+    };
+  }
+  var STAGE_FRAGMENT6, stdOpacityExt;
+  var init_std_opacity_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-opacity-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      STAGE_FRAGMENT6 = 2;
+      stdOpacityExt = {
+        _id: "std-opacity",
+        _phase: "mesh",
+        _feature: HAS_OPACITY_TEXTURE,
+        _frag: (features) => createStdOpacityFragment((features & OPACITY_FROM_RGB) !== 0),
+        _bind(mat, entries, b) {
+          const tex = mat.opacityTexture;
+          entries.push({ binding: b++, resource: tex.texture.createView() });
+          entries.push({ binding: b++, resource: tex.sampler });
+          return b;
+        },
+        _textures(mat, out) {
+          if (mat.opacityTexture) {
+            out.push(mat.opacityTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-reflection-fragment.ts
+  var std_reflection_fragment_exports = {};
+  __export(std_reflection_fragment_exports, {
+    createStdReflectionFragment: () => createStdReflectionFragment,
+    stdReflectionExt: () => stdReflectionExt
+  });
+  function createStdReflectionFragment() {
+    return {
+      _id: "std-reflection",
+      _bindings: [
+        { _name: "rT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT7 },
+        { _name: "rS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT7 }
+      ],
+      _helperFunctions: REFLECTION_HELPERS,
+      _fragmentSlots: {
+        AD: `{
+var reflCoords: vec2<f32>;
+if (mat.rCm < 1.5) { reflCoords = computeSphericalCoords(input.vp, normalW); }
+else { reflCoords = computePlanarCoords(input.vp, normalW); }
+reflectionColor = textureSample(rT, rS, reflCoords).rgb * mat.rLvl;
+}`
+      }
+    };
+  }
+  var STAGE_FRAGMENT7, REFLECTION_HELPERS, stdReflectionExt;
+  var init_std_reflection_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-reflection-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      STAGE_FRAGMENT7 = 2;
+      REFLECTION_HELPERS = `
+fn computeSphericalCoords(worldPos: vec3<f32>, worldNormal: vec3<f32>) -> vec2<f32> {
+let viewDir = normalize((scene.view * vec4<f32>(worldPos, 1.0)).xyz);
+let viewNormal = normalize((scene.view * vec4<f32>(worldNormal, 0.0)).xyz);
+var r = reflect(viewDir, viewNormal);
+r.z = r.z - 1.0;
+let m = 2.0 * length(r);
+return vec2<f32>(r.x / m + 0.5, r.y / m + 0.5);
+}
+fn computePlanarCoords(worldPos: vec3<f32>, worldNormal: vec3<f32>) -> vec2<f32> {
+let viewDir = worldPos - scene.vEyePosition.xyz;
+let coords = normalize(reflect(viewDir, worldNormal));
+return vec2<f32>(coords.x, 1.0 - coords.y);
+}
+`;
+      stdReflectionExt = {
+        _id: "std-reflection",
+        _phase: "mesh",
+        _feature: HAS_REFLECTION_TEXTURE,
+        _frag: createStdReflectionFragment,
+        _bind(mat, entries, b) {
+          const tex = mat.reflectionTexture;
+          entries.push({ binding: b++, resource: tex.texture.createView() });
+          entries.push({ binding: b++, resource: tex.sampler });
+          return b;
+        },
+        _textures(mat, out) {
+          if (mat.reflectionTexture) {
+            out.push(mat.reflectionTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-cube-reflection-fragment.ts
+  var std_cube_reflection_fragment_exports = {};
+  __export(std_cube_reflection_fragment_exports, {
+    createStdCubeReflectionFragment: () => createStdCubeReflectionFragment,
+    stdCubeReflectionExt: () => stdCubeReflectionExt
+  });
+  function createStdCubeReflectionFragment() {
+    return {
+      _id: "std-cube-reflection",
+      _bindings: [
+        { _name: "cRT", _type: { _kind: "texture", _textureType: "texture_cube<f32>" }, _visibility: 2 },
+        { _name: "cRS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: 2 }
+      ],
+      _fragmentSlots: {
+        AD: `{let v=normalize(input.vp-scene.vEyePosition.xyz);reflectionColor=textureSample(cRT,cRS,reflect(v,normalW)).rgb*mat.rLvl;}`
+      }
+    };
+  }
+  var stdCubeReflectionExt;
+  var init_std_cube_reflection_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-cube-reflection-fragment.ts"() {
+      "use strict";
+      init_standard_flags();
+      stdCubeReflectionExt = {
+        _id: "std-cube-reflection",
+        _phase: "mesh",
+        _feature: HAS_CUBE_REFLECTION,
+        _frag: createStdCubeReflectionFragment,
+        _bind(mat, entries, b) {
+          const cube = mat.reflectionCubeTexture;
+          entries.push({ binding: b++, resource: cube.view });
+          entries.push({ binding: b++, resource: cube.sampler });
+          return b;
+        }
+        // Cube textures are tracked separately; no Texture2D[] contribution.
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu.ts
+  var thin_instance_gpu_exports = {};
+  __export(thin_instance_gpu_exports, {
+    syncThinInstanceBuffers: () => syncThinInstanceBuffers,
+    syncThinInstanceGpuData: () => syncThinInstanceGpuData
+  });
+  function syncThinInstanceGpuData(engine, ti, hasColor) {
+    const device = engine._device;
+    const needsStorage = ti._gpuCullingEnabled;
+    if (ti._version !== ti._gpuVersion || ti._gpuBufferStorage !== needsStorage) {
+      const byteSize = ti.count * 64;
+      let bufferRecreated = false;
+      if (!ti._gpuBuffer || ti._gpuBuffer.size < byteSize || ti._gpuBufferStorage !== needsStorage) {
+        ti._gpuBuffer?.destroy();
+        ti._gpuBuffer = device.createBuffer({
+          size: Math.max(ti._capacity * 64, 4),
+          // STORAGE is always included: the GPU picker binds this matrix
+          // buffer as a read-only storage buffer for thin-instance picking,
+          // so it must be storage-capable even when compute culling is off
+          // (otherwise the whole pick pass is invalidated → nothing is pickable).
+          usage: BU.VERTEX | BU.COPY_DST | BU.STORAGE
+        });
+        ti._gpuBufferStorage = needsStorage;
+        bufferRecreated = true;
+      }
+      const dirtyMin = bufferRecreated ? 0 : ti._dirtyMin;
+      const dirtyMax = bufferRecreated ? ti.count : Math.min(ti._dirtyMax, ti.count);
+      if (dirtyMax > dirtyMin) {
+        const minByte = dirtyMin * 64;
+        const maxByte = dirtyMax * 64;
+        if (ti.matrices instanceof F32) {
+          device.queue.writeBuffer(ti._gpuBuffer, minByte, ti.matrices.buffer, ti.matrices.byteOffset + minByte, maxByte - minByte);
+        } else {
+          const neededFloats = ti._capacity * 16;
+          if (!ti._uploadF32 || ti._uploadF32.length < neededFloats) {
+            ti._uploadF32 = new F32(neededFloats);
+          }
+          const upload = ti._uploadF32;
+          for (let i = dirtyMin; i < dirtyMax; i++) {
+            packMat4IntoF32(upload, ti.matrices, i * 16, i * 16);
+          }
+          device.queue.writeBuffer(ti._gpuBuffer, minByte, upload.buffer, upload.byteOffset + minByte, maxByte - minByte);
+        }
+      }
+      ti._dirtyMin = ti.count;
+      ti._dirtyMax = 0;
+      ti._gpuVersion = ti._version;
+    }
+    if (hasColor && ti.colors) {
+      if (ti._colorVersion !== ti._colorGpuVersion || ti._colorGpuBufferStorage !== needsStorage) {
+        const colorByteSize = ti.count * 16;
+        let colorRecreated = false;
+        if (!ti._colorGpuBuffer || ti._colorGpuBuffer.size < colorByteSize || ti._colorGpuBufferStorage !== needsStorage) {
+          ti._colorGpuBuffer?.destroy();
+          ti._colorGpuBuffer = device.createBuffer({
+            size: Math.max(ti._capacity * 16, 4),
+            usage: BU.VERTEX | BU.COPY_DST | (needsStorage ? BU.STORAGE : 0)
+          });
+          ti._colorGpuBufferStorage = needsStorage;
+          colorRecreated = true;
+        }
+        const cMin = colorRecreated ? 0 : ti._colorDirtyMin;
+        const cMax = colorRecreated ? ti.count : Math.min(ti._colorDirtyMax, ti.count);
+        if (cMax > cMin) {
+          device.queue.writeBuffer(ti._colorGpuBuffer, cMin * 16, ti.colors.buffer, ti.colors.byteOffset + cMin * 16, (cMax - cMin) * 16);
+        }
+        ti._colorDirtyMin = ti.count;
+        ti._colorDirtyMax = 0;
+        ti._colorGpuVersion = ti._colorVersion;
+      }
+    }
+  }
+  function syncThinInstanceBuffers(engine, ti, pass, slot, hasColor, drawBuffers) {
+    syncThinInstanceGpuData(engine, ti, hasColor);
+    const matrixBuffer = drawBuffers?.matrixBuffer ?? ti._gpuBuffer;
+    if (matrixBuffer) {
+      pass.setVertexBuffer(slot++, matrixBuffer);
+    }
+    if (hasColor) {
+      const colorBuffer = drawBuffers?.colorBuffer ?? ti._colorGpuBuffer;
+      if (colorBuffer) {
+        pass.setVertexBuffer(slot++, colorBuffer);
+      }
+    }
+    return slot;
+  }
+  var init_thin_instance_gpu = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_pack_mat4_into_f32();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/thin-instance-fragment.ts
+  var thin_instance_fragment_exports = {};
+  __export(thin_instance_fragment_exports, {
+    createThinInstanceFragment: () => createThinInstanceFragment
+  });
+  function createThinInstanceFragment(hasInstanceColor) {
+    const attrs = [
+      {
+        _name: "world0",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 0
+      },
+      {
+        _name: "world1",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 16
+      },
+      {
+        _name: "world2",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 32
+      },
+      {
+        _name: "world3",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 48
+      }
+    ];
+    if (hasInstanceColor) {
+      attrs.push({
+        _name: "instanceColor",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 16,
+        _stepMode: "instance",
+        _bufferGroup: "ti-color",
+        _offset: 0
+      });
+    }
+    return {
+      _id: "thin-instance",
+      _vertexAttributes: attrs,
+      _varyings: hasInstanceColor ? [{ _name: "vInstanceColor", _type: "vec4<f32>" }] : [],
+      _vertexSlots: {
+        VW: `let instanceWorld = mat4x4<f32>(world0, world1, world2, world3);
+finalWorld = mesh.world * instanceWorld;`,
+        VB: hasInstanceColor ? `out.vInstanceColor = instanceColor;` : ""
+      },
+      _fragmentSlots: hasInstanceColor ? {
+        AT: `baseColor *= input.vInstanceColor.rgb;
+alpha *= input.vInstanceColor.a;`
+      } : {}
+    };
+  }
+  var init_thin_instance_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/thin-instance-fragment.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu-culling.ts
+  function createTiCullState() {
+    const paramsBytes = new ArrayBuffer(PARAM_BYTES);
+    return {
+      _capacity: 0,
+      _visibleMatrixBuffer: null,
+      _visibleColorBuffer: null,
+      _argsBuffer: null,
+      _paramsBuffer: null,
+      _bindGroup: null,
+      _srcMatrixBuffer: null,
+      _srcColorBuffer: null,
+      _hasColor: false,
+      _localSphereReady: false,
+      _localSphere: new F32(4),
+      _paramsBytes: paramsBytes,
+      _paramsF32: new F32(paramsBytes),
+      _paramsU32: new U32(paramsBytes),
+      _argsData: new U32(5),
+      _drawBuffers: null
+    };
+  }
+  function destroyTiCullState(state) {
+    state._visibleMatrixBuffer?.destroy();
+    state._visibleColorBuffer?.destroy();
+    state._argsBuffer?.destroy();
+    state._paramsBuffer?.destroy();
+    state._visibleMatrixBuffer = null;
+    state._visibleColorBuffer = null;
+    state._argsBuffer = null;
+    state._paramsBuffer = null;
+    state._bindGroup = null;
+    state._drawBuffers = null;
+  }
+  function prepareTiCull(engine, state, mesh, gpu, ti, hasColor, context) {
+    const camera = context._camera;
+    if (!ti._gpuCullingEnabled || !camera || mesh.visible === false || ti.count === 0) {
+      state._drawBuffers = null;
+      return null;
+    }
+    if (hasColor && !ti.colors) {
+      state._drawBuffers = null;
+      return null;
+    }
+    if (!state._localSphereReady && !computeLocalSphere(mesh, state._localSphere)) {
+      state._drawBuffers = null;
+      return null;
+    }
+    state._localSphereReady = true;
+    syncThinInstanceGpuData(engine, ti, hasColor);
+    const sourceMatrixBuffer = ti._gpuBuffer;
+    const sourceColorBuffer = hasColor ? ti._colorGpuBuffer : null;
+    if (!sourceMatrixBuffer || hasColor && !sourceColorBuffer) {
+      state._drawBuffers = null;
+      return null;
+    }
+    ensureCullBuffers(engine, state, ti._capacity, hasColor);
+    const visibleMatrixBuffer = state._visibleMatrixBuffer;
+    const visibleColorBuffer = hasColor ? state._visibleColorBuffer : null;
+    const argsBuffer = state._argsBuffer;
+    const paramsBuffer = state._paramsBuffer;
+    const pipeline = getCullPipeline(engine, hasColor);
+    if (state._bindGroup === null || state._srcMatrixBuffer !== sourceMatrixBuffer || state._srcColorBuffer !== sourceColorBuffer || state._hasColor !== hasColor) {
+      const entries = [
+        { binding: 0, resource: { buffer: sourceMatrixBuffer } },
+        { binding: 1, resource: { buffer: visibleMatrixBuffer } },
+        { binding: 2, resource: { buffer: argsBuffer } },
+        { binding: 3, resource: { buffer: paramsBuffer } }
+      ];
+      if (hasColor) {
+        entries.push({ binding: 4, resource: { buffer: sourceColorBuffer } }, { binding: 5, resource: { buffer: visibleColorBuffer } });
+      }
+      state._bindGroup = engine._device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
+      state._srcMatrixBuffer = sourceMatrixBuffer;
+      state._srcColorBuffer = sourceColorBuffer;
+      state._hasColor = hasColor;
+    }
+    const v = camera.viewport;
+    const aspect = context.targetWidth / context.targetHeight * (v ? v.width / v.height : 1);
+    writeCullParams(engine, state, mesh, gpu.indexCount, ti.count, camera, aspect);
+    const pass = engine._currentEncoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, state._bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(ti.count / WORKGROUP_SIZE));
+    pass.end();
+    state._drawBuffers = { matrixBuffer: visibleMatrixBuffer, colorBuffer: visibleColorBuffer };
+    return { drawBuffers: state._drawBuffers, argsBuffer };
+  }
+  function ensureCullBuffers(engine, state, capacity, hasColor) {
+    const device = engine._device;
+    if (state._capacity < capacity) {
+      state._visibleMatrixBuffer?.destroy();
+      state._visibleColorBuffer?.destroy();
+      state._visibleMatrixBuffer = device.createBuffer({
+        size: Math.max(capacity * 64, 4),
+        usage: BU.VERTEX | BU.STORAGE
+      });
+      state._visibleColorBuffer = hasColor ? device.createBuffer({
+        size: Math.max(capacity * 16, 4),
+        usage: BU.VERTEX | BU.STORAGE
+      }) : null;
+      state._capacity = capacity;
+      state._bindGroup = null;
+      state._drawBuffers = null;
+    } else if (hasColor && !state._visibleColorBuffer) {
+      state._visibleColorBuffer = device.createBuffer({
+        size: Math.max(state._capacity * 16, 4),
+        usage: BU.VERTEX | BU.STORAGE
+      });
+      state._bindGroup = null;
+      state._drawBuffers = null;
+    }
+    if (!state._argsBuffer) {
+      state._argsBuffer = device.createBuffer({
+        size: INDIRECT_ARGS_BYTES,
+        usage: BU.INDIRECT | BU.STORAGE | BU.COPY_DST
+      });
+    }
+    if (!state._paramsBuffer) {
+      state._paramsBuffer = device.createBuffer({
+        size: PARAM_BYTES,
+        usage: BU.UNIFORM | BU.COPY_DST
+      });
+    }
+  }
+  function getCullPipeline(engine, hasColor) {
+    const device = engine._device;
+    if (_cachedDevice2 !== device) {
+      _cachedDevice2 = device;
+      _pipelineNoColor = null;
+      _pipelineColor = null;
+    }
+    if (hasColor) {
+      _pipelineColor ?? (_pipelineColor = device.createComputePipeline({
+        layout: "auto",
+        compute: { module: device.createShaderModule({ code: CULL_WGSL_COLOR }), entryPoint: "mainColor" }
+      }));
+      return _pipelineColor;
+    }
+    _pipelineNoColor ?? (_pipelineNoColor = device.createComputePipeline({
+      layout: "auto",
+      compute: { module: device.createShaderModule({ code: CULL_WGSL_NO_COLOR }), entryPoint: "main" }
+    }));
+    return _pipelineNoColor;
+  }
+  function writeCullParams(engine, state, mesh, indexCount, instanceCount, camera, aspect) {
+    const params = state._paramsF32;
+    const viewProjection = getViewProjectionMatrix(camera, aspect);
+    writeFrustumPlanes(params, viewProjection);
+    params.set(mesh.worldMatrix, MESH_WORLD_FLOAT_OFFSET);
+    params.set(state._localSphere, LOCAL_SPHERE_FLOAT_OFFSET);
+    state._paramsU32[COUNT_U32_OFFSET] = instanceCount;
+    const args = state._argsData;
+    args[0] = indexCount;
+    args[1] = 0;
+    args[2] = 0;
+    args[3] = 0;
+    args[4] = 0;
+    engine._device.queue.writeBuffer(state._argsBuffer, 0, args.buffer, args.byteOffset, args.byteLength);
+    engine._device.queue.writeBuffer(state._paramsBuffer, 0, state._paramsBytes);
+  }
+  function writeFrustumPlanes(out, m) {
+    writePlane(out, 0, m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]);
+    writePlane(out, 4, m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]);
+    writePlane(out, 8, m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]);
+    writePlane(out, 12, m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]);
+    writePlane(out, 16, m[2], m[6], m[10], m[14]);
+    writePlane(out, 20, m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]);
+  }
+  function writePlane(out, offset, x, y, z, w) {
+    const invLen = 1 / Math.hypot(x, y, z);
+    out[offset] = x * invLen;
+    out[offset + 1] = y * invLen;
+    out[offset + 2] = z * invLen;
+    out[offset + 3] = w * invLen;
+  }
+  function computeLocalSphere(mesh, out) {
+    const positions = mesh._cpuPositions;
+    if (!positions || positions.length < 3) {
+      return false;
+    }
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i];
+      const y = positions[i + 1];
+      const z = positions[i + 2];
+      if (x < minX) {
+        minX = x;
+      }
+      if (x > maxX) {
+        maxX = x;
+      }
+      if (y < minY) {
+        minY = y;
+      }
+      if (y > maxY) {
+        maxY = y;
+      }
+      if (z < minZ) {
+        minZ = z;
+      }
+      if (z > maxZ) {
+        maxZ = z;
+      }
+    }
+    if (!isFinite(minX)) {
+      return false;
+    }
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const cz = (minZ + maxZ) * 0.5;
+    const dx = maxX - cx;
+    const dy = maxY - cy;
+    const dz = maxZ - cz;
+    out[0] = cx;
+    out[1] = cy;
+    out[2] = cz;
+    out[3] = Math.hypot(dx, dy, dz);
+    return true;
+  }
+  var WORKGROUP_SIZE, PARAM_BYTES, COUNT_U32_OFFSET, MESH_WORLD_FLOAT_OFFSET, LOCAL_SPHERE_FLOAT_OFFSET, INDIRECT_ARGS_BYTES, CULL_WGSL_NO_COLOR, CULL_WGSL_COLOR, _cachedDevice2, _pipelineNoColor, _pipelineColor;
+  var init_thin_instance_gpu_culling = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu-culling.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_camera();
+      init_thin_instance_gpu();
+      WORKGROUP_SIZE = 64;
+      PARAM_BYTES = 192;
+      COUNT_U32_OFFSET = 44;
+      MESH_WORLD_FLOAT_OFFSET = 24;
+      LOCAL_SPHERE_FLOAT_OFFSET = 40;
+      INDIRECT_ARGS_BYTES = 20;
+      CULL_WGSL_NO_COLOR = /* wgsl */
+      `
+struct CullParams{planes:array<vec4<f32>,6>,meshWorld:mat4x4<f32>,localSphere:vec4<f32>,count:u32};
+@group(0)@binding(0)var<storage,read> srcMatrices:array<mat4x4<f32>>;
+@group(0)@binding(1)var<storage,read_write> dstMatrices:array<mat4x4<f32>>;
+@group(0)@binding(2)var<storage,read_write> args:array<atomic<u32>>;
+@group(0)@binding(3)var<uniform> params:CullParams;
+fn visible(world:mat4x4<f32>)->bool{
+let center=(world*vec4<f32>(params.localSphere.xyz,1.0)).xyz;
+let sx=length(world[0].xyz);
+let sy=length(world[1].xyz);
+let sz=length(world[2].xyz);
+let radius=params.localSphere.w*max(max(sx,sy),sz)+0.0001;
+for(var i=0u;i<6u;i++){
+let p=params.planes[i];
+if(dot(p.xyz,center)+p.w < -radius){return false;}
+}
+return true;
+}
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid:vec3<u32>){
+let i=gid.x;
+if(i>=params.count){return;}
+let world=params.meshWorld*srcMatrices[i];
+if(!visible(world)){return;}
+let outIndex=atomicAdd(&args[1],1u);
+dstMatrices[outIndex]=srcMatrices[i];
+}`;
+      CULL_WGSL_COLOR = `${CULL_WGSL_NO_COLOR}
+@group(0)@binding(4)var<storage,read> srcColors:array<vec4<f32>>;
+@group(0)@binding(5)var<storage,read_write> dstColors:array<vec4<f32>>;
+@compute @workgroup_size(64)
+fn mainColor(@builtin(global_invocation_id) gid:vec3<u32>){
+let i=gid.x;
+if(i>=params.count){return;}
+let world=params.meshWorld*srcMatrices[i];
+if(!visible(world)){return;}
+let outIndex=atomicAdd(&args[1],1u);
+dstMatrices[outIndex]=srcMatrices[i];
+dstColors[outIndex]=srcColors[i];
+}`;
+      _cachedDevice2 = null;
+      _pipelineNoColor = null;
+      _pipelineColor = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-cull-binding.ts
+  var thin_instance_cull_binding_exports = {};
+  __export(thin_instance_cull_binding_exports, {
+    tryBind: () => tryBind
+  });
+  function tryBind(renderable, scene, mesh, engine, hasColor, excluded, baseUpdate) {
+    const ti = mesh.thinInstances;
+    if (excluded || !ti?._gpuCullingEnabled) {
+      return void 0;
+    }
+    renderable._direct = true;
+    const state = createTiCullState();
+    scene._meshDisposables.get(mesh)?.push(() => {
+      destroyTiCullState(state);
+    });
+    const binding = {
+      cullDrawBufs: null,
+      _args: null,
+      update(context) {
+        baseUpdate?.(context);
+        const res = prepareTiCull(engine, state, mesh, mesh._gpu, ti, hasColor, context);
+        binding.cullDrawBufs = res?.drawBuffers ?? null;
+        binding._args = res?.argsBuffer ?? null;
+      },
+      draw(pass, indexCount, instanceCount) {
+        if (binding._args) {
+          pass.drawIndexedIndirect(binding._args, 0);
+        } else {
+          pass.drawIndexed(indexCount, instanceCount);
+        }
+      }
+    };
+    return binding;
+  }
+  var init_thin_instance_cull_binding = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-cull-binding.ts"() {
+      "use strict";
+      init_thin_instance_gpu_culling();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/shadow-fragment-core.ts
+  function createShadowFragment(id, shadowLights) {
+    const varyings = [];
+    const bindings = [];
+    const vertexLines = [];
+    const fragmentLines = [];
+    const helperParts = [];
+    for (const slot of shadowLights) {
+      const li = slot.lightIndex;
+      const suffix = `_${li}`;
+      varyings.push({ _name: `vPosFromLight${suffix}`, _type: "vec4<f32>" }, { _name: `vDepthMetric${suffix}`, _type: "f32" });
+      if (slot.shadowType === "pcf") {
+        bindings.push(
+          { _name: `shadowTex${suffix}`, _type: { _kind: "texture", _textureType: "texture_depth_2d", _sampleType: "depth" }, _group: "shadow", _visibility: STAGE_FRAGMENT8 },
+          { _name: `shadowComp${suffix}`, _type: { _kind: "sampler", _samplerType: "sampler_comparison" }, _group: "shadow", _visibility: STAGE_FRAGMENT8 }
+        );
+      } else {
+        bindings.push(
+          { _name: `shadowTex${suffix}`, _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _group: "shadow", _visibility: STAGE_FRAGMENT8 },
+          { _name: `shadowSamp${suffix}`, _type: { _kind: "sampler", _samplerType: "sampler" }, _group: "shadow", _visibility: STAGE_FRAGMENT8 }
+        );
+      }
+      bindings.push({ _name: `shadowInfo${suffix}`, _type: { _kind: "uniform-buffer" }, _group: "shadow", _visibility: STAGE_FRAGMENT8 | STAGE_VERTEX });
+      vertexLines.push(
+        `out.vPosFromLight${suffix} = shadowInfo${suffix}.lightMatrix * worldPos4;`,
+        `out.vDepthMetric${suffix} = (out.vPosFromLight${suffix}.z + shadowInfo${suffix}.depthValues.x) / shadowInfo${suffix}.depthValues.y;`
+      );
+      if (slot.shadowType === "pcf") {
+        fragmentLines.push(
+          `shadowFactors[${li}] = computeShadowPCF${suffix}(input.vPosFromLight${suffix}, input.vDepthMetric${suffix}, shadowInfo${suffix}.shadowsInfo.x, shadowInfo${suffix}.shadowsInfo.y, shadowInfo${suffix}.shadowsInfo.z);`
+        );
+      } else {
+        fragmentLines.push(
+          `shadowFactors[${li}] = computeShadowESM${suffix}(input.vPosFromLight${suffix}, input.vDepthMetric${suffix}, shadowInfo${suffix}.shadowsInfo.x, shadowInfo${suffix}.shadowsInfo.z, shadowInfo${suffix}.shadowsInfo.w);`
+        );
+      }
+    }
+    for (const slot of shadowLights) {
+      const li = slot.lightIndex;
+      const suffix = `_${li}`;
+      helperParts.push(`struct shadowInfo${suffix}Uniforms { lightMatrix: mat4x4<f32>, depthValues: vec4<f32>, shadowsInfo: vec4<f32> };`);
+      if (slot.shadowType === "pcf") {
+        helperParts.push(`
+fn computeShadowPCF${suffix}(posFromLight: vec4<f32>, depthMetric: f32, darkness: f32, mapSz: f32, invMapSz: f32) -> f32 {
+let clipSpace = posFromLight.xyz / posFromLight.w;
+let uv = vec2<f32>(0.5 * clipSpace.x + 0.5, 0.5 - 0.5 * clipSpace.y);
+if (depthMetric < 0.0 || depthMetric > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+let depthRef = clamp(clipSpace.z, 0.0, 1.0);
+var tc = uv * mapSz + 0.5;
+let st = fract(tc);
+let base = (floor(tc) - 0.5) * invMapSz;
+let uvw0 = 4.0 - 3.0 * st;
+let uvw1 = vec2<f32>(7.0);
+let uvw2 = 1.0 + 3.0 * st;
+let u = vec3<f32>((3.0 - 2.0 * st.x) / uvw0.x - 2.0, (3.0 + st.x) / uvw1.x, st.x / uvw2.x + 2.0) * invMapSz;
+let v = vec3<f32>((3.0 - 2.0 * st.y) / uvw0.y - 2.0, (3.0 + st.y) / uvw1.y, st.y / uvw2.y + 2.0) * invMapSz;
+var sh = 0.0;
+sh += uvw0.x * uvw0.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[0], v[0]), depthRef);
+sh += uvw1.x * uvw0.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[1], v[0]), depthRef);
+sh += uvw2.x * uvw0.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[2], v[0]), depthRef);
+sh += uvw0.x * uvw1.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[0], v[1]), depthRef);
+sh += uvw1.x * uvw1.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[1], v[1]), depthRef);
+sh += uvw2.x * uvw1.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[2], v[1]), depthRef);
+sh += uvw0.x * uvw2.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[0], v[2]), depthRef);
+sh += uvw1.x * uvw2.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[1], v[2]), depthRef);
+sh += uvw2.x * uvw2.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[2], v[2]), depthRef);
+sh /= 144.0;
+return mix(darkness, 1.0, sh);
+}`);
+      } else {
+        helperParts.push(`
+fn computeFallOff${suffix}(value: f32, clipSpace: vec2<f32>, frustumEdgeFalloff: f32) -> f32 {
+let mask = smoothstep(1.0 - frustumEdgeFalloff, 1.00000012, clamp(dot(clipSpace, clipSpace), 0.0, 1.0));
+return mix(value, 1.0, mask);
+}
+fn computeShadowESM${suffix}(posFromLight: vec4<f32>, depthMetric: f32, darkness: f32, depthScale: f32, frustumEdgeFalloff: f32) -> f32 {
+let clipSpace = posFromLight.xyz / posFromLight.w;
+let uv = vec2<f32>(0.5 * clipSpace.x + 0.5, 0.5 - 0.5 * clipSpace.y);
+if (depthMetric < 0.0 || depthMetric > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+let shadowPixelDepth = clamp(depthMetric, 0.0, 1.0);
+let shadowMapSample = textureSampleLevel(shadowTex${suffix}, shadowSamp${suffix}, uv, 0.0).x;
+let esm = 1.0 - clamp(exp(min(87.0, depthScale * shadowPixelDepth)) * shadowMapSample, 0.0, 1.0 - darkness);
+return computeFallOff${suffix}(esm, clipSpace.xy, frustumEdgeFalloff);
+}`);
+      }
+    }
+    const vertexHelperParts = [];
+    for (const slot of shadowLights) {
+      const suffix = `_${slot.lightIndex}`;
+      vertexHelperParts.push(`struct shadowInfo${suffix}Uniforms { lightMatrix: mat4x4<f32>, depthValues: vec4<f32>, shadowsInfo: vec4<f32> };`);
+    }
+    return {
+      _id: id,
+      _varyings: varyings,
+      _bindings: bindings,
+      _helperFunctions: helperParts.join("\n"),
+      _vertexHelperFunctions: vertexHelperParts.join("\n"),
+      _vertexSlots: {
+        VB: vertexLines.join("\n")
+      },
+      _fragmentSlots: {
+        AD: fragmentLines.join("\n")
+      }
+    };
+  }
+  var STAGE_FRAGMENT8, STAGE_VERTEX;
+  var init_shadow_fragment_core = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/shadow-fragment-core.ts"() {
+      "use strict";
+      STAGE_FRAGMENT8 = 2;
+      STAGE_VERTEX = 1;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shadow/csm-receiver-registry.ts
+  function getCsmStdReceiverFactory() {
+    return _stdFactory;
+  }
+  var _stdFactory;
+  var init_csm_receiver_registry = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shadow/csm-receiver-registry.ts"() {
+      "use strict";
+      _stdFactory = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-shadow-fragment.ts
+  var std_shadow_fragment_exports = {};
+  __export(std_shadow_fragment_exports, {
+    createStdShadowFragment: () => createStdShadowFragment
+  });
+  function createStdShadowFragment(shadowLights) {
+    const csmSlots = shadowLights.filter((sl) => sl.shadowType === "csm");
+    if (csmSlots.length > 0) {
+      return getCsmStdReceiverFactory()(csmSlots.map((s) => ({ lightIndex: s.lightIndex })));
+    }
+    return createShadowFragment("std-shadow", shadowLights);
+  }
+  var init_std_shadow_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/fragments/std-shadow-fragment.ts"() {
+      "use strict";
+      init_shadow_fragment_core();
+      init_csm_receiver_registry();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/collect-std-bound-textures.ts
+  function collectStdBoundTextures(mat) {
+    const t = [];
+    if (mat.diffuseTexture) {
+      t.push(mat.diffuseTexture);
+    }
+    for (const ext of _getStdExts().values()) {
+      ext._textures?.(mat, t);
+    }
+    return t;
+  }
+  var init_collect_std_bound_textures = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/collect-std-bound-textures.ts"() {
+      "use strict";
+      init_standard_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-material.ts
+  function _computeStandardMaterialFeatures(m) {
+    let f = 0;
+    if (m.diffuseTexture) {
+      f |= HAS_DIFFUSE_TEXTURE;
+      if (m.diffuseCoordIndex === 1) {
+        f |= DIFFUSE_USES_UV2;
+      }
+    }
+    if (m.emissiveTexture) {
+      f |= HAS_EMISSIVE_TEXTURE;
+      if (m.emissiveTexture._sampleType === "depth") {
+        f |= HAS_DEPTH_EMISSIVE_TEXTURE;
+      }
+    }
+    if (m.bumpTexture) {
+      f |= HAS_BUMP_TEXTURE;
+    }
+    if (m.specularTexture) {
+      f |= HAS_SPECULAR_TEXTURE;
+      if (m.specularCoordIndex === 1) {
+        f |= SPECULAR_USES_UV2;
+      }
+    }
+    if (m.ambientTexture) {
+      f |= HAS_AMBIENT_TEXTURE;
+      if (m.ambientCoordIndex === 1) {
+        f |= AMBIENT_USES_UV2;
+      }
+    }
+    if (m.lightmapTexture) {
+      f |= HAS_LIGHTMAP_TEXTURE;
+      if (m.lightmapCoordIndex === 1) {
+        f |= LIGHTMAP_USES_UV2;
+      }
+      if (m.useLightmapAsShadowmap) {
+        f |= LIGHTMAP_SHADOWMAP;
+      }
+      if (m.lightmapTexture.uAng === Math.PI) {
+        f |= LIGHTMAP_FLIP_V;
+      }
+    }
+    if (m.opacityTexture) {
+      f |= HAS_OPACITY_TEXTURE;
+      if (m.opacityFromRGB) {
+        f |= OPACITY_FROM_RGB;
+      }
+    }
+    if (!m.backFaceCulling) {
+      f |= DOUBLE_SIDED;
+    }
+    if (m.reflectionTexture) {
+      f |= HAS_REFLECTION_TEXTURE;
+    }
+    if (m.reflectionCubeTexture) {
+      f |= HAS_CUBE_REFLECTION;
+    }
+    if (m.disableLighting) {
+      f |= DISABLE_LIGHTING;
+    }
+    if (m.alpha < 1) {
+      f |= MATERIAL_ALPHA_BLEND;
+    }
+    return f;
+  }
+  function _standardFeatureKey(features, meshFeatures, variant = "") {
+    return variant ? `${features}:${meshFeatures}:${variant}` : `${features}:${meshFeatures}`;
+  }
+  function _standardShaderVariantKey(shadowLights) {
+    return shadowLights.length === 0 ? "" : shadowLights.map((sl) => `${sl.lightIndex}${sl.shadowType === "pcf" ? "p" : "e"}`).join(",");
+  }
+  var init_standard_material = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-material.ts"() {
+      "use strict";
+      init_standard_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-template.ts
+  function createStandardTemplate(config, esmShadowDepthCode = "") {
+    const { _diffuse, _needsUV, _needsUV2, _diffuseUsesUV2, _disableLighting, _noColorOutput, _esmShadowOutput } = config;
+    const _baseVertexAttributes = [
+      { _name: "position", _type: "vec3<f32>", _gpuFormat: "float32x3", _arrayStride: 12 },
+      { _name: "normal", _type: "vec3<f32>", _gpuFormat: "float32x3", _arrayStride: 12 }
+    ];
+    if (_needsUV) {
+      _baseVertexAttributes.push({ _name: "uv", _type: "vec2<f32>", _gpuFormat: "float32x2", _arrayStride: 8 });
+    }
+    if (_needsUV2) {
+      _baseVertexAttributes.push({ _name: "uv2", _type: "vec2<f32>", _gpuFormat: "float32x2", _arrayStride: 8 });
+    }
+    const _baseVaryings = [
+      { _name: "vp", _type: "vec3<f32>" },
+      { _name: "vn", _type: "vec3<f32>" },
+      { _name: "vf", _type: "vec3<f32>" }
+    ];
+    if (_needsUV) {
+      _baseVaryings.push({ _name: "vu", _type: "vec2<f32>" });
+    }
+    if (_needsUV2) {
+      _baseVaryings.push({ _name: "vv", _type: "vec2<f32>" });
+    }
+    const _baseMeshUboFields = [{ _name: "world", _type: "mat4x4<f32>" }];
+    appendMeshLightUboFields(_baseMeshUboFields);
+    const _baseBindings = [{ _name: "mat", _type: { _kind: "uniform-buffer" }, _visibility: STAGE_FRAGMENT9 }];
+    if (_diffuse) {
+      _baseBindings.push(
+        { _name: "dT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT9 },
+        { _name: "dS", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT9 }
+      );
+    }
+    if (_needsUV) {
+      _baseBindings.push({ _name: "up", _type: { _kind: "uniform-buffer" }, _visibility: STAGE_VERTEX2 });
+    }
+    if (_esmShadowOutput) {
+      _baseBindings.push({ _name: "shadowParams", _type: { _kind: "uniform-buffer" }, _visibility: STAGE_FRAGMENT9 });
+    }
+    const uvPassthrough = _needsUV ? `out.vu = uv * up.u.xy + up.u.zw;` : "";
+    const uv2Passthrough = _needsUV2 ? `out.vv = uv2;` : "";
+    const vertexUboStructs = _needsUV ? `struct upUniforms { u: vec4<f32>, }` : "";
+    const _vertexTemplate = `/*SU*/
+/*MU*/
+@group(1) @binding(0) var<uniform> mesh: MeshUniforms;
+${vertexUboStructs}
+/*VH*/
+/*VD*/
+/*VO*/
+@vertex fn main(
+/*VP*/
+) -> VertexOutput {
+var out: VertexOutput;
+/*VR*/
+var finalWorld = mesh.world;
+/*VW*/
+let worldPos4 = finalWorld * vec4<f32>(position, 1.0);
+out.vp = worldPos4.xyz;
+let normalWorld = mat3x3<f32>(finalWorld[0].xyz, finalWorld[1].xyz, finalWorld[2].xyz);
+out.vn = normalize(normalWorld * normal);
+out.clipPos = scene.viewProjection * worldPos4;
+out.vf = (scene.view * worldPos4).xyz;
+${uvPassthrough}
+${uv2Passthrough}
+/*VB*/
+return out;
+}`;
+    const lightsStructs = `
+struct LightEntry { vLightData: vec4<f32>, vLightDiffuse: vec4<f32>, vLightSpecular: vec4<f32>, vLightDirection: vec4<f32> };
+struct lightsUniforms { count: u32, _p0: u32, _p1: u32, _p2: u32, lights: array<LightEntry, ${MAX_LIGHTS}> };
+@group(0) @binding(1) var<uniform> lights: lightsUniforms;
+`;
+    const materialStruct = `
+struct matUniforms {
+dc: vec4<f32>,
+sc: vec4<f32>,
+ec: vec3<f32>,
+bs: f32,
+ac: vec3<f32>,
+tl: f32,
+ambTexLvl: f32,
+lmLvl: f32,
+opLvl: f32,
+aCut: f32,
+rLvl: f32,
+rCm: f32,
+_0: f32,
+_1: f32,
+};
+`;
+    const helpers = _disableLighting ? WGSL_FOG : WGSL_FOG + LIGHTING_FN;
+    const doubleSidedEntry = `@fragment fn main(input: FragmentInput)${_noColorOutput ? "" : " -> @location(0) vec4<f32>"} {`;
+    const viewDirCode = !_disableLighting ? `let viewDirectionW = normalize(scene.vEyePosition.xyz - input.vp);` : "";
+    const normalCode = _disableLighting ? "" : `var normalW = normalize(input.vn);`;
+    const opacityCode = `var alpha = mat.dc.a;`;
+    const baseColorCode = _diffuse ? `let _ds = textureSample(dT, dS, ${_diffuseUsesUV2 ? "input.vv" : "input.vu"});
+if (_ds.a < mat.aCut) { discard; }
+var baseColor = _ds.rgb * mat.tl;` : `var baseColor = vec3<f32>(1.0, 1.0, 1.0);`;
+    const diffuseColorCode = `let diffuseColor = mat.dc.rgb;`;
+    const emissiveCode = `var emissiveContrib = mat.ec;`;
+    const specularColorCode = !_disableLighting ? `var specularColor = mat.sc.rgb;` : "";
+    let lightingBlock;
+    if (!_disableLighting) {
+      lightingBlock = `var glossiness = mat.sc.a;
+var diffuseBase = vec3<f32>(0.0);
+var specularBase = vec3<f32>(0.0);
+var shadowFactors = array<f32, ${MAX_LIGHTS}>(${new Array(MAX_LIGHTS).fill("1.0").join(", ")});
+var baseAmbientColor = vec3<f32>(1.0, 1.0, 1.0);
+var reflectionColor = vec3<f32>(0.0);
+let lc = min(mesh.lc, ${MAX_LIGHTS}u);
+/*AD*/
+for (var li = 0u; li < lc; li++) {
+let lightIndex = mli(li);
+let r = computeLighting(viewDirectionW, normalW, lights.lights[lightIndex], glossiness, input.vp);
+let sf = shadowFactors[lightIndex];
+diffuseBase += r[0] * sf;
+specularBase += r[1] * sf;
+}
+let finalDiffuse = clamp(diffuseBase * diffuseColor + emissiveContrib + mat.ac, vec3<f32>(0.0), vec3<f32>(1.0)) * baseColor;
+let finalSpecular = specularBase * specularColor;
+var color = vec4<f32>(finalDiffuse * baseAmbientColor + finalSpecular + reflectionColor, alpha);`;
+    } else {
+      lightingBlock = `var color = vec4<f32>(clamp(emissiveContrib * diffuseColor, vec3<f32>(0.0), vec3<f32>(1.0)) * baseColor, alpha);`;
+    }
+    const _fragmentTemplate = `/*SU*/
+${lightsStructs}
+${materialStruct}
+${_esmShadowOutput ? "struct shadowParamsUniforms { biasAndScale: vec4<f32>, depthValues: vec4<f32>, }" : ""}
+/*MU*/
+@group(1) @binding(0) var<uniform> mesh: MeshUniforms;
+${!_disableLighting ? meshLightIndexWGSL("mesh") : ""}
+${helpers}
+/*HF*/
+/*FB*/
+/*FI*/
+${doubleSidedEntry}
+/*SV*/
+${viewDirCode}
+${normalCode}
+/*AC*/
+${opacityCode}
+${baseColorCode}
+${diffuseColorCode}
+${emissiveCode}
+${specularColorCode}
+/*AT*/
+${_noColorOutput ? "return;" : _esmShadowOutput ? esmShadowDepthCode : ""}
+${lightingBlock}
+/*BC*/
+color = vec4<f32>(max(color.rgb, vec3<f32>(0.0)), color.a);
+if (scene.vFogInfos.x > 0.0) {
+let fog = calcFogFactor(input.vf);
+color = vec4<f32>(mix(scene.vFogColor.rgb, color.rgb, fog), color.a);
+}
+/*BA*/
+${_noColorOutput ? "" : "return color;"}
+}`;
+    return {
+      _vertexTemplate,
+      _fragmentTemplate,
+      _baseMeshUboFields,
+      _baseVertexAttributes,
+      _baseVaryings,
+      _baseBindings
+    };
+  }
+  var STAGE_VERTEX2, STAGE_FRAGMENT9, LIGHTING_FN;
+  var init_standard_template = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-template.ts"() {
+      "use strict";
+      init_wgsl_helpers();
+      init_types();
+      init_lights_ubo();
+      STAGE_VERTEX2 = 1;
+      STAGE_FRAGMENT9 = 2;
+      LIGHTING_FN = `
+fn computeLighting(viewDir: vec3<f32>, N: vec3<f32>, L: LightEntry, g: f32, P: vec3<f32>) -> array<vec3<f32>, 2> {
+var lv: vec3<f32>;
+var a: f32 = 1.0;
+let t = u32(L.vLightData.w);
+if (t == 3u) {
+let nl = 0.5 + 0.5 * dot(N, normalize(L.vLightData.xyz));
+let diff = mix(L.vLightDirection.xyz, L.vLightDiffuse.rgb, nl);
+let h = normalize(viewDir + normalize(L.vLightData.xyz));
+var s = pow(max(0.0, dot(N, h)), max(1.0, g));
+return array<vec3<f32>, 2>(diff, s * L.vLightSpecular.rgb);
+}
+if (t == 1u) {
+lv = normalize(-L.vLightData.xyz);
+} else {
+let d = L.vLightData.xyz - P;
+a = max(0.0, 1.0 - length(d) / L.vLightDiffuse.a);
+lv = normalize(d);
+if (t == 2u) {
+let c = max(0.0, dot(L.vLightDirection.xyz, -lv));
+if (c >= L.vLightDirection.w) { a *= max(0.0, pow(c, L.vLightSpecular.a)); } else { a = 0.0; }
+}
+}
+let nl = max(0.0, dot(N, lv));
+let diff = nl * L.vLightDiffuse.rgb * a;
+let h = normalize(viewDir + lv);
+var s = max(0.0, dot(N, h));
+s = pow(s, max(1.0, g));
+return array<vec3<f32>, 2>(diff, s * L.vLightSpecular.rgb * a);
+}
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/ubo-layout.ts
+  function alignUp(offset, alignment) {
+    return offset + alignment - 1 & ~(alignment - 1);
+  }
+  function typeInfo(type) {
+    const info = TYPE_INFO[type];
+    if (info) {
+      return info;
+    }
+    const m = /^array<vec4<u32>,\s*(\d+)>$/.exec(type);
+    if (m) {
+      return { align: 16, size: Number(m[1]) * 16 };
+    }
+    throw new Error(`Unknown UBO field type: ${type}`);
+  }
+  function computeUboLayout(fields) {
+    const _offsets = /* @__PURE__ */ new Map();
+    const lines = [];
+    let cursor = 0;
+    for (const field of fields) {
+      const info = typeInfo(field._type);
+      cursor = alignUp(cursor, info.align);
+      _offsets.set(field._name, cursor);
+      lines.push(`${field._name}: ${field._type},`);
+      cursor += info.size;
+    }
+    const _totalBytes = fields.length > 0 ? alignUp(cursor, 16) : 0;
+    const _structBody = lines.join("\n");
+    return {
+      _totalBytes,
+      _offsets,
+      _structBody
+    };
+  }
+  var TYPE_INFO;
+  var init_ubo_layout = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/ubo-layout.ts"() {
+      "use strict";
+      TYPE_INFO = {
+        f32: { align: 4, size: 4 },
+        u32: { align: 4, size: 4 },
+        i32: { align: 4, size: 4 },
+        "vec2<f32>": { align: 8, size: 8 },
+        "vec3<f32>": { align: 16, size: 12 },
+        "vec4<f32>": { align: 16, size: 16 },
+        "vec4<u32>": { align: 16, size: 16 },
+        "mat4x4<f32>": { align: 16, size: 64 }
+      };
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\scene-uniforms.wgsl
+  var scene_uniforms_default;
+  var init_scene_uniforms = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\scene-uniforms.wgsl"() {
+      scene_uniforms_default = "struct SceneUniforms {\r\nviewProjection: mat4x4<f32>,\r\nview: mat4x4<f32>,\r\nvEyePosition: vec4<f32>,\r\nenvRotationY: f32,\r\n_envPad0: f32, _envPad1: f32, _envPad2: f32,\r\nvSphericalL00: vec4<f32>,\r\nvSphericalL1_1: vec4<f32>,\r\nvSphericalL10: vec4<f32>,\r\nvSphericalL11: vec4<f32>,\r\nvSphericalL2_2: vec4<f32>,\r\nvSphericalL2_1: vec4<f32>,\r\nvSphericalL20: vec4<f32>,\r\nvSphericalL21: vec4<f32>,\r\nvSphericalL22: vec4<f32>,\r\nvImageInfos: vec4<f32>, // exposureLinear, contrast, lodGenerationScale, toneMappingEnabled\r\nvFogInfos: vec4<f32>,\r\nvFogColor: vec4<f32>,\r\nclipPlane: vec4<f32>,\r\n}\r\n@group(0) @binding(0) var<uniform> scene: SceneUniforms;\r\n";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms.ts
+  var SCENE_UBO_WGSL;
+  var init_scene_uniforms2 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms.ts"() {
+      "use strict";
+      init_scene_uniforms();
+      SCENE_UBO_WGSL = scene_uniforms_default;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/shader-composer.ts
+  function topoSort(fragments) {
+    const byId = /* @__PURE__ */ new Map();
+    for (const f of fragments) {
+      if (byId.has(f._id)) {
+        throw Error();
+      }
+      byId.set(f._id, f);
+    }
+    const inDeg = /* @__PURE__ */ new Map();
+    const deps = /* @__PURE__ */ new Map();
+    for (const f of fragments) {
+      if (!inDeg.has(f._id)) {
+        inDeg.set(f._id, 0);
+      }
+      for (const d of f._dependencies ?? []) {
+        if (!byId.has(d)) {
+          throw Error();
+        }
+        inDeg.set(f._id, (inDeg.get(f._id) ?? 0) + 1);
+        let arr = deps.get(d);
+        if (!arr) {
+          arr = [];
+          deps.set(d, arr);
+        }
+        arr.push(f._id);
+      }
+    }
+    const q = [];
+    for (const [id, d] of inDeg) {
+      if (d === 0) {
+        q.push(id);
+      }
+    }
+    q.sort();
+    const out = [];
+    let qi = 0;
+    while (qi < q.length) {
+      const id = q[qi++];
+      out.push(byId.get(id));
+      for (const d of deps.get(id) ?? []) {
+        const nd = (inDeg.get(d) ?? 1) - 1;
+        inDeg.set(d, nd);
+        if (nd === 0) {
+          let i = qi;
+          while (i < q.length && q[i] < d) {
+            i++;
+          }
+          q.splice(i, 0, d);
+        }
+      }
+    }
+    if (out.length !== fragments.length) {
+      throw Error();
+    }
+    return out;
+  }
+  function dedup(base, extra) {
+    const seen = /* @__PURE__ */ new Set();
+    const all = [];
+    for (const v of base) {
+      if (!seen.has(v._name)) {
+        seen.add(v._name);
+        all.push(v);
+      }
+    }
+    for (const v of extra) {
+      if (!seen.has(v._name)) {
+        seen.add(v._name);
+        all.push(v);
+      }
+    }
+    return all;
+  }
+  function bglEntry(binding, decl) {
+    const e = { binding, visibility: decl._visibility };
+    switch (decl._type._kind) {
+      case "uniform-buffer":
+        e.buffer = { type: "uniform" };
+        break;
+      case "texture": {
+        const def = decl._type._textureType === "texture_depth_2d" ? "depth" : decl._type._textureType === "texture_2d<u32>" ? "uint" : "float";
+        e.texture = {
+          sampleType: decl._type._sampleType ?? def,
+          viewDimension: decl._type._textureType.includes("array") ? "2d-array" : decl._type._textureType.includes("cube") ? "cube" : "2d"
+        };
+        break;
+      }
+      case "sampler":
+        e.sampler = {
+          type: decl._type._samplerType === "sampler_comparison" ? "comparison" : decl._type._samplerType === "sampler_non_filtering" ? "non-filtering" : "filtering"
+        };
+        break;
+      case "storage-texture":
+        e.storageTexture = { access: decl._type._access, format: decl._type._format };
+        break;
+    }
+    return e;
+  }
+  function declWGSL(g, b, d) {
+    switch (d._type._kind) {
+      case "uniform-buffer":
+        return `@group(${g})@binding(${b}) var<uniform> ${d._name}:${d._name}Uniforms;`;
+      case "texture":
+        return `@group(${g})@binding(${b}) var ${d._name}:${d._type._textureType};`;
+      case "sampler":
+        return `@group(${g})@binding(${b}) var ${d._name}:${d._type._samplerType === "sampler_non_filtering" ? "sampler" : d._type._samplerType};`;
+      case "storage-texture":
+        return `@group(${g})@binding(${b}) var ${d._name}:texture_storage_2d<${d._type._format},${d._type._access}>;`;
+    }
+  }
+  function injectSlots(tpl, sorted, key) {
+    return tpl.replace(SLOT_RE, (_, slot) => {
+      const parts = [];
+      for (const f of sorted) {
+        const s = f[key];
+        if (s?.[slot]) {
+          parts.push(s[slot]);
+        }
+      }
+      return parts.join("\n");
+    });
+  }
+  function composeShader(template, fragments) {
+    const sorted = topoSort(fragments);
+    const fragAttrs = [];
+    const fragVaryings = [];
+    const helpers = [];
+    const vHelpers = [];
+    const vBuiltins = [];
+    for (const f of sorted) {
+      if (f._vertexAttributes) {
+        fragAttrs.push(...f._vertexAttributes);
+      }
+      if (f._varyings) {
+        fragVaryings.push(...f._varyings);
+      }
+      if (f._helperFunctions) {
+        helpers.push(f._helperFunctions);
+      }
+      if (f._vertexHelperFunctions) {
+        vHelpers.push(f._vertexHelperFunctions);
+      }
+      for (const b of f._vertexBuiltins ?? []) {
+        vBuiltins.push(`@builtin(${b._builtin}) ${b._name}:${b._type},`);
+      }
+    }
+    const allAttrs = dedup(template._baseVertexAttributes, fragAttrs);
+    const inputLines = [];
+    const _vertexBufferLayouts = [];
+    const groups = /* @__PURE__ */ new Map();
+    const firstOfGroup = /* @__PURE__ */ new Map();
+    for (let i = 0; i < allAttrs.length; i++) {
+      const a = allAttrs[i];
+      inputLines.push(`@location(${i}) ${a._name}:${a._type},`);
+      if (a._bufferGroup) {
+        if (!groups.has(a._bufferGroup)) {
+          groups.set(a._bufferGroup, []);
+          firstOfGroup.set(a._bufferGroup, a);
+        }
+        groups.get(a._bufferGroup).push({ loc: i, off: a._offset ?? 0, fmt: a._gpuFormat });
+      } else {
+        _vertexBufferLayouts.push({
+          arrayStride: a._arrayStride,
+          stepMode: a._stepMode ?? "vertex",
+          attributes: [{ shaderLocation: i, offset: a._offset ?? 0, format: a._gpuFormat }]
+        });
+      }
+    }
+    for (const [grp, attrs] of groups) {
+      const f = firstOfGroup.get(grp);
+      _vertexBufferLayouts.push({
+        arrayStride: f._arrayStride,
+        stepMode: f._stepMode ?? "vertex",
+        attributes: attrs.map((a) => ({ shaderLocation: a.loc, offset: a.off, format: a.fmt }))
+      });
+    }
+    let nextLoc = allAttrs.length;
+    for (const f of sorted) {
+      if (f._pipelineVertexBuffers) {
+        const r = f._pipelineVertexBuffers(nextLoc);
+        _vertexBufferLayouts.push(...r._buffers);
+        nextLoc = r._nextLoc;
+      }
+    }
+    const allVary = dedup(template._baseVaryings, fragVaryings);
+    const varyBody = `@builtin(position) clipPos:vec4f,
+` + allVary.map((v, i) => `@location(${i}) ${v._name}:${v._type},`).join("\n");
+    const hasMaterialUbo = !!(template._baseMaterialUboFields && template._baseMaterialUboFields.length > 0);
+    const meshFields = [...template._baseMeshUboFields];
+    const materialFields = hasMaterialUbo ? [...template._baseMaterialUboFields] : [];
+    for (const f of sorted) {
+      if (f._uboFields?.length) {
+        (hasMaterialUbo ? materialFields : meshFields).push(...f._uboFields);
+      }
+    }
+    const _meshUboSpec = computeUboLayout(meshFields);
+    const _materialUboSpec = hasMaterialUbo ? computeUboLayout(materialFields) : void 0;
+    const meshBGL = [{ binding: 0, visibility: STAGE_VERTEX3 | STAGE_FRAGMENT10, buffer: { type: "uniform" } }];
+    if (hasMaterialUbo) {
+      meshBGL.push({ binding: 1, visibility: STAGE_FRAGMENT10, buffer: { type: "uniform" } });
+    }
+    const shadowBGL = [];
+    const vDecls = [];
+    const fDecls = [];
+    let mb = hasMaterialUbo ? 2 : 1, sb = 0;
+    function addBinding(d, _isVertex) {
+      const isShadow = d._group === "shadow";
+      const b = isShadow ? sb++ : mb++;
+      const g = isShadow ? 2 : 1;
+      (isShadow ? shadowBGL : meshBGL).push(bglEntry(b, d));
+      const w = declWGSL(g, b, d);
+      if (d._visibility & STAGE_VERTEX3) {
+        vDecls.push(w);
+      }
+      if (d._visibility & STAGE_FRAGMENT10) {
+        fDecls.push(w);
+      }
+    }
+    for (const d of template._baseVertexBindings ?? []) {
+      addBinding(d, true);
+    }
+    for (const f of sorted) {
+      for (const d of f._vertexBindings ?? []) {
+        addBinding(d, true);
+      }
+    }
+    for (const d of template._baseBindings ?? []) {
+      addBinding(d, false);
+    }
+    for (const f of sorted) {
+      for (const d of (f._bindings ?? []).filter((b) => (b._group ?? "mesh") === "mesh")) {
+        addBinding(d, false);
+      }
+    }
+    for (const f of sorted) {
+      for (const d of (f._bindings ?? []).filter((b) => b._group === "shadow")) {
+        addBinding(d, false);
+      }
+    }
+    const _fragmentKey = sorted.map((f) => f._id).join("|");
+    const vParams = (vBuiltins.length ? vBuiltins.join("\n") + "\n" : "") + inputLines.join("\n");
+    const meshStruct = `struct MeshUniforms{
+${_meshUboSpec._structBody}
+}`;
+    const materialStruct = _materialUboSpec ? `
+struct MaterialUniforms{
+${_materialUboSpec._structBody}
+}
+@group(1)@binding(1) var<uniform> material:MaterialUniforms;` : "";
+    let _vertexWGSL = template._vertexTemplate;
+    _vertexWGSL = _vertexWGSL.replace("/*SU*/", SCENE_UBO_WGSL);
+    _vertexWGSL = _vertexWGSL.replace("/*MU*/", meshStruct);
+    _vertexWGSL = _vertexWGSL.replace("/*VI*/", `struct VertexInput{
+${inputLines.join("\n")}
+}`);
+    _vertexWGSL = _vertexWGSL.replace("/*VO*/", `struct VertexOutput{
+${varyBody}
+}`);
+    _vertexWGSL = _vertexWGSL.replace("/*VD*/", vDecls.join("\n"));
+    _vertexWGSL = _vertexWGSL.replace("/*VP*/", vParams);
+    _vertexWGSL = _vertexWGSL.replace("/*VH*/", vHelpers.join("\n"));
+    _vertexWGSL = injectSlots(_vertexWGSL, sorted, "_vertexSlots");
+    let _fragmentWGSL = template._fragmentTemplate;
+    _fragmentWGSL = _fragmentWGSL.replace("/*SU*/", SCENE_UBO_WGSL);
+    _fragmentWGSL = _fragmentWGSL.replace("/*MU*/", meshStruct + materialStruct);
+    _fragmentWGSL = _fragmentWGSL.replace("/*FI*/", `struct FragmentInput{
+${varyBody}
+}`);
+    _fragmentWGSL = _fragmentWGSL.replace("/*HF*/", helpers.join("\n"));
+    _fragmentWGSL = _fragmentWGSL.replace("/*FB*/", fDecls.join("\n"));
+    _fragmentWGSL = injectSlots(_fragmentWGSL, sorted, "_fragmentSlots");
+    const _meshBGLDescriptor = { entries: meshBGL };
+    const _shadowBGLDescriptor = shadowBGL.length ? { entries: shadowBGL } : null;
+    return {
+      _vertexWGSL,
+      _fragmentWGSL,
+      _meshBGLDescriptor,
+      _shadowBGLDescriptor,
+      _vertexBufferLayouts,
+      _meshUboSpec,
+      _materialUboSpec,
+      _fragmentKey
+    };
+  }
+  var STAGE_VERTEX3, STAGE_FRAGMENT10, SLOT_RE;
+  var init_shader_composer = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/shader-composer.ts"() {
+      "use strict";
+      init_ubo_layout();
+      init_scene_uniforms2();
+      STAGE_VERTEX3 = 1;
+      STAGE_FRAGMENT10 = 2;
+      SLOT_RE = /\/\*([A-Z_0-9]+)\*\//g;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/mesh-features.ts
+  function _computeMeshFeatures(mesh, receiveShadows = false) {
+    const gpu = mesh._gpu;
+    let features = 0;
+    if (gpu.tangentBuffer) {
+      features |= MSH_HAS_TANGENTS;
+    }
+    if (mesh.vat) {
+      features |= MSH_VAT;
+      if (mesh.vat.joints1Buffer) {
+        features |= MSH_HAS_SKELETON_8;
+      }
+    } else if (mesh.skeleton) {
+      features |= MSH_HAS_SKELETON;
+      if (mesh.skeleton.joints1Buffer) {
+        features |= MSH_HAS_SKELETON_8;
+      }
+    }
+    if (mesh.morphTargets) {
+      features |= MSH_HAS_MORPH_TARGETS;
+    }
+    if (mesh.thinInstances) {
+      features |= MSH_HAS_THIN_INSTANCES;
+      if (mesh.thinInstances.colors) {
+        features |= MSH_HAS_INSTANCE_COLOR;
+      }
+    }
+    if (gpu.colorBuffer) {
+      features |= MSH_HAS_VERTEX_COLOR;
+    }
+    if (gpu.uv2Buffer) {
+      features |= MSH_HAS_UV2;
+    }
+    if (receiveShadows) {
+      features |= MSH_RECEIVE_SHADOWS;
+    }
+    return features;
+  }
+  var MSH_HAS_TANGENTS, MSH_HAS_SKELETON, MSH_HAS_SKELETON_8, MSH_HAS_MORPH_TARGETS, MSH_HAS_THIN_INSTANCES, MSH_HAS_INSTANCE_COLOR, MSH_HAS_VERTEX_COLOR, MSH_HAS_UV2, MSH_RECEIVE_SHADOWS, MSH_VAT;
+  var init_mesh_features = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/mesh-features.ts"() {
+      "use strict";
+      MSH_HAS_TANGENTS = 1 << 0;
+      MSH_HAS_SKELETON = 1 << 1;
+      MSH_HAS_SKELETON_8 = 1 << 2;
+      MSH_HAS_MORPH_TARGETS = 1 << 3;
+      MSH_HAS_THIN_INSTANCES = 1 << 4;
+      MSH_HAS_INSTANCE_COLOR = 1 << 5;
+      MSH_HAS_VERTEX_COLOR = 1 << 6;
+      MSH_HAS_UV2 = 1 << 7;
+      MSH_RECEIVE_SHADOWS = 1 << 8;
+      MSH_VAT = 1 << 9;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-pipeline.ts
+  function composeStandardShader(features, _meshFeatures = 0, fragments = [], esmShadowDepthCode = "") {
+    const has = (bit) => (features & bit) !== 0;
+    const template = createStandardTemplate(
+      {
+        _diffuse: has(HAS_DIFFUSE_TEXTURE),
+        _needsUV: has(NEEDS_UV),
+        _needsUV2: has(NEEDS_UV2),
+        _diffuseUsesUV2: has(DIFFUSE_USES_UV2),
+        _disableLighting: has(DISABLE_LIGHTING),
+        _noColorOutput: has(NO_COLOR_OUTPUT),
+        _esmShadowOutput: has(ESM_SHADOW_OUTPUT)
+      },
+      esmShadowDepthCode
+    );
+    return composeShader(template, fragments);
+  }
+  function getComposedCache() {
+    if (!_composedCache) {
+      _composedCache = /* @__PURE__ */ new Map();
+    }
+    return _composedCache;
+  }
+  function ensureDevice(engine) {
+    if (_cachedDevice3 !== engine._device) {
+      _bindingsCache.clear();
+      _composedCache?.clear();
+      clearSceneBGLCache();
+      _cachedDevice3 = engine._device;
+    }
+  }
+  function clearStandardPipelineCache() {
+    _bindingsCache.clear();
+    _composedCache?.clear();
+    clearSceneBGLCache();
+    _cachedDevice3 = null;
+  }
+  function getOrCreateStandardBindings(engine, features, meshFeatures, fragments = [], shaderKey = "", esmShadowDepthCode = "", stencil = null) {
+    ensureDevice(engine);
+    const resolvedStencil = stencil && _stencilResolver ? _stencilResolver(stencil) : null;
+    const key = _standardFeatureKey(features, meshFeatures, shaderKey) + (resolvedStencil ? resolvedStencil._key : "");
+    const cached = _bindingsCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const cc = getComposedCache();
+    let composed = cc.get(key);
+    if (!composed) {
+      composed = composeStandardShader(features, meshFeatures, fragments, esmShadowDepthCode);
+      cc.set(key, composed);
+    }
+    const device = engine._device;
+    const meshBGL = device.createBindGroupLayout(composed._meshBGLDescriptor);
+    let shadowBGL = null;
+    const hasShadow = (meshFeatures & MSH_RECEIVE_SHADOWS) !== 0;
+    if (hasShadow && composed._shadowBGLDescriptor) {
+      shadowBGL = device.createBindGroupLayout(composed._shadowBGLDescriptor);
+    }
+    const bindings = {
+      _features: features,
+      _meshFeatures: meshFeatures,
+      _meshBGL: meshBGL,
+      _shadowBGL: shadowBGL,
+      _composed: composed,
+      _pipelines: /* @__PURE__ */ new Map()
+    };
+    if (resolvedStencil) {
+      bindings._stencil = resolvedStencil._desc;
+    }
+    _bindingsCache.set(key, bindings);
+    return bindings;
+  }
+  function getOrCreateStandardPipeline(engine, sig, bindings) {
+    ensureDevice(engine);
+    const key = targetSignatureKey(sig);
+    const cached = bindings._pipelines.get(key);
+    if (cached) {
+      return cached;
+    }
+    const device = engine._device;
+    const composed = bindings._composed;
+    const features = bindings._features;
+    const sceneBGL = getSceneBindGroupLayout(engine);
+    const bgls = bindings._shadowBGL ? [sceneBGL, bindings._meshBGL, bindings._shadowBGL] : [sceneBGL, bindings._meshBGL];
+    const vertModule = device.createShaderModule({ code: composed._vertexWGSL });
+    const noColorOutput = (features & NO_COLOR_OUTPUT) !== 0;
+    const esmShadowOutput = (features & ESM_SHADOW_OUTPUT) !== 0;
+    const fragModule = !sig._colorFormat && !noColorOutput ? null : device.createShaderModule({ code: composed._fragmentWGSL });
+    const needsBlend = !esmShadowOutput && ((features & HAS_OPACITY_TEXTURE) !== 0 || (features & MATERIAL_ALPHA_BLEND) !== 0);
+    const colorTarget = noColorOutput ? null : needsBlend ? {
+      format: sig._colorFormat,
+      blend: {
+        color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" },
+        alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" }
+      }
+    } : { format: sig._colorFormat };
+    const pipeline = device.createRenderPipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: bgls }),
+      vertex: { module: vertModule, entryPoint: "main", buffers: composed._vertexBufferLayouts },
+      ...fragModule ? { fragment: { module: fragModule, entryPoint: "main", targets: colorTarget ? [colorTarget] : [] } } : {},
+      ...sig._depthStencilFormat ? {
+        depthStencil: {
+          format: sig._depthStencilFormat,
+          depthCompare: sig._depthCompare ?? REVERSE_DEPTH_COMPARE,
+          depthWriteEnabled: noColorOutput || esmShadowOutput || !needsBlend,
+          // Pre-baked stencil sub-fields, applied only on a stencil-capable target — the same
+          // material in the depth32float shadow/depth pass keeps plain depth state (no stencil → no
+          // format mismatch). Gated on `_stencilResolver` (the opt-in hook) so the entire branch —
+          // including the `bindings._stencil` reads — folds out of stencil-free bundles.
+          ..._stencilResolver && bindings._stencil && sig._depthStencilFormat.includes("stencil") ? bindings._stencil : {}
+        }
+      } : {},
+      multisample: { count: sig._sampleCount },
+      primitive: { topology: "triangle-list", cullMode: features & DOUBLE_SIDED ? "none" : "back", frontFace: "ccw" }
+    });
+    bindings._pipelines.set(key, pipeline);
+    return pipeline;
+  }
+  function createStandardMeshBindGroup(engine, bindings, meshUBO, materialUBO, material) {
+    const device = engine._device;
+    const features = bindings._features;
+    const needsUV = (features & NEEDS_UV) !== 0;
+    const hasDiffuseTex = (features & HAS_DIFFUSE_TEXTURE) !== 0;
+    const esmShadowOutput = (features & ESM_SHADOW_OUTPUT) !== 0;
+    let nextBinding = 0;
+    const entries = [
+      { binding: nextBinding++, resource: { buffer: meshUBO } },
+      { binding: nextBinding++, resource: { buffer: materialUBO } }
+    ];
+    if (hasDiffuseTex) {
+      const tex = material.diffuseTexture;
+      entries.push({ binding: nextBinding++, resource: tex.texture.createView() }, { binding: nextBinding++, resource: tex.sampler });
+    }
+    if (needsUV) {
+      const uvData = new F32(4);
+      const scaleX = material.uvScale[0];
+      let scaleY = material.uvScale[1];
+      let offsetY = 0;
+      if (material.diffuseTexture?.invertY) {
+        offsetY = scaleY;
+        scaleY = -scaleY;
+      }
+      uvData[0] = scaleX;
+      uvData[1] = scaleY;
+      uvData[2] = 0;
+      uvData[3] = offsetY;
+      entries.push({ binding: nextBinding++, resource: { buffer: createUniformBuffer(engine, uvData) } });
+    }
+    if (esmShadowOutput) {
+      entries.push({
+        binding: nextBinding++,
+        resource: { buffer: material._esmShadowParamsUBO }
+      });
+    }
+    const sortedExts = _getStdExtsSorted();
+    for (const ext of sortedExts) {
+      if (features & ext._feature && ext._bind) {
+        nextBinding = ext._bind(material, entries, nextBinding);
+      }
+    }
+    return device.createBindGroup({ layout: bindings._meshBGL, entries });
+  }
+  function writeStdMaterialData(data, mat, textureLevel) {
+    const { diffuseColor: dc, specularColor: sc, emissiveColor: ec, ambientColor: ac } = mat;
+    data[0] = dc[0];
+    data[1] = dc[1];
+    data[2] = dc[2];
+    data[3] = mat.alpha;
+    data[4] = sc[0];
+    data[5] = sc[1];
+    data[6] = sc[2];
+    data[7] = mat.specularPower;
+    data[8] = ec[0];
+    data[9] = ec[1];
+    data[10] = ec[2];
+    data[11] = 1 / mat.bumpLevel;
+    data[12] = ac[0];
+    data[13] = ac[1];
+    data[14] = ac[2];
+    data[15] = textureLevel;
+    data[16] = mat.ambientTexLevel;
+    data[17] = mat.lightmapLevel;
+    data[18] = mat.opacityLevel;
+    data[19] = mat.alphaCutOff;
+    data[20] = mat.reflectionLevel;
+    data[21] = mat.reflectionCoordMode;
+  }
+  var _stencilResolver, _bindingsCache, _composedCache, _cachedDevice3;
+  var init_standard_pipeline = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-pipeline.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_standard_material();
+      init_scene_helpers();
+      init_standard_template();
+      init_shader_composer();
+      init_gpu_buffers();
+      init_render_target();
+      init_standard_flags();
+      init_mesh_features();
+      _stencilResolver = null;
+      _bindingsCache = /* @__PURE__ */ new Map();
+      _composedCache = null;
+      _cachedDevice3 = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-renderable.ts
+  var standard_renderable_exports = {};
+  __export(standard_renderable_exports, {
+    buildStandardMeshRenderables: () => buildStandardMeshRenderables
+  });
+  function buildStandardMeshRenderables(scene, meshes, factories) {
+    const engine = scene.surface.engine;
+    const device = engine._device;
+    const { tiSync, tiFragment, shadowFragment, cull } = factories;
+    const shadowLights = [];
+    for (let i = 0; i < scene.lights.length; i++) {
+      const sg = scene.lights[i].shadowGenerator;
+      if (sg) {
+        shadowLights.push({ lightIndex: i, shadowType: sg._shadowType, gen: sg });
+      }
+    }
+    const hasSomeShadows = shadowLights.length > 0;
+    const shadowBGCache = /* @__PURE__ */ new Map();
+    const rebuildSingle = (s, mesh, materialOverride) => {
+      const mat = materialOverride ?? mesh.material;
+      const renderFeatures = mat._renderFeatures ?? (mat._renderFeatures = { features: _computeStandardMaterialFeatures(mat) });
+      const isOverride = materialOverride != null;
+      const features = renderFeatures.features;
+      const shadowOutput = (features & (NO_COLOR_OUTPUT | ESM_SHADOW_OUTPUT)) !== 0;
+      const receiveShadows = !shadowOutput && mesh.receiveShadows && hasSomeShadows;
+      const meshFeatures = _computeMeshFeatures(mesh, receiveShadows);
+      const frags = [];
+      for (const ext of _getStdExts().values()) {
+        if (features & ext._feature) {
+          const f = ext._frag(features);
+          if (f) {
+            frags.push(f);
+          }
+        }
+      }
+      let shaderKey = "";
+      if (meshFeatures & MSH_RECEIVE_SHADOWS && shadowFragment) {
+        const slots = shadowLights.map((sl) => ({ lightIndex: sl.lightIndex, shadowType: sl.shadowType }));
+        shaderKey = _standardShaderVariantKey(slots);
+        frags.push(shadowFragment(slots));
+      }
+      if (meshFeatures & MSH_HAS_THIN_INSTANCES && tiFragment) {
+        const hasColor = !!(meshFeatures & MSH_HAS_INSTANCE_COLOR);
+        const tiFrag = tiFragment(hasColor);
+        if (hasColor) {
+          const { _fragmentSlots, ...rest } = tiFrag;
+          frags.push({
+            ...rest,
+            _fragmentSlots: {
+              BC: `color = vec4<f32>(color.rgb * input.vInstanceColor.rgb, color.a * input.vInstanceColor.a);`
+            }
+          });
+        } else {
+          frags.push(tiFrag);
+        }
+      }
+      const esmShadowDepthCode = (features & ESM_SHADOW_OUTPUT) !== 0 ? mat._esmShadowDepthCode : "";
+      const bindings = getOrCreateStandardBindings(engine, features, meshFeatures, frags, shaderKey, esmShadowDepthCode, mat.stencil ?? null);
+      const meshShadowGens = receiveShadows ? shadowLights.map((sl) => sl.gen) : [];
+      const meshUboData = new F32(bindings._composed._meshUboSpec._totalBytes / 4);
+      const _packMeshWorld = engine._makePackMeshWorld?.(s) ?? packMat4IntoF32;
+      _packMeshWorld(meshUboData, mesh.worldMatrix, 0, 0);
+      writeMeshLightSelection(mesh, s.lights, meshUboData);
+      const meshUBO = createUniformBuffer(engine, meshUboData);
+      const textureLevel = (features & NEEDS_UV) !== 0 ? 1 : 0;
+      const matData = new F32(24);
+      writeStdMaterialData(matData, mat, textureLevel);
+      const materialUBO = createUniformBuffer(engine, matData);
+      const meshBindGroup = createStandardMeshBindGroup(engine, bindings, meshUBO, materialUBO, mat);
+      let shadowBindGroup = null;
+      if (meshShadowGens.length > 0 && bindings._shadowBGL) {
+        let cached = shadowBGCache.get(bindings._shadowBGL);
+        if (!cached) {
+          const entries = [];
+          let b = 0;
+          for (const sg of meshShadowGens) {
+            entries.push({ binding: b++, resource: sg._depthTexture.createView() });
+            entries.push({ binding: b++, resource: sg._depthSampler });
+            entries.push({ binding: b++, resource: { buffer: sg._shadowUBO } });
+          }
+          cached = device.createBindGroup({ layout: bindings._shadowBGL, entries });
+          shadowBGCache.set(bindings._shadowBGL, cached);
+        }
+        shadowBindGroup = cached;
+      }
+      const needsUV = (features & NEEDS_UV) !== 0;
+      const needsUV2 = (features & NEEDS_UV2) !== 0;
+      const hasThinInstances = (meshFeatures & MSH_HAS_THIN_INSTANCES) !== 0;
+      const hasInstanceColor = (meshFeatures & MSH_HAS_INSTANCE_COLOR) !== 0;
+      const isTransparent = !shadowOutput && ((features & HAS_OPACITY_TEXTURE) !== 0 || mat.alpha < 1);
+      const boundTextures = collectStdBoundTextures(mat);
+      for (const t of boundTextures) {
+        acquireTexture(t);
+      }
+      s._meshDisposables.set(mesh, [
+        () => {
+          for (const t of boundTextures) {
+            releaseTexture(t);
+          }
+        }
+      ]);
+      let _lastWorldVersion = mesh.worldMatrixVersion;
+      let _lastLightsCount = s.lights.length;
+      const sortCenter = [mesh.worldMatrix[12], mesh.worldMatrix[13], mesh.worldMatrix[14]];
+      const _baseUpdate = () => {
+        const worldVersion = mesh.worldMatrixVersion;
+        if (worldVersion !== _lastWorldVersion || s.lights.length !== _lastLightsCount) {
+          sortCenter[0] = mesh.worldMatrix[12];
+          sortCenter[1] = mesh.worldMatrix[13];
+          sortCenter[2] = mesh.worldMatrix[14];
+          _packMeshWorld(meshUboData, mesh.worldMatrix, 0, 0);
+          writeMeshLightSelection(mesh, s.lights, meshUboData);
+          device.queue.writeBuffer(meshUBO, 0, meshUboData);
+          _lastWorldVersion = worldVersion;
+          _lastLightsCount = s.lights.length;
+        }
+        const uboVersion = mat._uboVersion;
+        if (uboVersion !== _lastUboVersion) {
+          _lastUboVersion = uboVersion;
+          _stdMatScratch.fill(0);
+          writeStdMaterialData(_stdMatScratch, mat, textureLevel);
+          device.queue.writeBuffer(materialUBO, 0, _stdMatScratch.buffer, 0, 96);
+        }
+      };
+      const _invalidate = () => {
+        _lastWorldVersion = -1;
+      };
+      const update = engine._wrapRenderableForFO?.(_baseUpdate, s, _invalidate) ?? _baseUpdate;
+      const draw = (pass, cullBinding) => {
+        if (!isOverride && mesh.material !== mat) {
+          return 0;
+        }
+        const g = mesh._gpu;
+        let slot = 0;
+        const vb = g._vbLayout;
+        pass.setVertexBuffer(slot++, g.positionBuffer, vb?._p?._offset);
+        pass.setVertexBuffer(slot++, g.normalBuffer, vb?._n?._offset);
+        if (needsUV) {
+          pass.setVertexBuffer(slot++, g.uvBuffer, vb?._u?._offset);
+        }
+        if (needsUV2 && g.uv2Buffer) {
+          pass.setVertexBuffer(slot++, g.uv2Buffer, vb?._u2?._offset);
+        }
+        const ti = hasThinInstances ? mesh.thinInstances : null;
+        if (ti && tiSync) {
+          slot = tiSync(engine, ti, pass, slot, hasInstanceColor, cullBinding?.cullDrawBufs);
+        }
+        pass.setIndexBuffer(g.indexBuffer, g.indexFormat);
+        pass.setBindGroup(1, meshBindGroup);
+        if (receiveShadows && shadowBindGroup) {
+          pass.setBindGroup(2, shadowBindGroup);
+        }
+        if (cullBinding) {
+          cullBinding.draw(pass, g.indexCount, ti.count);
+        } else if (ti && ti.count > 0) {
+          pass.drawIndexed(g.indexCount, ti.count);
+        } else {
+          pass.drawIndexed(g.indexCount);
+        }
+        return 1;
+      };
+      const r = {
+        order: mesh.renderOrder ?? (isTransparent ? 200 : 100),
+        isTransparent,
+        mesh,
+        bind(eng, sig) {
+          const pipeline = getOrCreateStandardPipeline(eng, sig, bindings);
+          const cb = cull?.tryBind(r, s, mesh, engine, hasInstanceColor, isTransparent, update);
+          return {
+            renderable: r,
+            pipeline,
+            update: cb ? cb.update : update,
+            draw: (pass) => draw(pass, cb)
+          };
+        }
+      };
+      r._worldCenter = sortCenter;
+      let _lastUboVersion = mat._uboVersion;
+      return r;
+    };
+    const renderables = meshes.map((m) => rebuildSingle(scene, m));
+    scene._disposables.push(
+      () => clearStandardPipelineCache(),
+      () => clearSamplerCache(engine)
+    );
+    return { renderables, rebuildSingle };
+  }
+  var _stdMatScratch;
+  var init_standard_renderable = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-renderable.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_collect_std_bound_textures();
+      init_standard_material();
+      init_gpu_pool();
+      init_gpu_buffers();
+      init_standard_pipeline();
+      init_standard_flags();
+      init_lights_ubo();
+      init_mesh_features();
+      init_pack_mat4_into_f32();
+      _stdMatScratch = new F32(24);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-group-builder.ts
+  var _STD_MAT_EXTS, standardGroupBuilder;
+  var init_standard_group_builder = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/standard-group-builder.ts"() {
+      "use strict";
+      init_standard_flags();
+      _STD_MAT_EXTS = [
+        ["bumpTexture", () => Promise.resolve().then(() => (init_normal_map_fragment(), normal_map_fragment_exports)), "bumpStdExt"],
+        ["emissiveTexture", () => Promise.resolve().then(() => (init_std_emissive_fragment(), std_emissive_fragment_exports)), "stdEmissiveExt"],
+        ["specularTexture", () => Promise.resolve().then(() => (init_std_specular_fragment(), std_specular_fragment_exports)), "stdSpecularExt"],
+        ["ambientTexture", () => Promise.resolve().then(() => (init_std_ambient_fragment(), std_ambient_fragment_exports)), "stdAmbientExt"],
+        ["lightmapTexture", () => Promise.resolve().then(() => (init_std_lightmap_fragment(), std_lightmap_fragment_exports)), "stdLightmapExt"],
+        ["opacityTexture", () => Promise.resolve().then(() => (init_std_opacity_fragment(), std_opacity_fragment_exports)), "stdOpacityExt"],
+        ["reflectionTexture", () => Promise.resolve().then(() => (init_std_reflection_fragment(), std_reflection_fragment_exports)), "stdReflectionExt"],
+        ["reflectionCubeTexture", () => Promise.resolve().then(() => (init_std_cube_reflection_fragment(), std_cube_reflection_fragment_exports)), "stdCubeReflectionExt"]
+      ];
+      standardGroupBuilder = async (scene, meshes) => {
+        const hasTI = meshes.some((m) => !!m.thinInstances);
+        const hasCulling = meshes.some((m) => !!m.thinInstances?._gpuCullingEnabled);
+        const hasShadow = meshes.some((m) => m.receiveShadows) && scene.lights.some((l) => !!l.shadowGenerator);
+        let tiSync;
+        let tiFragment;
+        let shadowFragment;
+        let cull;
+        const imports = [];
+        if (hasTI) {
+          imports.push(
+            Promise.resolve().then(() => (init_thin_instance_gpu(), thin_instance_gpu_exports)).then((m) => {
+              tiSync = m.syncThinInstanceBuffers;
+            }),
+            Promise.resolve().then(() => (init_thin_instance_fragment(), thin_instance_fragment_exports)).then((m) => {
+              tiFragment = m.createThinInstanceFragment;
+            })
+          );
+          if (hasCulling) {
+            imports.push(
+              Promise.resolve().then(() => (init_thin_instance_cull_binding(), thin_instance_cull_binding_exports)).then((m) => {
+                cull = m;
+              })
+            );
+          }
+        }
+        if (hasShadow) {
+          imports.push(
+            Promise.resolve().then(() => (init_std_shadow_fragment(), std_shadow_fragment_exports)).then((m) => {
+              shadowFragment = m.createStdShadowFragment;
+            })
+          );
+        }
+        for (const [prop, load, key] of _STD_MAT_EXTS) {
+          if (meshes.some((m) => !!m.material[prop])) {
+            imports.push(load().then((mod) => _registerStdExt(mod[key])));
+          }
+        }
+        if (imports.length > 0) {
+          await Promise.all(imports);
+        }
+        const renderableMod = await Promise.resolve().then(() => (init_standard_renderable(), standard_renderable_exports));
+        const result = renderableMod.buildStandardMeshRenderables(scene, meshes, { tiSync, tiFragment, shadowFragment, cull });
+        standardGroupBuilder._rebuildSingle = result.rebuildSingle;
+        return result;
+      };
+      standardGroupBuilder._materialFamily = "standard";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/standard/create-standard-material.ts
+  function createStandardMaterial() {
+    return {
+      diffuseColor: [1, 1, 1],
+      alpha: 1,
+      specularColor: [1, 1, 1],
+      specularPower: 64,
+      emissiveColor: [0, 0, 0],
+      ambientColor: [0, 0, 0],
+      diffuseTexture: null,
+      diffuseCoordIndex: 0,
+      emissiveTexture: null,
+      bumpTexture: null,
+      bumpLevel: 1,
+      specularTexture: null,
+      specularCoordIndex: 0,
+      ambientTexture: null,
+      ambientTexLevel: 1,
+      ambientCoordIndex: 0,
+      lightmapTexture: null,
+      lightmapLevel: 1,
+      lightmapCoordIndex: 1,
+      useLightmapAsShadowmap: false,
+      opacityTexture: null,
+      opacityLevel: 1,
+      opacityFromRGB: false,
+      alphaCutOff: 0,
+      reflectionTexture: null,
+      reflectionCubeTexture: null,
+      reflectionLevel: 1,
+      reflectionCoordMode: 1,
+      uvScale: [1, 1],
+      backFaceCulling: true,
+      disableLighting: false,
+      _buildGroup: standardGroupBuilder,
+      _uboVersion: 0
+    };
+  }
+  var init_create_standard_material = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/standard/create-standard-material.ts"() {
+      "use strict";
+      init_standard_group_builder();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/index.ts
+  init_engine();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene.ts
+  init_scene_core();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/camera/arc-rotate.ts
+  init_mat4_look_at_lh();
+  init_vec3_up();
+  init_world_matrix_state();
+  init_observable_vec3();
+  init_matrix_allocator();
+  function createArcRotateCamera(alpha, beta, radius, target) {
+    function localEyePosition() {
+      const cosA = Math.cos(cam.alpha), sinA = Math.sin(cam.alpha);
+      const cosB = Math.cos(cam.beta);
+      let sinB = Math.sin(cam.beta);
+      if (sinB === 0) {
+        sinB = 1e-4;
+      }
+      return {
+        x: cam.target.x + cam.radius * cosA * sinB,
+        y: cam.target.y + cam.radius * cosB,
+        z: cam.target.z + cam.radius * sinA * sinB
+      };
+    }
+    const _localMat = allocateMat4();
+    function cameraLocalWorldMatrix() {
+      const eye = localEyePosition();
+      const v = mat4LookAtLH(eye, cam.target, Vec3Up);
+      const m = _localMat;
+      m[0] = v[0];
+      m[1] = v[4];
+      m[2] = v[8];
+      m[3] = 0;
+      m[4] = v[1];
+      m[5] = v[5];
+      m[6] = v[9];
+      m[7] = 0;
+      m[8] = v[2];
+      m[9] = v[6];
+      m[10] = v[10];
+      m[11] = 0;
+      m[12] = eye.x;
+      m[13] = eye.y;
+      m[14] = eye.z;
+      m[15] = 1;
+      return _localMat;
+    }
+    const wm = createWorldMatrixState(cameraLocalWorldMatrix);
+    const onDirty = () => wm.markLocalDirty();
+    const scalars = { alpha, beta, radius };
+    const cam = {
+      alpha: 0,
+      // placeholder — overridden by defineProperty below
+      beta: 0,
+      radius: 0,
+      target: new ObservableVec3(target.x, target.y, target.z, onDirty),
+      fov: 0.8,
+      nearPlane: 0.1,
+      farPlane: 1e3,
+      children: [],
+      inertia: 0.9,
+      panningInertia: 0.9,
+      inertialAlphaOffset: 0,
+      inertialBetaOffset: 0,
+      inertialRadiusOffset: 0,
+      inertialPanningX: 0,
+      inertialPanningY: 0,
+      // Matrix caches use the process-global allocator — F32 by default,
+      // F64 after an HPM engine is created. Same backing as the camera world
+      // matrix above, so the camera's storage precision is uniform.
+      _viewCache: allocateMat4(),
+      _projCache: allocateMat4(),
+      _vpCache: allocateMat4(),
+      get parent() {
+        return wm.parent;
+      },
+      set parent(v) {
+        wm.parent = v;
+      },
+      get worldMatrix() {
+        return wm.getWorldMatrix();
+      },
+      get worldMatrixVersion() {
+        return wm.getWorldMatrixVersion();
+      }
+    };
+    for (const key of ["alpha", "beta", "radius"]) {
+      Object.defineProperty(cam, key, {
+        get: () => scalars[key],
+        set: (v) => {
+          if (scalars[key] !== v) {
+            scalars[key] = v;
+            onDirty();
+            cam._clampToLimits?.();
+          }
+        },
+        configurable: true,
+        enumerable: true
+      });
+    }
+    attachWorldMatrixState(cam, wm);
+    return cam;
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/camera/arc-rotate-controls.ts
+  function attachControl(camera, canvas, scene, options) {
+    const angularSensibility = 1e3;
+    const panningSensibility = 50;
+    const wheelPrecision = 3;
+    const ROTATION_EPSILON = 1e-3;
+    const RADIUS_EPSILON = 1e-3;
+    const PANNING_EPSILON = 1e-4;
+    let isDragging = false;
+    let isPanning = false;
+    let lastX = 0;
+    let lastY = 0;
+    const activeTouches = /* @__PURE__ */ new Map();
+    let pinchStartDist = 0;
+    let pinchStartRadius = 0;
+    function onPointerDown(e) {
+      if (options?.shouldHandlePointerDown && !options.shouldHandlePointerDown(e)) {
+        return;
+      }
+      canvas.setPointerCapture(e.pointerId);
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (e.button === 0) {
+        isDragging = true;
+        isPanning = false;
+      } else if (e.button === 2) {
+        isDragging = false;
+        isPanning = true;
+      }
+    }
+    function onPointerMove(e) {
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (activeTouches.size >= 2) {
+        return;
+      }
+      if (!isDragging && !isPanning) {
+        return;
+      }
+      if (options?.isExternalDragActive?.()) {
+        isDragging = false;
+        isPanning = false;
+        camera.inertialAlphaOffset = 0;
+        camera.inertialBetaOffset = 0;
+        camera.inertialPanningX = 0;
+        camera.inertialPanningY = 0;
+        return;
+      }
+      if (options?.isExternalPickPending?.()) {
+        return;
+      }
+      if (isDragging) {
+        camera.inertialAlphaOffset -= dx / angularSensibility;
+        camera.inertialBetaOffset -= dy / angularSensibility;
+      }
+      if (isPanning) {
+        camera.inertialPanningX += -dx / panningSensibility;
+        camera.inertialPanningY += dy / panningSensibility;
+      }
+    }
+    function onPointerUp(e) {
+      canvas.releasePointerCapture(e.pointerId);
+      isDragging = false;
+      isPanning = false;
+    }
+    function onWheel(e) {
+      e.preventDefault();
+      camera.inertialRadiusOffset -= e.deltaY * camera.radius / (wheelPrecision * 1e3);
+    }
+    function onContextMenu(e) {
+      e.preventDefault();
+    }
+    function onTouchStart(e) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        activeTouches.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
+      }
+      if (activeTouches.size >= 2) {
+        isDragging = false;
+        isPanning = false;
+        const iter = activeTouches.values();
+        const p0 = iter.next().value;
+        const p1 = iter.next().value;
+        pinchStartDist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        pinchStartRadius = camera.radius;
+        e.preventDefault();
+      }
+    }
+    function onTouchMove(e) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        activeTouches.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
+      }
+      if (activeTouches.size >= 2) {
+        e.preventDefault();
+        const iter = activeTouches.values();
+        const p0 = iter.next().value;
+        const p1 = iter.next().value;
+        const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        if (pinchStartDist > 0 && dist > 0) {
+          camera.radius = pinchStartRadius * (pinchStartDist / dist);
+          camera.radius = Math.max(0.01, camera.radius);
+        }
+      }
+    }
+    function onTouchEnd(e) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        activeTouches.delete(e.changedTouches[i].identifier);
+      }
+      if (activeTouches.size === 1) {
+        const p = activeTouches.values().next().value;
+        lastX = p.x;
+        lastY = p.y;
+      }
+      if (activeTouches.size < 2) {
+        pinchStartDist = 0;
+      }
+    }
+    function onGesture(e) {
+      e.preventDefault();
+    }
+    function applyInertia() {
+      if (camera.inertialAlphaOffset !== 0 || camera.inertialBetaOffset !== 0) {
+        camera.alpha += camera.inertialAlphaOffset;
+        camera.beta += camera.inertialBetaOffset;
+        const eps = 0.01;
+        camera.beta = Math.max(eps, Math.min(Math.PI - eps, camera.beta));
+        camera.inertialAlphaOffset *= camera.inertia;
+        camera.inertialBetaOffset *= camera.inertia;
+        if (Math.abs(camera.inertialAlphaOffset) < ROTATION_EPSILON) {
+          camera.inertialAlphaOffset = 0;
+        }
+        if (Math.abs(camera.inertialBetaOffset) < ROTATION_EPSILON) {
+          camera.inertialBetaOffset = 0;
+        }
+      }
+      if (camera.inertialRadiusOffset !== 0) {
+        camera.radius -= camera.inertialRadiusOffset;
+        camera.radius = Math.max(0.01, camera.radius);
+        camera.inertialRadiusOffset *= camera.inertia;
+        if (Math.abs(camera.inertialRadiusOffset) < RADIUS_EPSILON) {
+          camera.inertialRadiusOffset = 0;
+        }
+      }
+      if (camera.inertialPanningX !== 0 || camera.inertialPanningY !== 0) {
+        const cosA = Math.cos(camera.alpha);
+        const sinA = Math.sin(camera.alpha);
+        const rightX = -sinA;
+        const rightZ = cosA;
+        const panScale = camera.radius * 1e-3;
+        camera.target.x += rightX * camera.inertialPanningX * panScale;
+        camera.target.y += camera.inertialPanningY * panScale;
+        camera.target.z += rightZ * camera.inertialPanningX * panScale;
+        camera.inertialPanningX *= camera.panningInertia;
+        camera.inertialPanningY *= camera.panningInertia;
+        if (Math.abs(camera.inertialPanningX) < PANNING_EPSILON) {
+          camera.inertialPanningX = 0;
+        }
+        if (Math.abs(camera.inertialPanningY) < PANNING_EPSILON) {
+          camera.inertialPanningY = 0;
+        }
+      }
+    }
+    if (scene) {
+      scene._beforeRender.push(applyInertia);
+    }
+    const listeners = [
+      ["pointerdown", onPointerDown],
+      ["pointermove", onPointerMove],
+      ["pointerup", onPointerUp],
+      ["wheel", onWheel, { passive: false }],
+      ["contextmenu", onContextMenu],
+      ["touchstart", onTouchStart, { passive: false }],
+      ["touchmove", onTouchMove, { passive: false }],
+      ["touchend", onTouchEnd],
+      ["gesturestart", onGesture, { passive: false }],
+      ["gesturechange", onGesture, { passive: false }],
+      ["gestureend", onGesture, { passive: false }]
+    ];
+    for (const [ev, h, opts] of listeners) {
+      canvas.addEventListener(ev, h, opts);
+    }
+    return () => {
+      if (scene) {
+        const idx = scene._beforeRender.indexOf(applyInertia);
+        if (idx >= 0) {
+          scene._beforeRender.splice(idx, 1);
+        }
+      }
+      for (const [ev, h] of listeners) {
+        canvas.removeEventListener(ev, h);
+      }
+    };
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/hemispheric.ts
+  init_light_base();
+  init_light_matrix();
+  init_matrix_allocator();
+  function createHemisphericLight(direction = [0, 1, 0], intensity = 1) {
+    const _localMatrix = allocateMat4();
+    const { wm, onDirty, lvs } = createLightBase(() => {
+      return localMatrixFromDirection(light.direction.x, light.direction.y, light.direction.z, 0, 0, 0, _localMatrix);
+    });
+    const light = applyWorldMatrixAccessors(
+      {
+        lightType: "hemispheric",
+        children: [],
+        direction: new ObservableVec3(direction[0], direction[1], direction[2], onDirty),
+        intensity,
+        diffuseColor: [1, 1, 1],
+        specularColor: [1, 1, 1],
+        groundColor: [0, 0, 0],
+        _writeLightUbo: (data, offset) => {
+          const o = offset;
+          const w = light.worldMatrix;
+          data[o] = w[8];
+          data[o + 1] = w[9];
+          data[o + 2] = w[10];
+          data[o + 3] = 3;
+          data[o + 4] = light.diffuseColor[0] * light.intensity;
+          data[o + 5] = light.diffuseColor[1] * light.intensity;
+          data[o + 6] = light.diffuseColor[2] * light.intensity;
+          data[o + 8] = light.specularColor[0] * light.intensity;
+          data[o + 9] = light.specularColor[1] * light.intensity;
+          data[o + 10] = light.specularColor[2] * light.intensity;
+          data[o + 12] = light.groundColor[0] * light.intensity;
+          data[o + 13] = light.groundColor[1] * light.intensity;
+          data[o + 14] = light.groundColor[2] * light.intensity;
+        }
+      },
+      wm,
+      lvs
+    );
+    return light;
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/mesh-factories.ts
+  init_mesh();
+  init_compute_aabb();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/create-sphere.ts
+  init_typed_arrays();
+  function createSphereData(options = {}) {
+    const segments = Math.max(3, options.segments ?? 32);
+    const baseDiameter = options.diameter ?? 1;
+    const rx = (options.diameterX ?? baseDiameter) / 2;
+    const ry = (options.diameterY ?? baseDiameter) / 2;
+    const rz = (options.diameterZ ?? baseDiameter) / 2;
+    const totalZRotationSteps = 2 + segments;
+    const totalYRotationSteps = 2 * totalZRotationSteps;
+    const totalVertices = (totalZRotationSteps + 1) * (totalYRotationSteps + 1);
+    const totalIndices = totalZRotationSteps * totalYRotationSteps * 6;
+    const positions = new F32(totalVertices * 3);
+    const normals = new F32(totalVertices * 3);
+    const uvs = new F32(totalVertices * 2);
+    const indices = new U32(totalIndices);
+    let vIdx = 0;
+    for (let zStep = 0; zStep <= totalZRotationSteps; zStep++) {
+      const normalizedZ = zStep / totalZRotationSteps;
+      const angleZ = normalizedZ * Math.PI;
+      for (let yStep = 0; yStep <= totalYRotationSteps; yStep++) {
+        const normalizedY = yStep / totalYRotationSteps;
+        const angleY = normalizedY * Math.PI * 2;
+        const nx = Math.sin(angleZ) * Math.cos(angleY);
+        const ny = Math.cos(angleZ);
+        const nz = -Math.sin(angleZ) * Math.sin(angleY);
+        positions[vIdx * 3] = rx * nx;
+        positions[vIdx * 3 + 1] = ry * ny;
+        positions[vIdx * 3 + 2] = rz * nz;
+        normals[vIdx * 3] = nx;
+        normals[vIdx * 3 + 1] = ny;
+        normals[vIdx * 3 + 2] = nz;
+        uvs[vIdx * 2] = normalizedY;
+        uvs[vIdx * 2 + 1] = normalizedZ;
+        vIdx++;
+      }
+    }
+    let iIdx = 0;
+    for (let zStep = 0; zStep < totalZRotationSteps; zStep++) {
+      for (let yStep = 0; yStep < totalYRotationSteps; yStep++) {
+        const a = zStep * (totalYRotationSteps + 1) + yStep;
+        const b = a + totalYRotationSteps + 1;
+        indices[iIdx++] = a;
+        indices[iIdx++] = a + 1;
+        indices[iIdx++] = b;
+        indices[iIdx++] = b;
+        indices[iIdx++] = a + 1;
+        indices[iIdx++] = b + 1;
+      }
+    }
+    return {
+      positions,
+      normals,
+      uvs,
+      indices,
+      vertexCount: totalVertices,
+      indexCount: totalIndices
+    };
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/create-box.ts
+  init_typed_arrays();
+  var BOX_POSITIONS = new F32([
+    // +Z face
+    0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    // -Z face
+    0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    // +X face
+    0.5,
+    0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    // -X face
+    -0.5,
+    0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    // +Y face
+    -0.5,
+    0.5,
+    0.5,
+    -0.5,
+    0.5,
+    -0.5,
+    0.5,
+    0.5,
+    -0.5,
+    0.5,
+    0.5,
+    0.5,
+    // -Y face
+    0.5,
+    -0.5,
+    0.5,
+    0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    0.5
+  ]);
+  var BOX_NORMALS = new F32([
+    // +Z
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    // -Z
+    0,
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    // +X
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    // -X
+    -1,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    // +Y
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    // -Y
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    -1,
+    0
+  ]);
+  var BOX_UVS = new F32([
+    // Each face: (1,1), (0,1), (0,0), (1,0) — matching BJS box UV layout
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    // +Z
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    // -Z
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    // +X
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    // -X
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    // +Y
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0
+    // -Y
+  ]);
+  var BOX_INDICES = new U32([
+    0,
+    1,
+    2,
+    0,
+    2,
+    3,
+    4,
+    5,
+    6,
+    4,
+    6,
+    7,
+    8,
+    9,
+    10,
+    8,
+    10,
+    11,
+    12,
+    13,
+    14,
+    12,
+    14,
+    15,
+    16,
+    17,
+    18,
+    16,
+    18,
+    19,
+    20,
+    21,
+    22,
+    20,
+    22,
+    23
+  ]);
+  function createBoxData(size = 1) {
+    if (size === 1) {
+      return {
+        positions: BOX_POSITIONS,
+        normals: BOX_NORMALS,
+        uvs: BOX_UVS,
+        indices: BOX_INDICES,
+        vertexCount: 24,
+        indexCount: 36
+      };
+    }
+    const positions = new F32(BOX_POSITIONS.length);
+    for (let i = 0; i < positions.length; i++) {
+      positions[i] = BOX_POSITIONS[i] * size;
+    }
+    return {
+      positions,
+      normals: BOX_NORMALS,
+      uvs: BOX_UVS,
+      indices: BOX_INDICES,
+      vertexCount: 24,
+      indexCount: 36
+    };
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/create-plane.ts
+  init_typed_arrays();
+  function createPlaneData(options = {}) {
+    const size = options.size ?? 1;
+    const width = options.width ?? size;
+    const height = options.height ?? size;
+    const hw = width / 2;
+    const hh = height / 2;
+    const positions = new F32([
+      -hw,
+      -hh,
+      0,
+      hw,
+      -hh,
+      0,
+      hw,
+      hh,
+      0,
+      -hw,
+      hh,
+      0
+    ]);
+    const normals = new F32([
+      0,
+      0,
+      -1,
+      0,
+      0,
+      -1,
+      0,
+      0,
+      -1,
+      0,
+      0,
+      -1
+    ]);
+    const uvs = new F32([
+      0,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1
+    ]);
+    const indices = new U32([0, 1, 2, 0, 2, 3]);
+    return { positions, normals, uvs, indices };
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/mesh-factories.ts
+  function createMeshFromData(engine, name, positions, normals, indices, uvs, uvs2, tangents, colors) {
+    const [min, max] = computeAabb(positions);
+    const mesh = {
+      name,
+      material: null,
+      receiveShadows: false,
+      boundMin: isFinite(min[0]) ? min : void 0,
+      boundMax: isFinite(max[0]) ? max : void 0,
+      _gpu: uploadMeshToGPU(engine, positions, normals, indices, uvs, uvs2, tangents, colors)
+    };
+    initMeshTransform(mesh);
+    mesh._cpuPositions = positions;
+    mesh._cpuNormals = normals;
+    mesh._cpuUvs = uvs;
+    mesh._cpuIndices = indices;
+    engine._dlr?.m(mesh, uvs2 ?? null, tangents ?? null, colors ?? null, indices, "uint32");
+    return mesh;
+  }
+  function createSphere(engine, options) {
+    const data = createSphereData(options);
+    return createMeshFromData(engine, "sphere", data.positions, data.normals, data.indices, data.uvs);
+  }
+  function createBox(engine, size = 1) {
+    const data = createBoxData(size);
+    return createMeshFromData(engine, "box", data.positions, data.normals, data.indices, data.uvs);
+  }
+  function createPlane(engine, options) {
+    const data = createPlaneData(options);
+    return createMeshFromData(engine, "plane", data.positions, data.normals, data.indices, data.uvs);
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/normalize-vec3.ts
+  function normalizeVec3(x, y, z, epsilon = 1e-10) {
+    const len = Math.hypot(x, y, z);
+    if (len <= epsilon) {
+      return [0, 1, 0];
+    }
+    return [x / len, y / len, z / len];
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/csg2.ts
+  init_typed_arrays();
+  init_mat4_invert();
+  var MATERIAL_ID_RESERVE_COUNT = 65536;
+  var csg2Runtime = null;
+  var csg2RuntimePromise = null;
+  async function initializeCsg2Async() {
+    await getRuntimeAsync();
+  }
+  async function getRuntimeAsync() {
+    if (csg2Runtime) {
+      return csg2Runtime;
+    }
+    if (csg2RuntimePromise) {
+      return csg2RuntimePromise;
+    }
+    csg2RuntimePromise = (async () => {
+      const [module, wasm] = await Promise.all([Promise.resolve().then(() => (init_manifold(), manifold_exports)), Promise.resolve().then(() => (init_manifold2(), manifold_exports2))]);
+      const manifoldModule = await module.default({
+        locateFile: () => new URL(wasm.default, "file:///app/").href
+      });
+      manifoldModule.setup();
+      const runtime = {
+        Manifold: manifoldModule.Manifold,
+        Mesh: manifoldModule.Mesh,
+        firstMaterialId: manifoldModule.Manifold.reserveIDs(MATERIAL_ID_RESERVE_COUNT)
+      };
+      csg2Runtime = runtime;
+      return runtime;
+    })();
+    return csg2RuntimePromise;
+  }
+  function requireRuntime() {
+    if (!csg2Runtime) {
+      throw new Error("CSG2 is not initialized. Call and await initializeCsg2Async() before using CSG2 operations.");
+    }
+    return csg2Runtime;
+  }
+  function requireSolidManifold(solid, operation) {
+    const manifold = solid._manifold;
+    if (!manifold) {
+      throw new Error(`${operation} cannot use a disposed CSG2 solid.`);
+    }
+    return manifold;
+  }
+  function solidFromManifold(manifold, numProp) {
+    return { _manifold: manifold, _numProp: numProp };
+  }
+  function transformPoint(m, x, y, z) {
+    return [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]];
+  }
+  function transformNormal(m, inv, x, y, z) {
+    if (inv) {
+      return normalizeVec3(inv[0] * x + inv[1] * y + inv[2] * z, inv[4] * x + inv[5] * y + inv[6] * z, inv[8] * x + inv[9] * y + inv[10] * z, 1e-20);
+    }
+    return normalizeVec3(m[0] * x + m[4] * y + m[8] * z, m[1] * x + m[5] * y + m[9] * z, m[2] * x + m[6] * y + m[10] * z, 1e-20);
+  }
+  function requireCpuGeometry(mesh) {
+    if (!mesh._cpuPositions) {
+      throw new Error(`createCsg2FromMesh("${mesh.name}") requires CPU positions. Use a Babylon Lite mesh factory or loader that retains CPU geometry.`);
+    }
+    if (!mesh._cpuIndices) {
+      throw new Error(`createCsg2FromMesh("${mesh.name}") requires CPU indices. Use a Babylon Lite mesh factory or loader that retains CPU geometry.`);
+    }
+    if (!mesh._cpuNormals) {
+      throw new Error(`createCsg2FromMesh("${mesh.name}") requires CPU normals. Use a Babylon Lite mesh factory or loader that retains CPU geometry.`);
+    }
+    return {
+      positions: mesh._cpuPositions,
+      normals: mesh._cpuNormals,
+      indices: mesh._cpuIndices,
+      uvs: mesh._cpuUvs
+    };
+  }
+  function createCsg2FromMesh(mesh, materialSlot = 0) {
+    const runtime = requireRuntime();
+    if (materialSlot < 0 || materialSlot >= MATERIAL_ID_RESERVE_COUNT || !Number.isInteger(materialSlot)) {
+      throw new Error(`createCsg2FromMesh("${mesh.name}") materialSlot must be an integer from 0 to ${MATERIAL_ID_RESERVE_COUNT - 1}.`);
+    }
+    const geometry = requireCpuGeometry(mesh);
+    const vertexCount = geometry.positions.length / 3;
+    const numProp = 8;
+    const vertProperties = new F32(vertexCount * numProp);
+    const world = mesh.worldMatrix;
+    const invWorld = mat4Invert(world);
+    for (let i = 0; i < vertexCount; i++) {
+      const p = i * 3;
+      const uv = i * 2;
+      const out = i * numProp;
+      const [x, y, z] = transformPoint(world, geometry.positions[p], geometry.positions[p + 1], geometry.positions[p + 2]);
+      const [nx, ny, nz] = transformNormal(world, invWorld, geometry.normals[p], geometry.normals[p + 1], geometry.normals[p + 2]);
+      vertProperties[out] = x;
+      vertProperties[out + 1] = y;
+      vertProperties[out + 2] = z;
+      vertProperties[out + 3] = nx;
+      vertProperties[out + 4] = ny;
+      vertProperties[out + 5] = nz;
+      vertProperties[out + 6] = geometry.uvs?.[uv] ?? 0;
+      vertProperties[out + 7] = geometry.uvs?.[uv + 1] ?? 0;
+    }
+    const triVerts = new U32(geometry.indices.length);
+    for (let i = 0; i < geometry.indices.length; i += 3) {
+      triVerts[i] = geometry.indices[i + 2];
+      triVerts[i + 1] = geometry.indices[i + 1];
+      triVerts[i + 2] = geometry.indices[i];
+    }
+    const manifoldMesh = new runtime.Mesh({
+      numProp,
+      vertProperties,
+      triVerts,
+      runIndex: new U32([0]),
+      runOriginalID: new U32([runtime.firstMaterialId + materialSlot])
+    });
+    manifoldMesh.merge();
+    try {
+      return solidFromManifold(new runtime.Manifold(manifoldMesh), numProp);
+    } catch (err) {
+      throw new Error(`Error while creating CSG2 from mesh "${mesh.name}".`, { cause: err });
+    }
+  }
+  function runBooleanOperation(operation, a, b) {
+    const runtime = requireRuntime();
+    if (a._numProp !== b._numProp) {
+      throw new Error("CSG2 operations require solids with the same vertex property layout.");
+    }
+    return solidFromManifold(runtime.Manifold[operation](requireSolidManifold(a, `csg2 ${operation}`), requireSolidManifold(b, `csg2 ${operation}`)), a._numProp);
+  }
+  function csg2Subtract(a, b) {
+    return runBooleanOperation("difference", a, b);
+  }
+  function csg2Intersect(a, b) {
+    return runBooleanOperation("intersection", a, b);
+  }
+  function csg2Add(a, b) {
+    return runBooleanOperation("union", a, b);
+  }
+  function disposeCsg2(solid) {
+    if (solid._manifold) {
+      solid._manifold.delete();
+      solid._manifold = null;
+    }
+  }
+  function materialSlotFromOriginalId(runtime, originalId, name) {
+    const materialSlot = originalId - runtime.firstMaterialId;
+    if (materialSlot < 0 || materialSlot >= MATERIAL_ID_RESERVE_COUNT) {
+      throw new Error(`createMeshesFromCsg2("${name}") received an unknown Manifold material original ID ${originalId}.`);
+    }
+    return materialSlot;
+  }
+  function appendTriangle(output, mesh, triVerts, numProp, triIndex) {
+    const base = output.positions.length / 3;
+    for (let corner = 2; corner >= 0; corner--) {
+      const vertexIndex = triVerts[triIndex + corner];
+      const prop = vertexIndex * numProp;
+      output.positions.push(mesh.vertProperties[prop], mesh.vertProperties[prop + 1], mesh.vertProperties[prop + 2]);
+      output.normals.push(mesh.vertProperties[prop + 3], mesh.vertProperties[prop + 4], mesh.vertProperties[prop + 5]);
+      output.uvs.push(mesh.vertProperties[prop + 6], mesh.vertProperties[prop + 7]);
+      output.indices.push(base + (2 - corner));
+    }
+  }
+  function createMeshFromOutput(engine, name, output) {
+    if (output.positions.length === 0) {
+      throw new Error(`Unable to build CSG2 mesh "${name}". Manifold has 0 vertices for this output.`);
+    }
+    return createMeshFromData(engine, name, new F32(output.positions), new F32(output.normals), new U32(output.indices), new F32(output.uvs));
+  }
+  function createMeshesFromCsg2(engine, solid, materials, name = "csg2") {
+    const runtime = requireRuntime();
+    const mesh = requireSolidManifold(solid, `createMeshesFromCsg2("${name}")`).getMesh();
+    const outputs = [];
+    for (let run = 0; run < mesh.numRun; run++) {
+      const originalId = mesh.runOriginalID[run];
+      const materialSlot = materialSlotFromOriginalId(runtime, originalId, name);
+      let output = outputs.find((entry) => entry.materialSlot === materialSlot);
+      if (!output) {
+        output = { materialSlot, positions: [], normals: [], uvs: [], indices: [] };
+        outputs.push(output);
+      }
+      const start = mesh.runIndex[run] ?? 0;
+      const end = mesh.runIndex[run + 1] ?? mesh.triVerts.length;
+      for (let i = start; i < end; i += 3) {
+        appendTriangle(output, mesh, mesh.triVerts, solid._numProp, i);
+      }
+    }
+    outputs.sort((a, b) => a.materialSlot - b.materialSlot);
+    return outputs.map((output) => {
+      const material = materials[output.materialSlot];
+      if (!material) {
+        throw new Error(`createMeshesFromCsg2("${name}") missing material for CSG2 material slot ${output.materialSlot}.`);
+      }
+      const result = createMeshFromOutput(engine, `${name}_sub${output.materialSlot}`, output);
+      result.material = material;
+      return result;
+    });
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/index.ts
+  init_create_standard_material();
+  init_texture_2d();
+
+  // ../../../Babylon-Lite/lab/lite/src/lite/scene91.ts
+  var GRASS_URL = "https://playground.babylonjs.com/textures/grass.png";
+  var CRATE_URL = "https://playground.babylonjs.com/textures/crate.png";
+  function labelTextureUrl(text) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Scene 91 labels require a 2D canvas context.");
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "black";
+    ctx.font = "700 64px Arial, Helvetica, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(text, 128, 78);
+    return canvas.toDataURL("image/png");
+  }
+  async function createLabelMaterial(engine, text) {
+    const material = createStandardMaterial();
+    material.disableLighting = true;
+    material.emissiveColor = [1, 1, 1];
+    material.diffuseTexture = await loadTexture2D(engine, labelTextureUrl(text), {
+      mipMaps: false,
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge"
+    });
+    material.alphaCutOff = 0.5;
+    material.backFaceCulling = false;
+    return material;
+  }
+  function setMeshPosition(mesh, x, y, z = 0) {
+    mesh.position.x = x;
+    mesh.position.y = y;
+    mesh.position.z = z;
+  }
+  async function main() {
+    const initStart = performance.now();
+    const canvas = document.getElementById("renderCanvas");
+    const engine = await createEngine(canvas);
+    await initializeCsg2Async();
+    const scene = createSceneContext(engine);
+    scene.camera = createArcRotateCamera(-1.5, 1.6, 18, { x: 0, y: 0, z: 0 });
+    scene.camera.nearPlane = 0.1;
+    scene.camera.farPlane = 1e3;
+    attachControl(scene.camera, canvas, scene);
+    addToScene(scene, createHemisphericLight([0, 1, 0], 1));
+    const [grassTexture, crateTexture, subtractLabel, intersectLabel, unionLabel, equalsLabel] = await Promise.all([
+      loadTexture2D(engine, GRASS_URL, { invertY: true }),
+      loadTexture2D(engine, CRATE_URL, { invertY: true }),
+      createLabelMaterial(engine, "-"),
+      createLabelMaterial(engine, "\u2229"),
+      createLabelMaterial(engine, "+"),
+      createLabelMaterial(engine, "=")
+    ]);
+    const crateMaterial = createStandardMaterial();
+    crateMaterial.diffuseTexture = crateTexture;
+    const grassMaterial = createStandardMaterial();
+    grassMaterial.diffuseTexture = grassTexture;
+    const rows = [
+      { y: -4, label: subtractLabel, op: "subtract" },
+      { y: 0, label: intersectLabel, op: "intersect" },
+      { y: 4, label: unionLabel, op: "union" }
+    ];
+    for (const row of rows) {
+      const box = createBox(engine, 2);
+      const sphere = createSphere(engine, { diameter: 2.5, segments: 32 });
+      box.material = crateMaterial;
+      sphere.material = grassMaterial;
+      const boxCsg = createCsg2FromMesh(box, 0);
+      const sphereCsg = createCsg2FromMesh(sphere, 1);
+      let resultCsg;
+      let resultMeshes = [];
+      try {
+        resultCsg = row.op === "subtract" ? csg2Subtract(boxCsg, sphereCsg) : row.op === "intersect" ? csg2Intersect(boxCsg, sphereCsg) : csg2Add(boxCsg, sphereCsg);
+        resultMeshes = createMeshesFromCsg2(engine, resultCsg, [crateMaterial, grassMaterial], `csg-${row.op}`);
+      } finally {
+        disposeCsg2(boxCsg);
+        disposeCsg2(sphereCsg);
+        if (resultCsg) {
+          disposeCsg2(resultCsg);
+        }
+      }
+      setMeshPosition(box, -4, row.y);
+      setMeshPosition(sphere, 0.2, row.y);
+      addToScene(scene, box);
+      addToScene(scene, sphere);
+      for (const result of resultMeshes) {
+        setMeshPosition(result, 4, row.y);
+        addToScene(scene, result);
+      }
+      const label = createPlane(engine, { width: 1.4, height: 0.7 });
+      label.material = row.label;
+      setMeshPosition(label, -2, row.y);
+      addToScene(scene, label);
+      const equals = createPlane(engine, { width: 1.4, height: 0.7 });
+      equals.material = equalsLabel;
+      setMeshPosition(equals, 2, row.y);
+      addToScene(scene, equals);
+    }
+    await registerScene(scene);
+    await startEngine(engine);
+    canvas.dataset.drawCalls = String(engine.drawCallCount);
+    canvas.dataset.initMs = String(performance.now() - initStart);
+    canvas.dataset.ready = "true";
+  }
+  main().catch((err) => {
+    console.error(err);
+    const canvas = document.getElementById("renderCanvas");
+    if (canvas) {
+      canvas.dataset.error = String(err);
+    }
+  });
+})();

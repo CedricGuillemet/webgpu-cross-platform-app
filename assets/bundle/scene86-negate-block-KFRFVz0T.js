@@ -1,0 +1,1 @@
+import{u as Qe}from"./scene86-_math-factory-DFVyS8gB.js";const ii=Qe("NegateBlock",e=>"-"+e,void 0,"value");export{ii as emitter};

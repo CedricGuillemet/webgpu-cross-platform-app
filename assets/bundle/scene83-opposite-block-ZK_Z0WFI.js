@@ -1,0 +1,1 @@
+import{u as Yt}from"./scene83-_math-factory-DFVyS8gB.js";const to=Yt("OppositeBlock",t=>"1.0-"+t);export{to as emitter};

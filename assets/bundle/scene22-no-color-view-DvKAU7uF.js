@@ -1,0 +1,1 @@
+import{c as ei}from"./scene22-material-view-Dua1bl7W.js";import{e as er,f as ga}from"./scene22.js";function Ma(e){var _e$mo,_r$features;const r=(_e$mo=e.mo)!==null&&_e$mo!==void 0?_e$mo:{features:0,features2:0};return ei(e,{features:r.features&~ga,features2:((_r$features=r.features2)!==null&&_r$features!==void 0?_r$features:0)|er});}export{Ma as createPbrNoColorMaterialView};

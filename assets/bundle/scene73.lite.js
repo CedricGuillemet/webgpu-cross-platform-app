@@ -1,0 +1,20935 @@
+"use strict";
+(() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __esm = (fn, res) => function __init() {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  };
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/typed-arrays.ts
+  var F32, F64, U32, I32, U16, I16, U8, I8, U8C, DV;
+  var init_typed_arrays = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/typed-arrays.ts"() {
+      "use strict";
+      F32 = Float32Array;
+      F64 = Float64Array;
+      U32 = Uint32Array;
+      I32 = Int32Array;
+      U16 = Uint16Array;
+      I16 = Int16Array;
+      U8 = Uint8Array;
+      I8 = Int8Array;
+      U8C = Uint8ClampedArray;
+      DV = DataView;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/_matrix-allocator.ts
+  function _defaultAllocate() {
+    return new F32(16);
+  }
+  function allocateMat4() {
+    return (_allocate ?? _defaultAllocate)();
+  }
+  function _setHpmAllocator(allocate) {
+    _allocate = allocate;
+  }
+  var _allocate;
+  var init_matrix_allocator = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/_matrix-allocator.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/gpu-flags.ts
+  var TU, BU, SS, CW;
+  var init_gpu_flags = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/gpu-flags.ts"() {
+      "use strict";
+      TU = globalThis.GPUTextureUsage;
+      BU = globalThis.GPUBufferUsage;
+      SS = globalThis.GPUShaderStage;
+      CW = globalThis.GPUColorWrite;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/render-target.ts
+  function targetSignatureKey(desc) {
+    return `${desc._colorFormat ?? "-"}|${desc._depthStencilFormat ?? "-"}|${desc._depthCompare ?? ""}|${desc._sampleCount}`;
+  }
+  function createRenderTarget(descriptor) {
+    return {
+      _descriptor: descriptor,
+      _colorTexture: null,
+      _colorView: null,
+      _depthTexture: null,
+      _depthView: null,
+      _width: 0,
+      _height: 0
+    };
+  }
+  function buildRenderTarget(rt, engine) {
+    if (rt._eager) {
+      return;
+    }
+    disposeRenderTarget(rt);
+    const desc = rt._descriptor;
+    const { width, height } = resolveSize(desc);
+    rt._width = width;
+    rt._height = height;
+    const device = engine._device;
+    const allocColor = !!desc.format;
+    if (allocColor) {
+      rt._colorTexture = device.createTexture({
+        label: desc.lbl,
+        size: { width, height },
+        format: desc.format,
+        sampleCount: desc.samples,
+        usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING | TU.COPY_SRC
+      });
+      rt._colorView = rt._colorTexture.createView();
+    }
+    if (desc.dFormat) {
+      rt._depthTexture = device.createTexture({
+        label: desc.lbl,
+        size: { width, height },
+        format: desc.dFormat,
+        sampleCount: desc.samples,
+        usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING
+      });
+      rt._depthView = rt._depthTexture.createView();
+    }
+  }
+  function disposeRenderTarget(rt) {
+    if (!rt || rt._eager) {
+      return;
+    }
+    if (rt._colorTexture) {
+      rt._colorTexture.destroy();
+      rt._colorTexture = null;
+      rt._colorView = null;
+    }
+    if (rt._depthTexture) {
+      if (rt._ownsDepthTexture !== false) {
+        rt._depthTexture.destroy();
+      }
+      rt._depthTexture = null;
+      rt._depthView = null;
+    }
+    rt._width = 0;
+    rt._height = 0;
+  }
+  function resolveSize(desc) {
+    const size = desc.size;
+    if ("canvas" in size) {
+      const canvas = size.canvas;
+      return { width: canvas.width, height: canvas.height };
+    }
+    return size;
+  }
+  var REVERSE_DEPTH_COMPARE;
+  var init_render_target = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/render-target.ts"() {
+      "use strict";
+      init_gpu_flags();
+      REVERSE_DEPTH_COMPARE = "greater-equal";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/surface.ts
+  function isDomCanvas(canvas) {
+    return "clientWidth" in canvas;
+  }
+  function _buildSurface(engine, canvas, options) {
+    const context = canvas.getContext("webgpu");
+    if (!context) {
+      throw new Error("WebGPU context not available");
+    }
+    const format = options?.format ?? navigator.gpu.getPreferredCanvasFormat();
+    const alphaMode = options?.alphaMode ?? "opaque";
+    context.configure({ device: engine._device, format, alphaMode });
+    const msaaSamples = options?.msaaSamples === 1 ? 1 : 4;
+    const scRT = createRenderTarget({ lbl: "swapchain", format, samples: 1, size: { width: 0, height: 0 } });
+    scRT._eager = true;
+    return {
+      engine,
+      canvas,
+      format,
+      msaaSamples,
+      scRT,
+      maxDevicePixelRatio: options?.maxDevicePixelRatio ?? Infinity,
+      _uniqueId: _nextSurfaceId++,
+      _context: context,
+      _alphaMode: alphaMode,
+      _renderingContexts: []
+    };
+  }
+  function _refreshScRT(surface) {
+    const tex = surface._context.getCurrentTexture();
+    const swap = surface.scRT;
+    swap._colorTexture = tex;
+    swap._colorView = tex.createView();
+    swap._width = tex.width;
+    swap._height = tex.height;
+  }
+  function resizeSurface(surface) {
+    const canvas = surface.canvas;
+    if (!isDomCanvas(canvas)) {
+      return;
+    }
+    const clientWidth = canvas.clientWidth;
+    const clientHeight = canvas.clientHeight;
+    if (!(clientWidth > 0 && clientHeight > 0)) {
+      return;
+    }
+    const scale = Math.min(globalThis.devicePixelRatio || 1, surface.maxDevicePixelRatio);
+    const w = clientWidth * scale | 0;
+    const h = clientHeight * scale | 0;
+    setSurfaceSize(surface, w, h);
+  }
+  function setSurfaceSize(surface, widthPx, heightPx) {
+    const canvas = surface.canvas;
+    const w = widthPx | 0;
+    const h = heightPx | 0;
+    if (!(w > 0 && h > 0)) {
+      return;
+    }
+    if (w === canvas.width && h === canvas.height) {
+      return;
+    }
+    canvas.width = w;
+    canvas.height = h;
+    surface.scRT._width = w;
+    surface.scRT._height = h;
+    for (const c of surface._renderingContexts) {
+      c._resize?.();
+    }
+  }
+  var _nextSurfaceId;
+  var init_surface = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/surface.ts"() {
+      "use strict";
+      init_render_target();
+      _nextSurfaceId = 1;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/_mat4-storage-f64.ts
+  var mat4_storage_f64_exports = {};
+  __export(mat4_storage_f64_exports, {
+    MAT4_STORAGE_F64_BUILD_TAG: () => MAT4_STORAGE_F64_BUILD_TAG,
+    allocateF64Mat4: () => allocateF64Mat4
+  });
+  function allocateF64Mat4() {
+    return new F64(16);
+  }
+  var MAT4_STORAGE_F64_BUILD_TAG;
+  var init_mat4_storage_f64 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/_mat4-storage-f64.ts"() {
+      "use strict";
+      init_typed_arrays();
+      MAT4_STORAGE_F64_BUILD_TAG = "@@MAT4_STORAGE_F64@@";
+      allocateF64Mat4[MAT4_STORAGE_F64_BUILD_TAG] = true;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/types.ts
+  function setMaxLights(n) {
+    if (!Number.isFinite(n) || n < 1) {
+      throw new Error(`setMaxLights: expected positive integer, got ${n}`);
+    }
+    MAX_LIGHTS = n | 0;
+  }
+  var MAX_LIGHTS, LIGHT_ENTRY_FLOATS;
+  var init_types = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/types.ts"() {
+      "use strict";
+      MAX_LIGHTS = 16;
+      LIGHT_ENTRY_FLOATS = 16;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/large-world/floating-origin.ts
+  var floating_origin_exports = {};
+  __export(floating_origin_exports, {
+    applyLightFoOffset: () => applyLightFoOffset,
+    getFloatingOriginOffset: () => getFloatingOriginOffset,
+    lightFoVersion: () => lightFoVersion,
+    wrapRenderableForFO: () => wrapRenderableForFO
+  });
+  function getFloatingOriginOffset(scene) {
+    const cam = scene.camera;
+    if (!cam) {
+      return { x: 0, y: 0, z: 0 };
+    }
+    const w = cam.worldMatrix;
+    return { x: w[12], y: w[13], z: w[14] };
+  }
+  function lightFoVersion(scene) {
+    return scene.camera ? scene.camera.worldMatrixVersion : 0;
+  }
+  function applyLightFoOffset(data, scene) {
+    const cam = scene.camera;
+    const w = cam?.worldMatrix;
+    if (!w) {
+      return;
+    }
+    const ox = w[12];
+    const oy = w[13];
+    const oz = w[14];
+    let count = 0;
+    for (const light of scene.lights) {
+      if (count >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      const o = 4 + count * LIGHT_ENTRY_FLOATS;
+      const type = data[o + 3];
+      if (type === 0 || type === 2) {
+        const lw = light.worldMatrix;
+        data[o] = lw[12] - ox;
+        data[o + 1] = lw[13] - oy;
+        data[o + 2] = lw[14] - oz;
+      }
+      count++;
+    }
+  }
+  function wrapRenderableForFO(inner, scene, invalidate) {
+    let _lastCameraVersion = -1;
+    return () => {
+      const cv = scene.camera ? scene.camera.worldMatrixVersion : -1;
+      if (cv !== _lastCameraVersion) {
+        invalidate();
+        _lastCameraVersion = cv;
+      }
+      inner();
+    };
+  }
+  var init_floating_origin = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/large-world/floating-origin.ts"() {
+      "use strict";
+      init_types();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/large-world/pack-mat4-with-offset.ts
+  var pack_mat4_with_offset_exports = {};
+  __export(pack_mat4_with_offset_exports, {
+    makePackMeshWorld: () => makePackMeshWorld,
+    packMat4IntoF32WithOffset: () => packMat4IntoF32WithOffset
+  });
+  function packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, offsetX, offsetY, offsetZ) {
+    const src = mat;
+    const s = srcOffsetFloats;
+    const o = offsetFloats;
+    view[o + 0] = src[s + 0];
+    view[o + 1] = src[s + 1];
+    view[o + 2] = src[s + 2];
+    view[o + 3] = src[s + 3];
+    view[o + 4] = src[s + 4];
+    view[o + 5] = src[s + 5];
+    view[o + 6] = src[s + 6];
+    view[o + 7] = src[s + 7];
+    view[o + 8] = src[s + 8];
+    view[o + 9] = src[s + 9];
+    view[o + 10] = src[s + 10];
+    view[o + 11] = src[s + 11];
+    view[o + 12] = src[s + 12] - offsetX;
+    view[o + 13] = src[s + 13] - offsetY;
+    view[o + 14] = src[s + 14] - offsetZ;
+    view[o + 15] = src[s + 15];
+  }
+  function makePackMeshWorld(scene) {
+    return (view, mat, offsetFloats, srcOffsetFloats) => {
+      const cam = scene.camera;
+      if (!cam) {
+        packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, 0, 0, 0);
+        return;
+      }
+      const w = cam.worldMatrix;
+      packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, w[12], w[13], w[14]);
+    };
+  }
+  var init_pack_mat4_with_offset = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/large-world/pack-mat4-with-offset.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/engine.ts
+  function bumpVisibilityEpoch() {
+    _vis = _vis + 1 | 0;
+  }
+  function isRenderingContextRegistered(surface, context) {
+    return surface._renderingContexts.indexOf(context) !== -1;
+  }
+  function registerRenderingContext(surface, context) {
+    if (surface._renderingContexts.indexOf(context) !== -1) {
+      return false;
+    }
+    surface._renderingContexts.push(context);
+    return true;
+  }
+  async function createEngine(canvas, options) {
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+    if (!adapter) {
+      throw new Error("WebGPU adapter not available");
+    }
+    const features = [];
+    if (adapter.features.has("float32-filterable")) {
+      features.push("float32-filterable");
+    }
+    for (const f of ["texture-compression-astc", "texture-compression-bc", "texture-compression-etc2", "timestamp-query"]) {
+      if (adapter.features.has(f)) {
+        features.push(f);
+      }
+    }
+    const device = await adapter.requestDevice({ requiredFeatures: features, requiredLimits: options?.requiredLimits });
+    const versionToLog = `Babylon Lite v${VERSION}`;
+    console.log(`${versionToLog} - WebGPU engine`);
+    if (isDomCanvas(canvas)) {
+      canvas.setAttribute("data-engine", versionToLog);
+    }
+    const useHpm = options?.useHighPrecisionMatrix === true;
+    const useFO = options?.useFloatingOrigin === true;
+    if (useFO && !useHpm) {
+      throw new Error("Babylon Lite: useFloatingOrigin requires useHighPrecisionMatrix on the engine.");
+    }
+    if (useHpm) {
+      const { allocateF64Mat4: allocateF64Mat42 } = await Promise.resolve().then(() => (init_mat4_storage_f64(), mat4_storage_f64_exports));
+      _setHpmAllocator(allocateF64Mat42);
+    }
+    let _wrapRenderableForFO;
+    let _makePackMeshWorld;
+    let _lightFoVersion;
+    let _applyLightFoOffset;
+    if (useFO) {
+      const [{ wrapRenderableForFO: wrapRenderableForFO2, lightFoVersion: lightFoVersion2, applyLightFoOffset: applyLightFoOffset2 }, { makePackMeshWorld: makePackMeshWorld2 }] = await Promise.all([
+        Promise.resolve().then(() => (init_floating_origin(), floating_origin_exports)),
+        Promise.resolve().then(() => (init_pack_mat4_with_offset(), pack_mat4_with_offset_exports))
+      ]);
+      _wrapRenderableForFO = wrapRenderableForFO2;
+      _makePackMeshWorld = makePackMeshWorld2;
+      _lightFoVersion = lightFoVersion2;
+      _applyLightFoOffset = applyLightFoOffset2;
+    }
+    const engine = { _device: device };
+    const surfaces = [engine];
+    Object.assign(
+      engine,
+      {
+        engine,
+        // self-reference: the engine IS its primary surface
+        surfaces,
+        // public readonly view of `_surfaces` (same underlying array)
+        _surfaces: surfaces,
+        _device: device,
+        drawCallCount: 0,
+        gpuFrameTimeMs: 0,
+        useHighPrecisionMatrix: useHpm,
+        useFloatingOrigin: useFO,
+        _animFrameId: 0,
+        _renderFn: null,
+        _currentEncoder: void 0,
+        _currentDelta: 0,
+        _cbs: [],
+        _wrapRenderableForFO,
+        _makePackMeshWorld,
+        _lightFoVersion,
+        _applyLightFoOffset
+      },
+      _buildSurface(engine, canvas, options)
+    );
+    resizeSurface(engine);
+    _refreshScRT(engine);
+    return engine;
+  }
+  function resizeEngine(engine) {
+    for (const surface of engine.surfaces) {
+      resizeSurface(surface);
+    }
+  }
+  function startEngine(engine) {
+    return new Promise((resolve) => {
+      let firstRafFrame = true;
+      let lastTime = 0;
+      engine._renderFn = (now) => {
+        const delta = firstRafFrame ? 0 : lastTime > 0 ? now - lastTime : 16.667;
+        lastTime = now;
+        resizeEngine(engine);
+        renderFrame(engine, delta);
+        if (firstRafFrame) {
+          firstRafFrame = false;
+          resolve();
+        }
+        engine._animFrameId = requestAnimationFrame(engine._renderFn);
+      };
+      engine._animFrameId = requestAnimationFrame(engine._renderFn);
+    });
+  }
+  function renderFrame(engine, delta) {
+    const surfaces = engine.surfaces;
+    let total = 0;
+    for (let i = 0; i < surfaces.length; i++) {
+      total += surfaces[i]._renderingContexts.length;
+    }
+    if (total === 0) {
+      return;
+    }
+    const encoder = engine._device.createCommandEncoder({ label: "frame" });
+    engine._currentEncoder = encoder;
+    engine._currentDelta = delta;
+    engine._gpuTimerBegin?.(encoder);
+    let drawCalls = 0;
+    for (let i = 0; i < surfaces.length; i++) {
+      const surface = surfaces[i];
+      surface._capturePreFrame?.(surface);
+      _refreshScRT(surface);
+      const ctxs = surface._renderingContexts;
+      for (let j = 0; j < ctxs.length; j++) {
+        const s = ctxs[j];
+        s._update();
+        drawCalls += s._drawCallsPre;
+        drawCalls += s._record();
+      }
+    }
+    const finalEncoder = engine._currentEncoder;
+    for (let i = 0; i < surfaces.length; i++) {
+      const surface = surfaces[i];
+      surface._captureService?.(surface, finalEncoder);
+    }
+    engine._gpuTimerEnd?.(finalEncoder);
+    engine._cbs[0] = finalEncoder.finish();
+    engine._device.queue.submit(engine._cbs);
+    engine.drawCallCount = drawCalls;
+    engine._gpuTimerResolve?.();
+  }
+  var VERSION, _vis;
+  var init_engine = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/engine.ts"() {
+      "use strict";
+      init_matrix_allocator();
+      init_surface();
+      VERSION = "0.1.0";
+      _vis = 0;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-material-swap.ts
+  var scene_material_swap_exports = {};
+  __export(scene_material_swap_exports, {
+    processMaterialSwaps: () => processMaterialSwaps
+  });
+  function processMaterialSwaps(scene) {
+    const q = scene._materialSwapQueue;
+    const device = scene.surface.engine._device;
+    for (const mesh of q) {
+      const old = scene._meshDisposables.get(mesh);
+      if (old) {
+        scene._meshDisposables.delete(mesh);
+        void device.queue.onSubmittedWorkDone().then(() => {
+          try {
+            for (const fn of old) {
+              fn();
+            }
+          } catch {
+          }
+        }).catch(() => {
+        });
+      }
+      const mat = mesh.material;
+      const builder = mat?._buildGroup;
+      if (!builder) {
+        continue;
+      }
+      const rebuild = builder._rebuildSingle;
+      if (!rebuild) {
+        continue;
+      }
+      const renderable = rebuild(scene, mesh);
+      let i = scene._renderables.length;
+      while (i > 0 && scene._renderables[i - 1].order > renderable.order) {
+        i--;
+      }
+      scene._renderables.splice(i, 0, renderable);
+    }
+    q.length = 0;
+    scene._renderableVersion++;
+  }
+  var init_scene_material_swap = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-material-swap.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/mesh-scene-registry.ts
+  function enqueueMaterialSwap(scene, mesh) {
+    if (scene._materialSwapQueue.indexOf(mesh) >= 0) {
+      return;
+    }
+    scene._materialSwapQueue.push(mesh);
+    if (!scene._processSwaps) {
+      void Promise.resolve().then(() => (init_scene_material_swap(), scene_material_swap_exports)).then((m) => {
+        scene._processSwaps = m.processMaterialSwaps;
+      });
+    }
+  }
+  function installMaterialSetter(mesh) {
+    let _mat = mesh.material;
+    Object.defineProperty(mesh, "material", {
+      get() {
+        return _mat;
+      },
+      set(v) {
+        if (v !== _mat) {
+          _mat = v;
+          const scenes = _meshScenes?.get(mesh);
+          if (scenes) {
+            for (const scene of scenes) {
+              enqueueMaterialSwap(scene, mesh);
+            }
+          }
+        }
+      },
+      configurable: true,
+      enumerable: true
+    });
+  }
+  function registerMeshScene(scene, mesh) {
+    const map = _meshScenes ?? (_meshScenes = /* @__PURE__ */ new WeakMap());
+    let scenes = map.get(mesh);
+    if (!scenes) {
+      map.set(mesh, scenes = /* @__PURE__ */ new Set());
+      installMaterialSetter(mesh);
+    }
+    scenes.add(scene);
+  }
+  var _meshScenes;
+  var init_mesh_scene_registry = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/mesh-scene-registry.ts"() {
+      "use strict";
+      _meshScenes = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/frame-graph.ts
+  function createFrameGraph(_engine) {
+    const fg = {
+      _tasks: [],
+      _currentProcessedTask: null,
+      build() {
+        for (let i = 0; i < fg._tasks.length; i++) {
+          const task = fg._tasks[i];
+          task._passes.length = 0;
+          fg._currentProcessedTask = task;
+          task.record();
+          fg._currentProcessedTask = null;
+        }
+        for (let i = 0; i < fg._tasks.length; i++) {
+          const passes = fg._tasks[i]._passes;
+          for (let j = 0; j < passes.length; j++) {
+            passes[j]._initialize();
+          }
+        }
+      },
+      execute() {
+        let drawCalls = 0;
+        for (const task of fg._tasks) {
+          if (task.execute) {
+            drawCalls += task.execute();
+          } else {
+            for (const pass of task._passes) {
+              drawCalls += pass._execute();
+            }
+          }
+        }
+        return drawCalls;
+      },
+      dispose() {
+        for (const task of fg._tasks) {
+          task.dispose();
+        }
+        fg._tasks.length = 0;
+        fg._currentProcessedTask = null;
+      }
+    };
+    return fg;
+  }
+  function _appendTask(fg, task) {
+    fg._tasks.push(task);
+  }
+  var init_frame_graph = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/frame-graph.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply-into.ts
+  function mat4MultiplyInto(dst, d, a, i, b, j) {
+    const a0 = a[i], a1 = a[i + 1], a2 = a[i + 2], a3 = a[i + 3];
+    const a4 = a[i + 4], a5 = a[i + 5], a6 = a[i + 6], a7 = a[i + 7];
+    const a8 = a[i + 8], a9 = a[i + 9], a10 = a[i + 10], a11 = a[i + 11];
+    const a12 = a[i + 12], a13 = a[i + 13], a14 = a[i + 14], a15 = a[i + 15];
+    let b0 = b[j], b1 = b[j + 1], b2 = b[j + 2], b3 = b[j + 3];
+    dst[d] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 1] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 2] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 3] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 4];
+    b1 = b[j + 5];
+    b2 = b[j + 6];
+    b3 = b[j + 7];
+    dst[d + 4] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 5] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 6] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 7] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 8];
+    b1 = b[j + 9];
+    b2 = b[j + 10];
+    b3 = b[j + 11];
+    dst[d + 8] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 9] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 10] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 11] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 12];
+    b1 = b[j + 13];
+    b2 = b[j + 14];
+    b3 = b[j + 15];
+    dst[d + 12] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 13] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 14] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 15] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+  }
+  var init_mat4_multiply_into = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply-into.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts
+  function mat4PerspectiveLHToRef(out, fov, aspect, near, far) {
+    const tan = 1 / Math.tan(fov * 0.5);
+    const range = far - near;
+    out[0] = tan / aspect;
+    out[5] = tan;
+    out[10] = -near / range;
+    out[11] = 1;
+    out[14] = far * near / range;
+  }
+  var init_mat4_perspective_lh_to_ref = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/camera/camera.ts
+  function getViewMatrix(camera) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._viewVer === ver) {
+      return camera._viewCache;
+    }
+    const v = camera._viewCache;
+    const w = camera.worldMatrix;
+    const useFO = camera._useFloatingOrigin;
+    const cx = useFO ? 0 : w[12];
+    const cy = useFO ? 0 : w[13];
+    const cz = useFO ? 0 : w[14];
+    v[0] = w[0];
+    v[1] = w[4];
+    v[2] = w[8];
+    v[3] = 0;
+    v[4] = w[1];
+    v[5] = w[5];
+    v[6] = w[9];
+    v[7] = 0;
+    v[8] = w[2];
+    v[9] = w[6];
+    v[10] = w[10];
+    v[11] = 0;
+    v[12] = -(w[0] * cx + w[1] * cy + w[2] * cz);
+    v[13] = -(w[4] * cx + w[5] * cy + w[6] * cz);
+    v[14] = -(w[8] * cx + w[9] * cy + w[10] * cz);
+    v[15] = 1;
+    camera._viewVer = ver;
+    return v;
+  }
+  function getProjectionMatrix(camera, aspectRatio) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._projVer === ver && camera._projAspect === aspectRatio) {
+      return camera._projCache;
+    }
+    const p = camera._projCache;
+    mat4PerspectiveLHToRef(p, camera.fov, aspectRatio, camera.nearPlane, camera.farPlane);
+    camera._projVer = ver;
+    camera._projAspect = aspectRatio;
+    return p;
+  }
+  function getViewProjectionMatrix(camera, aspectRatio) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._vpVer === ver && camera._vpAspect === aspectRatio) {
+      return camera._vpCache;
+    }
+    const vp = camera._vpCache;
+    mat4MultiplyInto(vp, 0, getProjectionMatrix(camera, aspectRatio), 0, getViewMatrix(camera), 0);
+    camera._vpVer = ver;
+    camera._vpAspect = aspectRatio;
+    return vp;
+  }
+  var init_camera = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/camera/camera.ts"() {
+      "use strict";
+      init_mat4_multiply_into();
+      init_mat4_perspective_lh_to_ref();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/render/scene-helpers.ts
+  function getSceneBindGroupLayout(engine) {
+    const device = engine._device;
+    if (_cachedSceneBGL && _cachedDevice === device) {
+      return _cachedSceneBGL;
+    }
+    _cachedDevice = device;
+    _cachedSceneBGL = device.createBindGroupLayout({
+      label: "scene",
+      entries: [
+        { binding: 0, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } },
+        { binding: 1, visibility: SS.FRAGMENT, buffer: { type: "uniform" } }
+      ]
+    });
+    return _cachedSceneBGL;
+  }
+  function createDefaultPipelineDescriptor(opts) {
+    const target = opts._blend ? { format: opts._format, blend: opts._blend } : { format: opts._format };
+    return {
+      label: opts._label,
+      layout: opts._engine._device.createPipelineLayout({ bindGroupLayouts: opts._bgls }),
+      vertex: { module: opts._vertModule, entryPoint: "main", buffers: opts._vertexBuffers },
+      fragment: { module: opts._fragModule, entryPoint: "main", targets: [target] },
+      depthStencil: {
+        format: opts._depthStencilFormat ?? "depth24plus-stencil8",
+        depthCompare: opts._depthCompare ?? REVERSE_DEPTH_COMPARE,
+        depthWriteEnabled: opts._depthWriteEnabled ?? true
+      },
+      multisample: { count: opts._msaaSamples },
+      primitive: { topology: "triangle-list", cullMode: opts._cullMode ?? "back", frontFace: "ccw" }
+    };
+  }
+  var _cachedSceneBGL, _cachedDevice;
+  var init_scene_helpers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/render/scene-helpers.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_render_target();
+      _cachedSceneBGL = null;
+      _cachedDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/pack-mat4-into-f32.ts
+  function packMat4IntoF32(view, mat, offsetFloats = 0, srcOffsetFloats = 0) {
+    const src = mat;
+    if (srcOffsetFloats === 0 && src.length === 16) {
+      view.set(src, offsetFloats);
+      return;
+    }
+    const s = srcOffsetFloats;
+    const o = offsetFloats;
+    view[o + 0] = src[s + 0];
+    view[o + 1] = src[s + 1];
+    view[o + 2] = src[s + 2];
+    view[o + 3] = src[s + 3];
+    view[o + 4] = src[s + 4];
+    view[o + 5] = src[s + 5];
+    view[o + 6] = src[s + 6];
+    view[o + 7] = src[s + 7];
+    view[o + 8] = src[s + 8];
+    view[o + 9] = src[s + 9];
+    view[o + 10] = src[s + 10];
+    view[o + 11] = src[s + 11];
+    view[o + 12] = src[s + 12];
+    view[o + 13] = src[s + 13];
+    view[o + 14] = src[s + 14];
+    view[o + 15] = src[s + 15];
+  }
+  var init_pack_mat4_into_f32 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/pack-mat4-into-f32.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/scene-uniforms-pack.ts
+  function _packSceneUniforms(data, eng, scene, camera, aspect) {
+    data.fill(0);
+    const viewProj = getViewProjectionMatrix(camera, aspect);
+    const viewMat = getViewMatrix(camera);
+    const wm = camera.worldMatrix;
+    packMat4IntoF32(data, viewProj, 0);
+    packMat4IntoF32(data, viewMat, 16);
+    if (eng.useFloatingOrigin) {
+      data[32] = 0;
+      data[33] = 0;
+      data[34] = 0;
+    } else {
+      data[32] = wm[12];
+      data[33] = wm[13];
+      data[34] = wm[14];
+    }
+    data[87] = eng.canvas.width;
+    data[36] = scene.envRotationY || 0;
+    const envTextures = scene._envTextures;
+    const img = scene.imageProcessing;
+    data[76] = img.exposure;
+    data[77] = img.contrast;
+    data[78] = envTextures?.lodGenerationScale ?? 0.8;
+    data[79] = +img.toneMappingEnabled;
+    data[37] = eng.canvas.height;
+  }
+  var init_scene_uniforms_pack = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/scene-uniforms-pack.ts"() {
+      "use strict";
+      init_camera();
+      init_pack_mat4_into_f32();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-buffers.ts
+  function align(n, to) {
+    return n + to - 1 & ~(to - 1);
+  }
+  function createUniformBuffer(engine, data, label) {
+    const device = engine._device;
+    const buf = device.createBuffer({
+      label,
+      size: align(data.byteLength, 16),
+      usage: BU.UNIFORM | BU.COPY_DST
+    });
+    device.queue.writeBuffer(buf, 0, data.buffer, data.byteOffset, data.byteLength);
+    return buf;
+  }
+  function createEmptyUniformBuffer(engine, byteLength, label) {
+    return engine._device.createBuffer({
+      label,
+      size: align(byteLength, 16),
+      usage: BU.UNIFORM | BU.COPY_DST
+    });
+  }
+  function createMappedBuffer(engine, data, usage) {
+    const size = align(Math.max(data.byteLength, 4), 4);
+    const buf = engine._device.createBuffer({
+      size,
+      usage: usage | BU.COPY_DST,
+      mappedAtCreation: true
+    });
+    new U8(buf.getMappedRange()).set(new U8(data.buffer, data.byteOffset, data.byteLength));
+    buf.unmap();
+    return buf;
+  }
+  var init_gpu_buffers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-buffers.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms-size.ts
+  var SCENE_UBO_BYTES;
+  var init_scene_uniforms_size = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms-size.ts"() {
+      "use strict";
+      SCENE_UBO_BYTES = 368;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/render/lights-ubo.ts
+  function meshLightIndexVec4Count() {
+    return Math.ceil(MAX_LIGHTS / 4);
+  }
+  function getLightsUboSize() {
+    return 16 + MAX_LIGHTS * LIGHT_ENTRY_FLOATS * 4;
+  }
+  function computeLightsVersion(lights) {
+    let v = 0;
+    for (const light of lights) {
+      v += light._lightVersion ?? 0;
+    }
+    return v;
+  }
+  function fillLightsData(data, lights) {
+    data.fill(0);
+    let count = 0;
+    const headerFloats = 4;
+    for (const light of lights) {
+      if (count >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      light._writeLightUbo(data, headerFloats + count * LIGHT_ENTRY_FLOATS);
+      count++;
+    }
+    _countU32[0] = count;
+    data[0] = _countF32[0];
+  }
+  function ensureSceneLightState(engine, scene) {
+    let state = scene._lightGpuState;
+    const byteSize = getLightsUboSize();
+    if (state && state._byteSize === byteSize) {
+      return state;
+    }
+    const registerDisposer = !state;
+    state?._buffer.destroy();
+    const scratch = new F32(byteSize / 4);
+    fillLightsData(scratch, scene.lights);
+    engine._applyLightFoOffset?.(scratch, scene);
+    state = {
+      _buffer: createUniformBuffer(engine, scratch),
+      _scratch: scratch,
+      _version: computeLightsVersion(scene.lights) + (engine._lightFoVersion?.(scene) ?? 0),
+      _lightCount: scene.lights.length,
+      _byteSize: byteSize
+    };
+    scene._lightGpuState = state;
+    if (registerDisposer) {
+      scene._disposables.push(() => {
+        scene._lightGpuState?._buffer.destroy();
+        scene._lightGpuState = void 0;
+      });
+    }
+    return state;
+  }
+  function refreshSceneLightsUBO(engine, scene) {
+    const state = ensureSceneLightState(engine, scene);
+    const version = computeLightsVersion(scene.lights) + (engine._lightFoVersion?.(scene) ?? 0);
+    if (version !== state._version || scene.lights.length !== state._lightCount) {
+      state._version = version;
+      state._lightCount = scene.lights.length;
+      fillLightsData(state._scratch, scene.lights);
+      engine._applyLightFoOffset?.(state._scratch, scene);
+      engine._device.queue.writeBuffer(state._buffer, 0, state._scratch);
+    }
+    return state._buffer;
+  }
+  function appendMeshLightUboFields(fields) {
+    fields.push({ _name: "lc", _type: "u32" });
+    fields.push({ _name: "li", _type: `array<vec4<u32>, ${meshLightIndexVec4Count()}>` });
+  }
+  function meshLightIndexWGSL(meshVar, functionName = "mli") {
+    return `fn ${functionName}(i: u32) -> u32 { return ${meshVar}.li[i / 4u][i % 4u]; }`;
+  }
+  function affectsMesh(light, mesh) {
+    const meshId = mesh.id;
+    const included = light.includedOnlyMeshIds;
+    if (included?.size) {
+      return !!meshId && included.has(meshId);
+    }
+    return !meshId || !light.excludedMeshIds?.has(meshId);
+  }
+  function writeMeshLightSelection(mesh, lights, data) {
+    const u32 = data ? new U32(data.buffer, data.byteOffset, data.byteLength / 4) : null;
+    let count = 0;
+    let single = -1;
+    let pi = 0;
+    for (const light of lights) {
+      if (pi >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      if (affectsMesh(light, mesh)) {
+        single = pi;
+        if (u32) {
+          u32[MSH_LIGHT_INDEX_WORD_OFFSET + count] = pi;
+        }
+        count++;
+      }
+      pi++;
+    }
+    if (u32) {
+      u32[16] = count;
+      for (let i = count; i < MAX_LIGHTS; i++) {
+        u32[MSH_LIGHT_INDEX_WORD_OFFSET + i] = 0;
+      }
+    }
+    return count === 1 ? single + 1 : -count;
+  }
+  var _countU32, _countF32, MSH_LIGHT_INDEX_WORD_OFFSET;
+  var init_lights_ubo = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/render/lights-ubo.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_types();
+      init_gpu_buffers();
+      _countU32 = new U32(1);
+      _countF32 = new F32(_countU32.buffer);
+      MSH_LIGHT_INDEX_WORD_OFFSET = 20;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/render-task.ts
+  function createRenderTask(config, engine, scene) {
+    const sc = scene;
+    config.clrColor ?? (config.clrColor = { r: 0.2, g: 0.2, b: 0.3, a: 1 });
+    config.clr ?? (config.clr = true);
+    const desc = config.rt._descriptor;
+    const targetSignature = {
+      _colorFormat: desc.format,
+      _depthStencilFormat: config.depth?._descriptor.dFormat ?? desc.dFormat,
+      _depthCompare: desc._depthCompare,
+      _sampleCount: desc.samples ?? 1
+    };
+    const sceneBGL = getSceneBindGroupLayout(engine);
+    const sceneUBO = createEmptyUniformBuffer(engine, SCENE_UBO_BYTES);
+    const lightsUBO = ensureSceneLightState(engine, sc)._buffer;
+    const sceneBG = engine._device.createBindGroup({
+      layout: sceneBGL,
+      entries: [
+        { binding: 0, resource: { buffer: sceneUBO } },
+        { binding: 1, resource: { buffer: lightsUBO } }
+      ]
+    });
+    const colorAttachment = { loadOp: "clear", storeOp: "store" };
+    const updateContext = { targetWidth: 0, targetHeight: 0 };
+    const task = {
+      name: config.name,
+      _config: config,
+      engine,
+      scene: sc,
+      _passes: [],
+      _autoFromScene: false,
+      _renderables: [],
+      _opaqueBindings: [],
+      _directBindings: [],
+      _transparentBindings: [],
+      _opaqueBundles: [],
+      _lastVersion: -1,
+      _lastVis: 0,
+      _renderPassDescriptor: { colorAttachments: [colorAttachment] },
+      _colorAttachment: colorAttachment,
+      _depthSrc: config.depth,
+      _depthLoadOp: config.depth ? config.depth._eager ? "load" : "clear" : void 0,
+      _sceneUBO: sceneUBO,
+      _sceneBG: sceneBG,
+      _lightsUBO: lightsUBO,
+      _suData: new F32(SCENE_UBO_BYTES / 4),
+      _su: [],
+      _targetSignature: targetSignature,
+      _pendingMeshes: [],
+      addMesh(mesh, opts) {
+        const material = opts?.material ?? mesh.material;
+        if (!material) {
+          return;
+        }
+        task._pendingMeshes.push({ mesh, material });
+      },
+      record() {
+        if (task._autoFromScene) {
+          task._renderables.length = 0;
+        }
+        resolvePendingMeshes(task, sc);
+        task._autoFromScene = task._renderables.length === 0;
+        if (task._autoFromScene) {
+          task._renderables.push(...sc._renderables);
+        }
+        const rt = config.rt;
+        buildRenderTarget(rt, engine);
+        if (config.rst && (rt._descriptor.samples ?? 1) > 1) {
+          buildRenderTarget(config.rst, engine);
+        }
+        if (config.depth && !config.depth._eager) {
+          buildRenderTarget(config.depth, engine);
+        }
+        updateContext.targetWidth = rt._width;
+        updateContext.targetHeight = rt._height;
+        refreshTaskSceneBindGroup(task, engine);
+        buildBindings(task, engine, targetSignature);
+        buildRenderPassDescriptor(task, rt);
+      },
+      execute() {
+        return executePass(task, engine, targetSignature, updateContext);
+      },
+      dispose() {
+        task._passes.length = 0;
+        disposeRenderTarget(config.rt);
+        disposeRenderTarget(config.rst);
+        disposeRenderTarget(config.depth);
+        task._opaqueBindings.length = 0;
+        task._directBindings.length = 0;
+        task._transparentBindings.length = 0;
+        task._renderables.length = 0;
+        task._opaqueBundles.length = 0;
+        task._sceneUBO.destroy();
+      }
+    };
+    return task;
+  }
+  function resolvePendingMeshes(task, sc) {
+    if (task._pendingMeshes.length === 0) {
+      return;
+    }
+    for (const { mesh, material } of task._pendingMeshes) {
+      const rebuild = material._buildGroup?._rebuildSingle;
+      if (!rebuild) {
+        throw new Error();
+      }
+      const renderable = rebuild(sc, mesh, material);
+      if (!task._renderables.includes(renderable)) {
+        task._renderables.push(renderable);
+      }
+    }
+    task._pendingMeshes.length = 0;
+  }
+  function sortTransparentBindings(task, camera) {
+    const arr = task._transparentBindings;
+    if (arr.length <= 1 || !camera) {
+      return;
+    }
+    const v = getViewMatrix(camera);
+    for (const b of arr) {
+      const wc = b.renderable._worldCenter;
+      b._sortDistance = wc ? wc[0] * v[2] + wc[1] * v[6] + wc[2] * v[10] + v[14] : 0;
+    }
+    arr.sort((a, b) => b._sortDistance - a._sortDistance || a.renderable.order - b.renderable.order);
+  }
+  function buildBindings(task, eng, targetSignature) {
+    const opaque = task._opaqueBindings;
+    const direct = task._directBindings;
+    const transparent = task._transparentBindings;
+    opaque.length = 0;
+    direct.length = 0;
+    transparent.length = 0;
+    for (const r of task._renderables) {
+      const binding = r.bind(eng, targetSignature);
+      if (r.isTransparent || r._transmissive) {
+        transparent.push(binding);
+      } else if (r._direct) {
+        direct.push(binding);
+      } else {
+        opaque.push(binding);
+      }
+    }
+    opaque.sort((a, b) => a.renderable.order - b.renderable.order);
+    direct.sort((a, b) => a.renderable.order - b.renderable.order);
+    task._opaqueBundles.length = 0;
+    task._lastVersion = task.scene._renderableVersion;
+  }
+  function buildRenderPassDescriptor(task, rt) {
+    const att = task._colorAttachment;
+    att.view = rt._colorView;
+    att.resolveTarget = task._config.rst?._colorView ?? void 0;
+    task._renderPassDescriptor.colorAttachments = rt._colorView ? [att] : [];
+    const depthSrc = task._depthSrc ?? rt;
+    const depthView = depthSrc._depthView;
+    let depthAttachment;
+    if (depthView) {
+      const dd = depthSrc._descriptor;
+      const loadOp = task._depthLoadOp ?? "clear";
+      depthAttachment = {
+        view: depthView,
+        depthClearValue: dd._depthClearValue ?? 0,
+        depthLoadOp: loadOp,
+        depthStoreOp: "store"
+      };
+      if (dd.dFormat?.includes("stencil")) {
+        depthAttachment.stencilClearValue = 0;
+        depthAttachment.stencilLoadOp = loadOp;
+        depthAttachment.stencilStoreOp = "store";
+      }
+    }
+    task._renderPassDescriptor.depthStencilAttachment = depthAttachment;
+  }
+  function prepareRenderTaskPass(task, eng, targetSignature, context) {
+    const sc = task.scene;
+    if (task._autoFromScene && task._lastVersion !== sc._renderableVersion) {
+      task._renderables.length = 0;
+      task._renderables.push(...sc._renderables);
+      buildBindings(task, eng, targetSignature);
+    }
+    refreshTaskSceneBindGroup(task, eng);
+    const camera = task._config.cam ?? sc.camera;
+    sc._clusteredLightUpdater?.(camera, context.targetWidth, context.targetHeight);
+    writePassSceneUBO(task, eng, sc, camera);
+    refreshSceneLightsUBO(eng, sc);
+    context._camera = camera;
+    updateBindings(task._opaqueBindings, context);
+    updateBindings(task._directBindings, context);
+    updateBindings(task._transparentBindings, context);
+    sortTransparentBindings(task, camera);
+  }
+  function executePass(task, eng, targetSignature, context) {
+    const sc = task.scene;
+    const sampleCount = targetSignature._sampleCount;
+    prepareRenderTaskPass(task, eng, targetSignature, context);
+    const att = task._colorAttachment;
+    const cfg = task._config;
+    if (cfg.rt._colorView) {
+      if (cfg.rt === eng.scRT) {
+        att.view = cfg.rt._colorView;
+      }
+      att.resolveTarget = cfg.rst?._colorView ?? void 0;
+      att.clearValue = task._autoFromScene ? sc.clearColor : cfg.clrColor;
+      att.loadOp = cfg.clr ? "clear" : "load";
+    }
+    if (task._executeWithTransmission) {
+      return task._executeWithTransmission(sampleCount);
+    }
+    const pass = eng._currentEncoder.beginRenderPass(task._renderPassDescriptor);
+    const draws = executePassBody(task, pass);
+    pass.end();
+    return draws;
+  }
+  function executePassBody(task, pass) {
+    const eng = task.engine;
+    const cfg = task._config;
+    const rt = cfg.rt;
+    const scene = task.scene;
+    const opaqueBindings = task._opaqueBindings;
+    const opaqueBundles = task._opaqueBundles;
+    const sceneBG = task._sceneBG;
+    const camera = cfg.cam ?? scene.camera;
+    const v = camera?.viewport;
+    if (v) {
+      const rw = rt._width;
+      const rh = rt._height;
+      const x = Math.floor(v.x * rw);
+      const y = Math.floor((1 - v.y - v.height) * rh);
+      const w = Math.ceil((v.x + v.width) * rw) - x;
+      const h = Math.ceil((1 - v.y) * rh) - y;
+      pass.setViewport(x, y, w, h, 0, 1);
+      pass.setScissorRect(x, y, w, h);
+    }
+    pass.setBindGroup(0, sceneBG);
+    if (task._lastVersion !== scene._renderableVersion || task._lastVis !== _vis || opaqueBundles.length === 0) {
+      const desc = rt._descriptor;
+      const be = eng._device.createRenderBundleEncoder({
+        colorFormats: desc.format ? [desc.format] : [],
+        // Use the task's target signature, not the RT descriptor: a depth
+        // override (config.depth) supplies the depth format externally, so
+        // the cached opaque pipelines are built with it while the colour RT
+        // carries no depthStencilFormat of its own. The bundle encoder's
+        // attachment state must match those pipelines exactly.
+        depthStencilFormat: task._targetSignature._depthStencilFormat,
+        sampleCount: desc.samples ?? 1
+      });
+      be.setBindGroup(0, sceneBG);
+      drawList(be, opaqueBindings, eng);
+      opaqueBundles[0] = be.finish();
+      task._lastVersion = scene._renderableVersion;
+      task._lastVis = _vis;
+    }
+    let draws = opaqueBindings.length;
+    pass.executeBundles(opaqueBundles);
+    pass.setBindGroup(0, sceneBG);
+    draws += drawList(pass, task._directBindings, eng);
+    draws += drawList(pass, task._transparentBindings, eng);
+    return draws;
+  }
+  function refreshTaskSceneBindGroup(task, eng) {
+    const lightsUBO = ensureSceneLightState(eng, task.scene)._buffer;
+    if (lightsUBO === task._lightsUBO) {
+      return;
+    }
+    task._lightsUBO = lightsUBO;
+    task._sceneBG = eng._device.createBindGroup({
+      layout: getSceneBindGroupLayout(eng),
+      entries: [
+        { binding: 0, resource: { buffer: task._sceneUBO } },
+        { binding: 1, resource: { buffer: lightsUBO } }
+      ]
+    });
+    task._opaqueBundles.length = 0;
+    task._lastVersion = -1;
+  }
+  function writePassSceneUBO(task, eng, scene, camera) {
+    if (!camera) {
+      return;
+    }
+    const v = camera.viewport;
+    const rt = task._config.rt;
+    const aspect = (task._config.cs ? eng.canvas.width / eng.canvas.height : rt._width / rt._height) * (v ? v.width / v.height : 1);
+    const fog = scene.fog;
+    const img = scene.imageProcessing;
+    const envRotationY = scene.envRotationY || 0;
+    const wv = camera.worldMatrixVersion;
+    const s = task._su;
+    if (s[0] === camera && s[1] === fog && s[2] === wv && s[3] === aspect && s[4] === envRotationY && s[5] === img.exposure && s[6] === img.contrast) {
+      return;
+    }
+    s[0] = camera;
+    s[1] = fog;
+    s[2] = wv;
+    s[3] = aspect;
+    s[4] = envRotationY;
+    s[5] = img.exposure;
+    s[6] = img.contrast;
+    const data = task._suData;
+    _packSceneUniforms(data, eng, scene, camera, aspect);
+    const contribs = scene._sceneUboContributors;
+    if (contribs) {
+      for (const c of contribs) {
+        c(data, scene);
+      }
+    }
+    eng._device.queue.writeBuffer(task._sceneUBO, 0, data);
+  }
+  function updateBindings(list, context) {
+    for (const b of list) {
+      b.update?.(context);
+    }
+  }
+  function drawList(enc, list, engine) {
+    let lp = null;
+    let draws = 0;
+    for (const b of list) {
+      const mesh = b.renderable.mesh;
+      if (mesh && mesh.visible === false) {
+        continue;
+      }
+      if (b.pipeline !== lp) {
+        enc.setPipeline(b.pipeline);
+        lp = b.pipeline;
+      }
+      draws += b.draw(enc, engine);
+    }
+    return draws;
+  }
+  var init_render_task = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/render-task.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_engine();
+      init_render_target();
+      init_camera();
+      init_scene_helpers();
+      init_scene_uniforms_pack();
+      init_gpu_buffers();
+      init_scene_uniforms_size();
+      init_lights_ubo();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/swapchain-overlay.ts
+  var swapchain_overlay_exports = {};
+  __export(swapchain_overlay_exports, {
+    configureSwapchainOverlayScene: () => configureSwapchainOverlayScene
+  });
+  function getDefaultSwapchainTask(scene, surface) {
+    for (const task of scene._frameGraph._tasks) {
+      const ptask = task;
+      if (!ptask?._config || !ptask._colorAttachment) {
+        continue;
+      }
+      const renderTask = task;
+      if (renderTask._config.rt === surface.scRT || renderTask._config.rst === surface.scRT) {
+        return renderTask;
+      }
+    }
+    return null;
+  }
+  function configureSwapchainOverlayScene(surface, overlay) {
+    const base = surface._renderingContexts[surface._renderingContexts.length - 1];
+    if (!base?._frameGraph) {
+      return;
+    }
+    const baseTask = getDefaultSwapchainTask(base, surface);
+    const overlayTask = getDefaultSwapchainTask(overlay, surface);
+    if (!baseTask || !overlayTask) {
+      return;
+    }
+    overlayTask._config.clr = false;
+    overlay._beforeRender.unshift(() => {
+      if (surface.msaaSamples > 1) {
+        const view = baseTask._config.rt._colorView;
+        if (view) {
+          overlayTask._colorAttachment.view = view;
+        }
+      }
+    });
+  }
+  var init_swapchain_overlay = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/swapchain-overlay.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-core.ts
+  function createSceneContext(surface, options) {
+    const eng = surface.engine;
+    const ctxLocal = {
+      surface,
+      clearColor: { r: 0.2, g: 0.2, b: 0.3, a: 1 },
+      camera: null,
+      lights: [],
+      meshes: [],
+      animationGroups: [],
+      fog: null,
+      clipPlane: null,
+      shadowGenerators: [],
+      imageProcessing: { exposure: 1, contrast: 1, toneMappingEnabled: false },
+      _renderables: [],
+      _prePasses: [],
+      _gsMeshes: [],
+      _uniformUpdaters: [],
+      fixedDeltaMs: 0,
+      _beforeRender: [],
+      _deferredBuilders: [],
+      _groups: /* @__PURE__ */ new Map(),
+      _disposables: [],
+      _meshDisposables: /* @__PURE__ */ new Map(),
+      _materialSwapQueue: [],
+      _renderableVersion: 0,
+      _built: false,
+      _drawCallsPre: 0,
+      _update() {
+        if (eng.useFloatingOrigin && ctx.camera && !ctx.camera._useFloatingOrigin) {
+          ctx.camera._useFloatingOrigin = true;
+          ctx.camera._viewVer = -1;
+          ctx.camera._vpVer = -1;
+        }
+        const d = ctx.fixedDeltaMs > 0 ? ctx.fixedDeltaMs : eng._currentDelta;
+        const encoder = eng._currentEncoder;
+        let draws = 0;
+        for (const cb of ctx._beforeRender) {
+          cb(d);
+        }
+        if (ctx._materialSwapQueue.length > 0) {
+          ctx._processSwaps?.(ctx);
+        }
+        for (const pp of ctx._prePasses) {
+          draws += pp.execute(encoder, eng);
+        }
+        for (const u of ctx._uniformUpdaters) {
+          u.update(eng);
+        }
+        ctx._drawCallsPre = draws;
+      },
+      _record() {
+        return ctx._frameGraph.execute();
+      },
+      _resize() {
+        ctx._frameGraph.build();
+      }
+    };
+    const ctx = ctxLocal;
+    const fg = createFrameGraph(eng);
+    ctx._frameGraph = fg;
+    if (options?.defaultRenderTask !== false) {
+      const msaa = surface.msaaSamples > 1;
+      const rt = msaa ? createRenderTarget({ lbl: "scene-color", format: surface.format, dFormat: "depth24plus-stencil8", samples: surface.msaaSamples, size: surface }) : surface.scRT;
+      const depth = msaa ? void 0 : createRenderTarget({ lbl: "scene-depth", dFormat: "depth24plus-stencil8", samples: 1, size: surface });
+      _appendTask(fg, createRenderTask({ name: "scene", rt, rst: msaa ? surface.scRT : void 0, depth, clrColor: ctx.clearColor }, eng, ctx));
+    }
+    ctx._disposables.push(() => fg.dispose());
+    return ctx;
+  }
+  function addToScene(scene, entity) {
+    const ctx = scene;
+    if ("entities" in entity) {
+      const result = entity;
+      for (const e of result.entities) {
+        addToScene(scene, e);
+      }
+      if (result.clearColor) {
+        ctx.clearColor = result.clearColor;
+      }
+      if (result.camera && !ctx.camera) {
+        ctx.camera = result.camera;
+      }
+      if (result.animationGroups?.length) {
+        const engine = ctx.surface.engine;
+        const groups = result.animationGroups;
+        ctx.animationGroups.push(...groups);
+        ctx._beforeRender.push((deltaMs) => {
+          for (const g of groups) {
+            if (!g._stopped && g._ctrl) {
+              g._ctrl.tick(deltaMs, engine);
+            }
+          }
+        });
+      }
+      return;
+    }
+    if ("_gpu" in entity && "material" in entity) {
+      const mesh = entity;
+      ctx.meshes.push(mesh);
+      registerMeshScene(ctx, mesh);
+      const build = mesh.material ? mesh.material._buildGroup : void 0;
+      if (build) {
+        let group = ctx._groups.get(build);
+        if (!group) {
+          group = [];
+          ctx._groups.set(build, group);
+          ctx._deferredBuilders.push(async () => {
+            const result = await build(ctx, group);
+            ctx._renderables.push(...result.renderables);
+            if (result.updater) {
+              ctx._uniformUpdaters.push(result.updater);
+            }
+          });
+        }
+        group.push(mesh);
+        if (ctx._built) {
+          enqueueMaterialSwap(ctx, mesh);
+        }
+      }
+    } else if ("lightType" in entity) {
+      ctx.lights.push(entity);
+    }
+    const kids = entity.children;
+    if (kids?.length) {
+      for (const child of kids) {
+        child.parent = entity;
+        addToScene(scene, child);
+      }
+    }
+  }
+  async function buildScene(scene) {
+    const ctx = scene;
+    while (ctx._deferredBuilders.length > 0) {
+      const builders = [...ctx._deferredBuilders];
+      ctx._deferredBuilders = [];
+      await Promise.all(builders.map(async (b) => b()));
+    }
+    ctx._materialSwapQueue.length = 0;
+    ctx._renderableVersion++;
+    ctx._built = true;
+  }
+  async function registerScene(scene) {
+    const ctx = scene;
+    const surface = ctx.surface;
+    if (isRenderingContextRegistered(surface, ctx)) {
+      return;
+    }
+    await buildScene(scene);
+    ctx._renderables.sort(byOrder);
+    await Promise.all(ctx._frameGraph._tasks.map((task) => task._preload?.()).filter((preload) => preload !== void 0));
+    ctx._frameGraph.build();
+    if (surface._renderingContexts.length > 0) {
+      (await Promise.resolve().then(() => (init_swapchain_overlay(), swapchain_overlay_exports))).configureSwapchainOverlayScene(surface, ctx);
+    }
+    registerRenderingContext(surface, ctx);
+  }
+  var byOrder;
+  var init_scene_core = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-core.ts"() {
+      "use strict";
+      init_engine();
+      init_mesh_scene_registry();
+      init_frame_graph();
+      init_render_task();
+      init_render_target();
+      byOrder = (a, b) => a.order - b.order;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-identity.ts
+  function mat4Identity() {
+    const m = new F32(16);
+    m[0] = 1;
+    m[5] = 1;
+    m[10] = 1;
+    m[15] = 1;
+    return m;
+  }
+  var init_mat4_identity = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-identity.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-look-at-lh.ts
+  function mat4LookAtLH(eye, target, up) {
+    const zAxis = { x: target.x - eye.x, y: target.y - eye.y, z: target.z - eye.z };
+    const zLen = Math.sqrt(zAxis.x * zAxis.x + zAxis.y * zAxis.y + zAxis.z * zAxis.z);
+    if (zLen < 1e-10) {
+      return mat4Identity();
+    }
+    const invZ = 1 / zLen;
+    zAxis.x *= invZ;
+    zAxis.y *= invZ;
+    zAxis.z *= invZ;
+    const xAxis = {
+      x: up.y * zAxis.z - up.z * zAxis.y,
+      y: up.z * zAxis.x - up.x * zAxis.z,
+      z: up.x * zAxis.y - up.y * zAxis.x
+    };
+    const xLen = Math.sqrt(xAxis.x * xAxis.x + xAxis.y * xAxis.y + xAxis.z * xAxis.z);
+    if (xLen < 1e-10) {
+      return mat4Identity();
+    }
+    const invX = 1 / xLen;
+    xAxis.x *= invX;
+    xAxis.y *= invX;
+    xAxis.z *= invX;
+    const yAxis = {
+      x: zAxis.y * xAxis.z - zAxis.z * xAxis.y,
+      y: zAxis.z * xAxis.x - zAxis.x * xAxis.z,
+      z: zAxis.x * xAxis.y - zAxis.y * xAxis.x
+    };
+    return new F32([
+      xAxis.x,
+      yAxis.x,
+      zAxis.x,
+      0,
+      xAxis.y,
+      yAxis.y,
+      zAxis.y,
+      0,
+      xAxis.z,
+      yAxis.z,
+      zAxis.z,
+      0,
+      -(xAxis.x * eye.x + xAxis.y * eye.y + xAxis.z * eye.z),
+      -(yAxis.x * eye.x + yAxis.y * eye.y + yAxis.z * eye.z),
+      -(zAxis.x * eye.x + zAxis.y * eye.y + zAxis.z * eye.z),
+      1
+    ]);
+  }
+  var init_mat4_look_at_lh = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-look-at-lh.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_mat4_identity();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/vec3-up.ts
+  var Vec3Up;
+  var init_vec3_up = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/vec3-up.ts"() {
+      "use strict";
+      Vec3Up = { x: 0, y: 1, z: 0 };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/world-matrix-state.ts
+  function attachWorldMatrixState(host, state) {
+    host[WM_STATE] = state;
+  }
+  function peekWorldMatrixState(p) {
+    if (p === null) {
+      return null;
+    }
+    const s = p[WM_STATE];
+    return s ?? null;
+  }
+  function createWorldMatrixState(getLocalMatrix) {
+    let _worldVersion = 0;
+    let _lastSeenParentVersion = -1;
+    let _cachedWorld = null;
+    const _ownedWorld = allocateMat4();
+    let _parent = null;
+    let _parentState = null;
+    const _children = [];
+    function invalidate() {
+      _cachedWorld = null;
+      _worldVersion++;
+      for (const child of _children) {
+        child._invalidate();
+      }
+    }
+    function pollForeignParent() {
+      const pv = _parent.worldMatrixVersion;
+      if (pv !== _lastSeenParentVersion) {
+        _lastSeenParentVersion = pv;
+        invalidate();
+      }
+    }
+    const state = {
+      get parent() {
+        return _parent;
+      },
+      set parent(p) {
+        if (p === _parent) {
+          return;
+        }
+        if (_parentState !== null) {
+          _parentState._removeChild(state);
+        }
+        _parent = p;
+        _parentState = peekWorldMatrixState(p);
+        if (_parentState !== null) {
+          _parentState._addChild(state);
+        }
+        _lastSeenParentVersion = -1;
+        invalidate();
+      },
+      markLocalDirty() {
+        invalidate();
+      },
+      getWorldMatrix() {
+        if (_parentState === null && _parent !== null) {
+          pollForeignParent();
+        }
+        if (_cachedWorld !== null) {
+          return _cachedWorld;
+        }
+        const local = getLocalMatrix();
+        if (_parent !== null) {
+          const pw = _parent.worldMatrix;
+          mat4MultiplyInto(_ownedWorld, 0, pw, 0, local, 0);
+          _cachedWorld = _ownedWorld;
+        } else {
+          _cachedWorld = local;
+        }
+        return _cachedWorld;
+      },
+      getWorldMatrixVersion() {
+        if (_parentState === null && _parent !== null) {
+          pollForeignParent();
+        }
+        return _worldVersion;
+      },
+      _invalidate() {
+        invalidate();
+      },
+      _addChild(child) {
+        _children.push(child);
+      },
+      _removeChild(child) {
+        const i = _children.indexOf(child);
+        if (i >= 0) {
+          _children.splice(i, 1);
+        }
+      }
+    };
+    return state;
+  }
+  var WM_STATE;
+  var init_world_matrix_state = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/world-matrix-state.ts"() {
+      "use strict";
+      init_mat4_multiply_into();
+      init_matrix_allocator();
+      WM_STATE = Symbol("wmState");
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/observable-vec3.ts
+  var ObservableVec3;
+  var init_observable_vec3 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/observable-vec3.ts"() {
+      "use strict";
+      ObservableVec3 = class {
+        constructor(x, y, z, onDirty) {
+          __publicField(this, "_x");
+          __publicField(this, "_y");
+          __publicField(this, "_z");
+          __publicField(this, "_onDirty");
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._onDirty = onDirty;
+        }
+        get x() {
+          return this._x;
+        }
+        set x(v) {
+          if (this._x !== v) {
+            this._x = v;
+            this._onDirty();
+          }
+        }
+        get y() {
+          return this._y;
+        }
+        set y(v) {
+          if (this._y !== v) {
+            this._y = v;
+            this._onDirty();
+          }
+        }
+        get z() {
+          return this._z;
+        }
+        set z(v) {
+          if (this._z !== v) {
+            this._z = v;
+            this._onDirty();
+          }
+        }
+        /** Bulk set — one dirty notification instead of three. */
+        set(x, y, z) {
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._onDirty();
+        }
+        /** Copy values from another vector. */
+        copyFrom(v) {
+          this.set(v.x, v.y, v.z);
+        }
+        /** Copy into a Float32Array at offset. */
+        toArray(out, offset = 0) {
+          out[offset] = this._x;
+          out[offset + 1] = this._y;
+          out[offset + 2] = this._z;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/visibility.ts
+  function setSubtreeVisible(node, v) {
+    cascade(node, v);
+    bumpVisibilityEpoch();
+  }
+  function cascade(node, v) {
+    node.visible = v;
+    const kids = node.children;
+    for (let i = 0; i < kids.length; i++) {
+      cascade(kids[i], v);
+    }
+  }
+  var init_visibility = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/visibility.ts"() {
+      "use strict";
+      init_engine();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/image-processing-task.ts
+  function createImageProcessingTask(config, engine, scene) {
+    let state = null;
+    const task = {
+      name: config.name ?? "image-processing",
+      engine,
+      scene,
+      _passes: [],
+      record() {
+        disposeImageProcessingState(state);
+        state = createImageProcessingState(engine, config.source);
+      },
+      execute() {
+        if (!state) {
+          return 0;
+        }
+        const img = scene.imageProcessing;
+        const data = new F32([img.exposure, img.contrast, img.toneMappingEnabled === true ? 1 : 0, 0]);
+        engine._device.queue.writeBuffer(state.params, 0, data);
+        const pass = engine._currentEncoder.beginRenderPass({
+          colorAttachments: [
+            {
+              view: engine.scRT._colorView,
+              loadOp: "clear",
+              storeOp: "store",
+              clearValue: scene.clearColor
+            }
+          ]
+        });
+        pass.setPipeline(state.pipeline);
+        pass.setBindGroup(0, state.bindGroup);
+        pass.draw(3);
+        pass.end();
+        return 1;
+      },
+      dispose() {
+        disposeImageProcessingState(state);
+        state = null;
+        this._passes.length = 0;
+      }
+    };
+    return task;
+  }
+  function createImageProcessingState(engine, source) {
+    const texture = resolveImageProcessingTexture(source);
+    if (!texture) {
+      throw new Error("Image processing source has no color texture");
+    }
+    const device = engine._device;
+    const sampleCount = texture.sampleCount ?? 1;
+    const multisampled = sampleCount > 1;
+    const params = device.createBuffer({ size: 16, usage: BU.UNIFORM | BU.COPY_DST });
+    const bgl = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: SS.FRAGMENT, buffer: { type: "uniform" } },
+        { binding: 1, visibility: SS.FRAGMENT, texture: { sampleType: multisampled ? "unfilterable-float" : "float", multisampled } }
+      ]
+    });
+    const common = `struct P{e:f32,c:f32,t:f32,p:f32}
+@group(0)@binding(0)var<uniform> p:P;
+@vertex fn vs(@builtin(vertex_index)i:u32)->@builtin(position) vec4f{var a=array<vec2f,3>(vec2f(-1,-3),vec2f(3,1),vec2f(-1,1));return vec4f(a[i],0,1);}
+fn ip(r:vec4f)->vec4f{var c=r.rgb*p.e;
+if(p.t>0.5){c=1.0-exp2(-1.590579*c);}
+c=clamp(pow(max(c,vec3f(0)),vec3f(1/2.2)),vec3f(0),vec3f(1));
+let h=c*c*(3.0-2.0*c);
+if(p.c<1.0){c=mix(vec3f(0.5),c,p.c);}else{c=mix(c,h,p.c-1.0);}
+return vec4f(max(c,vec3f(0)),r.a);}`;
+    const textureDecl = multisampled ? `@group(0)@binding(1)var s:texture_multisampled_2d<f32>;` : `@group(0)@binding(1)var s:texture_2d<f32>;`;
+    const fragment = multisampled ? `@fragment fn fs(@builtin(position) q:vec4f)->@location(0) vec4f{let d=textureDimensions(s);let px=clamp(vec2i(q.xy),vec2i(0),vec2i(d)-1);let n=textureNumSamples(s);var c=vec4f(0);for(var i=0u;i<n;i++){c+=ip(textureLoad(s,px,i));}return c/f32(n);}` : `@fragment fn fs(@builtin(position) q:vec4f)->@location(0) vec4f{let d=textureDimensions(s);return ip(textureLoad(s,clamp(vec2i(q.xy),vec2i(0),vec2i(d)-1),0));}`;
+    const shader = device.createShaderModule({ code: `${common}${textureDecl}${fragment}` });
+    const pipeline = device.createRenderPipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+      vertex: { module: shader, entryPoint: "vs" },
+      fragment: { module: shader, entryPoint: "fs", targets: [{ format: engine.format }] },
+      primitive: { topology: "triangle-list" }
+    });
+    const bindGroup = device.createBindGroup({
+      layout: bgl,
+      entries: [
+        { binding: 0, resource: { buffer: params } },
+        { binding: 1, resource: texture.createView() }
+      ]
+    });
+    return { pipeline, bindGroup, params };
+  }
+  function resolveImageProcessingTexture(source) {
+    const resolved = typeof source === "function" ? source() : source;
+    if (!resolved) {
+      return null;
+    }
+    if ("_colorTexture" in resolved) {
+      return resolved._colorTexture;
+    }
+    return resolved.texture;
+  }
+  function disposeImageProcessingState(state) {
+    state?.params.destroy();
+  }
+  var init_image_processing_task = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/image-processing-task.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-pool.ts
+  function texRefs() {
+    if (!_texRefs) {
+      _texRefs = /* @__PURE__ */ new WeakMap();
+    }
+    return _texRefs;
+  }
+  function acquireTexture(tex) {
+    const m = texRefs();
+    m.set(tex.texture, (m.get(tex.texture) ?? 0) + 1);
+  }
+  function releaseTexture(tex) {
+    const m = texRefs();
+    const c = (m.get(tex.texture) ?? 1) - 1;
+    if (c <= 0) {
+      tex.texture.destroy();
+      m.delete(tex.texture);
+      return true;
+    }
+    m.set(tex.texture, c);
+    return false;
+  }
+  function acquireGPUTexture(tex) {
+    const m = texRefs();
+    m.set(tex, (m.get(tex) ?? 0) + 1);
+  }
+  function releaseGPUTexture(tex) {
+    const m = texRefs();
+    const c = (m.get(tex) ?? 1) - 1;
+    if (c <= 0) {
+      tex.destroy();
+      m.delete(tex);
+      return true;
+    }
+    m.set(tex, c);
+    return false;
+  }
+  function samplerKey(desc) {
+    return `${desc.minFilter ?? "nearest"}:${desc.magFilter ?? "nearest"}:${desc.mipmapFilter ?? "nearest"}:${desc.addressModeU ?? "clamp-to-edge"}:${desc.addressModeV ?? "clamp-to-edge"}:${desc.addressModeW ?? "clamp-to-edge"}:${desc.maxAnisotropy ?? 1}`;
+  }
+  function getOrCreateSampler(engine, desc = {}) {
+    const device = engine._device;
+    if (!_samplerCache) {
+      _samplerCache = /* @__PURE__ */ new WeakMap();
+    }
+    let dc = _samplerCache.get(device);
+    if (!dc) {
+      dc = /* @__PURE__ */ new Map();
+      _samplerCache.set(device, dc);
+    }
+    const key = samplerKey(desc);
+    let s = dc.get(key);
+    if (!s) {
+      s = device.createSampler(desc);
+      dc.set(key, s);
+    }
+    return s;
+  }
+  function clearSamplerCache(engine) {
+    const device = engine._device;
+    _samplerCache?.delete(device);
+  }
+  var _texRefs, _samplerCache;
+  var init_gpu_pool = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-pool.ts"() {
+      "use strict";
+      _texRefs = null;
+      _samplerCache = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/samplers.ts
+  function getBilinearSampler(engine) {
+    return getOrCreateSampler(engine, _bilinearDesc);
+  }
+  function getTrilinearSampler(engine) {
+    return getOrCreateSampler(engine, _trilinearDesc);
+  }
+  var _bilinearDesc, _trilinearDesc;
+  var init_samplers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/samplers.ts"() {
+      "use strict";
+      init_gpu_pool();
+      _bilinearDesc = { magFilter: "linear", minFilter: "linear" };
+      _trilinearDesc = { magFilter: "linear", minFilter: "linear", mipmapFilter: "linear" };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/trilinear-anisotropic-sampler.ts
+  function getTrilinearAnisotropicSampler(engine) {
+    return getOrCreateSampler(engine, _trilinearAnisotropicDesc);
+  }
+  var _trilinearAnisotropicDesc;
+  var init_trilinear_anisotropic_sampler = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/trilinear-anisotropic-sampler.ts"() {
+      "use strict";
+      init_gpu_pool();
+      _trilinearAnisotropicDesc = {
+        magFilter: "linear",
+        minFilter: "linear",
+        mipmapFilter: "linear",
+        addressModeU: "repeat",
+        addressModeV: "repeat",
+        addressModeW: "repeat",
+        maxAnisotropy: 4
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/generate-mipmaps.ts
+  var generate_mipmaps_exports = {};
+  __export(generate_mipmaps_exports, {
+    generateMipmaps: () => generateMipmaps,
+    recordMipmaps: () => recordMipmaps
+  });
+  function clearCache() {
+    pipelineCache?.clear();
+    pipelineCache = null;
+    shaderModule = null;
+    linearSampler = null;
+    bindGroupLayout = null;
+    cachedDevice = null;
+  }
+  function ensureResources(engine) {
+    const device = engine._device;
+    if (device !== cachedDevice) {
+      clearCache();
+      cachedDevice = device;
+    }
+    shaderModule ?? (shaderModule = device.createShaderModule({ code: BLIT_SHADER }));
+    linearSampler ?? (linearSampler = getBilinearSampler(engine));
+    bindGroupLayout ?? (bindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: SS.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: SS.FRAGMENT, sampler: {} }
+      ]
+    }));
+  }
+  function getPipeline(engine, format) {
+    const device = engine._device;
+    ensureResources(engine);
+    pipelineCache ?? (pipelineCache = /* @__PURE__ */ new Map());
+    let pipeline = pipelineCache.get(format);
+    if (!pipeline) {
+      pipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+        vertex: { module: shaderModule, entryPoint: "vs" },
+        fragment: { module: shaderModule, entryPoint: "fs", targets: [{ format }] },
+        primitive: { topology: "triangle-list" }
+      });
+      pipelineCache.set(format, pipeline);
+    }
+    return pipeline;
+  }
+  function generateMipmaps(engine, texture, face) {
+    const device = engine._device;
+    const encoder = device.createCommandEncoder();
+    recordMipmaps(engine, texture, encoder, face);
+    device.queue.submit([encoder.finish()]);
+  }
+  function recordMipmaps(engine, texture, encoder, face) {
+    if (texture.mipLevelCount <= 1) {
+      return;
+    }
+    const device = engine._device;
+    const pipeline = getPipeline(engine, texture.format);
+    const vp = face != null ? { dimension: "2d", baseArrayLayer: face, arrayLayerCount: 1 } : {};
+    for (let mip = 1; mip < texture.mipLevelCount; mip++) {
+      const srcView = texture.createView({ baseMipLevel: mip - 1, mipLevelCount: 1, ...vp });
+      const dstView = texture.createView({ baseMipLevel: mip, mipLevelCount: 1, ...vp });
+      const bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+          { binding: 0, resource: srcView },
+          { binding: 1, resource: linearSampler }
+        ]
+      });
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{ view: dstView, loadOp: "clear", storeOp: "store", clearValue: { r: 0, g: 0, b: 0, a: 0 } }]
+      });
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(3);
+      pass.end();
+    }
+  }
+  var BLIT_SHADER, pipelineCache, shaderModule, linearSampler, bindGroupLayout, cachedDevice;
+  var init_generate_mipmaps = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/generate-mipmaps.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_samplers();
+      BLIT_SHADER = `@group(0)@binding(0)var t:texture_2d<f32>;@group(0)@binding(1)var s:sampler;
+struct V{@builtin(position)p:vec4f,@location(0)u:vec2f};
+@vertex fn vs(@builtin(vertex_index)i:u32)->V{let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3))[i];return V(vec4f(p,0,1),p*vec2f(.5,-.5)+.5);}
+@fragment fn fs(v:V)->@location(0)vec4f{return textureSample(t,s,v.u);}`;
+      pipelineCache = null;
+      shaderModule = null;
+      linearSampler = null;
+      bindGroupLayout = null;
+      cachedDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/mip-count.ts
+  function mipLevelCount(width, height) {
+    return Math.floor(Math.log2(Math.max(width, height))) + 1;
+  }
+  function biasedMipLevelCount(width, height, lodBias) {
+    const maxDim = Math.max(width, height);
+    return Math.max(1, Math.floor(Math.log2(maxDim) - lodBias) + 1);
+  }
+  var init_mip_count = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/mip-count.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/transmission.ts
+  function enableSceneTransmission(scene, engine) {
+    markPbrMaterialsLinear(scene);
+    let lastRenderTask = null;
+    for (const task of scene._frameGraph._tasks) {
+      if ("_renderables" in task) {
+        const renderTask = task;
+        enableRenderTaskTransmission(renderTask, engine);
+        lastRenderTask = renderTask;
+      }
+    }
+    if (lastRenderTask && !scene._frameGraph._tasks.some((task) => task.name === "transmission-image-processing")) {
+      scene._frameGraph._tasks.push(createImageProcessingTask({ name: "transmission-image-processing", source: lastRenderTask._config.rt }, engine, scene));
+    }
+  }
+  function enableRenderTaskTransmission(task, engine, options) {
+    const linear = options?.linear !== false;
+    applyTransmissionOptions(task, options);
+    const grab = {
+      get texture() {
+        return task._targetSignature._transmissionTexture ?? null;
+      }
+    };
+    if (task._executeWithTransmission) {
+      return grab;
+    }
+    if (linear) {
+      retargetRenderTaskToLinearOffscreen(task);
+    }
+    let state = null;
+    const record = task.record.bind(task);
+    const execute = task.execute?.bind(task);
+    const dispose = task.dispose?.bind(task);
+    task.record = () => {
+      disposeRenderTaskTransmission(state);
+      state = createRenderTaskTransmission(task, engine);
+      task._targetSignature._transmissionTexture = state.texture;
+      record();
+      configureTransmissionSource(state, task, engine);
+    };
+    if (linear && execute) {
+      task.execute = () => executeRenderTaskLinear(task.scene, execute);
+    }
+    task.dispose = () => {
+      disposeRenderTaskTransmission(state);
+      state = null;
+      dispose?.();
+    };
+    task._executeWithTransmission = (sampleCount) => executePassWithTransmission(task, engine, state, sampleCount);
+    return grab;
+  }
+  function retargetRenderTaskToLinearOffscreen(task) {
+    const cfg = task._config;
+    const oldDesc = cfg.rt._descriptor;
+    const surface = task.scene.surface;
+    const sampleCount = surface.msaaSamples;
+    const ownsDepth = !cfg.depth;
+    const newRt = createRenderTarget({
+      lbl: "transmission-linear",
+      format: "rgba16float",
+      dFormat: ownsDepth ? oldDesc.dFormat ?? "depth24plus-stencil8" : void 0,
+      _depthClearValue: oldDesc._depthClearValue,
+      _depthCompare: oldDesc._depthCompare,
+      samples: sampleCount,
+      size: surface
+    });
+    cfg.rt = newRt;
+    cfg.rst = void 0;
+    const sig = task._targetSignature;
+    sig._colorFormat = "rgba16float";
+    sig._depthStencilFormat = cfg.depth?._descriptor.dFormat ?? newRt._descriptor.dFormat;
+    sig._depthCompare = newRt._descriptor._depthCompare;
+    sig._sampleCount = sampleCount;
+    task._opaqueBundles.length = 0;
+    task._lastVersion = -1;
+  }
+  function executeRenderTaskLinear(scene, execute) {
+    const imageProcessing = scene.imageProcessing;
+    const toneMappingEnabled = imageProcessing.toneMappingEnabled;
+    const clearColor = scene.clearColor;
+    const linearClearColor = inverseImageProcessedColor(clearColor, imageProcessing.exposure, imageProcessing.contrast, toneMappingEnabled === true);
+    imageProcessing.toneMappingEnabled = -1;
+    scene.clearColor = linearClearColor;
+    try {
+      return execute();
+    } finally {
+      scene.clearColor = clearColor;
+      imageProcessing.toneMappingEnabled = toneMappingEnabled;
+    }
+  }
+  function inverseImageProcessedColor(color, exposure, contrast, toneMapping) {
+    return {
+      r: inverseImageProcessedChannel(color.r, exposure, contrast, toneMapping),
+      g: inverseImageProcessedChannel(color.g, exposure, contrast, toneMapping),
+      b: inverseImageProcessedChannel(color.b, exposure, contrast, toneMapping),
+      a: color.a
+    };
+  }
+  function inverseImageProcessedChannel(value, exposure, contrast, toneMapping) {
+    let c = clamp01(value);
+    if (contrast < 1) {
+      c = contrast > 0 ? clamp01((c - 0.5 * (1 - contrast)) / contrast) : 0.5;
+    } else if (contrast > 1) {
+      const mixAmount = contrast - 1;
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) * 0.5;
+        const high = mid * mid * (3 - 2 * mid);
+        const out = mid + (high - mid) * mixAmount;
+        if (out < c) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      c = (lo + hi) * 0.5;
+    }
+    c = c ** 2.2;
+    if (toneMapping) {
+      c = -Math.log2(Math.max(1 - c, 1e-6)) / 1.5905790328979492;
+    }
+    return exposure > 0 ? c / exposure : c;
+  }
+  function clamp01(v) {
+    return Math.min(Math.max(v, 0), 1);
+  }
+  function markPbrMaterialsLinear(scene) {
+    for (const mesh of scene.meshes) {
+      const mat = mesh.material;
+      if (mat) {
+        mat._linearImageProcessing = true;
+        mat._renderFeatures = void 0;
+      }
+    }
+  }
+  function createRenderTaskTransmission(task, engine) {
+    const rt = task._config.rt;
+    const width = 1024;
+    const height = 1024;
+    const format = "rgba16float";
+    const mipLevelCount2 = transmissionMipLevelCount(task._config.transmission, width, height);
+    const generateMipmaps2 = mipLevelCount2 > 1;
+    const texture = engine._device.createTexture({
+      label: task.name,
+      size: { width, height },
+      format,
+      mipLevelCount: mipLevelCount2,
+      usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING | TU.COPY_DST
+    });
+    const tex = {
+      texture,
+      view: texture.createView(),
+      sampler: getTrilinearAnisotropicSampler(engine),
+      width,
+      height,
+      invertY: false
+    };
+    return {
+      texture: tex,
+      _baseView: texture.createView({ baseMipLevel: 0, mipLevelCount: 1 }),
+      _sourceWidth: rt._width,
+      _sourceHeight: rt._height,
+      _sourceTexture: null,
+      _blit: null,
+      _copyCount: normalizeCopyCount(task._config.transmission),
+      _generateMipmaps: generateMipmaps2,
+      _copies: 0
+    };
+  }
+  function configureTransmissionSource(state, task, engine) {
+    const rt = task._config.rt;
+    state._sourceWidth = rt._width;
+    state._sourceHeight = rt._height;
+    state._sourceTexture = rt._colorTexture;
+    const sampleCount = task._targetSignature._sampleCount;
+    if (!state._sourceTexture) {
+      return;
+    }
+    state._blit = shouldBlitTransmission(state, sampleCount) ? createTransmissionBlit(state, engine, state._sourceTexture, sampleCount > 1) : null;
+  }
+  function disposeRenderTaskTransmission(state) {
+    state?.texture.texture.destroy();
+  }
+  function executePassWithTransmission(task, engine, state, sampleCount) {
+    state._copies = 0;
+    const transparent = task._transparentBindings;
+    let pass = beginTaskPass(task, null, sampleCount, false);
+    let draws = drawBaseTask(task, pass);
+    let lastPipeline = null;
+    let overlay = null;
+    for (let i = 0; i < transparent.length; i++) {
+      const binding = transparent[i];
+      if (binding.renderable.mesh?.renderOnTop === true) {
+        (overlay ?? (overlay = [])).push(binding);
+        continue;
+      }
+      const transmissive = binding.renderable._transmissive === true;
+      if (transmissive && canUpdateTransmission(state)) {
+        pass.end();
+        updateTransmissionTexture(state, engine);
+        pass = beginTaskPass(task, null, sampleCount, true);
+        setPassState(task, pass);
+        lastPipeline = null;
+      }
+      const mesh = binding.renderable.mesh;
+      if (mesh && mesh.visible === false) {
+        continue;
+      }
+      if (binding.pipeline !== lastPipeline) {
+        pass.setPipeline(binding.pipeline);
+        lastPipeline = binding.pipeline;
+      }
+      draws += binding.draw(pass, engine);
+    }
+    if (overlay) {
+      draws += drawList2(pass, overlay, engine);
+    }
+    pass.end();
+    return draws;
+  }
+  function updateTransmissionTexture(state, engine) {
+    if (!state._sourceTexture) {
+      throw new Error("No transmission source");
+    }
+    if (state._blit) {
+      blitToTransmission(state, engine);
+    } else {
+      engine._currentEncoder.copyTextureToTexture(
+        { texture: state._sourceTexture },
+        { texture: state.texture.texture },
+        { width: state.texture.width, height: state.texture.height }
+      );
+    }
+    if (state._generateMipmaps) {
+      recordMipmaps(engine, state.texture.texture, engine._currentEncoder);
+    }
+    state._copies++;
+  }
+  function getBlitPipeline(engine, format, multisampled) {
+    const device = engine._device;
+    if (device !== blitDevice) {
+      blitPipelines?.clear();
+      blitPipelines = null;
+      blitShader = null;
+      blitMsaaShader = null;
+      blitBgl = null;
+      blitMsaaBgl = null;
+      blitDevice = device;
+    }
+    if (multisampled) {
+      blitMsaaShader ?? (blitMsaaShader = device.createShaderModule({ code: BLIT_MSAA_SHADER }));
+      blitMsaaBgl ?? (blitMsaaBgl = device.createBindGroupLayout({
+        entries: [{ binding: 0, visibility: SS.FRAGMENT, texture: { sampleType: "unfilterable-float", multisampled: true } }]
+      }));
+    } else {
+      blitShader ?? (blitShader = device.createShaderModule({ code: BLIT_SHADER2 }));
+      blitBgl ?? (blitBgl = device.createBindGroupLayout({
+        entries: [
+          { binding: 0, visibility: SS.FRAGMENT, texture: { sampleType: "float" } },
+          { binding: 1, visibility: SS.FRAGMENT, sampler: {} }
+        ]
+      }));
+    }
+    blitPipelines ?? (blitPipelines = /* @__PURE__ */ new Map());
+    const key = `${format}:${multisampled ? "msaa" : ""}`;
+    let pipeline = blitPipelines.get(key);
+    if (!pipeline) {
+      const bgl = multisampled ? blitMsaaBgl : blitBgl;
+      pipeline = device.createRenderPipeline({
+        label: "transmission-copy",
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+        vertex: { module: multisampled ? blitMsaaShader : blitShader, entryPoint: "vs" },
+        fragment: { module: multisampled ? blitMsaaShader : blitShader, entryPoint: "fs", targets: [{ format }] },
+        primitive: { topology: "triangle-list" }
+      });
+      blitPipelines.set(key, pipeline);
+    }
+    return pipeline;
+  }
+  function shouldBlitTransmission(state, sampleCount) {
+    return sampleCount > 1 || state._sourceWidth !== state.texture.width || state._sourceHeight !== state.texture.height;
+  }
+  function createTransmissionBlit(state, engine, source, multisampled) {
+    const device = engine._device;
+    const pipeline = getBlitPipeline(engine, state.texture.texture.format, multisampled);
+    const bindGroup = device.createBindGroup({
+      layout: multisampled ? blitMsaaBgl : blitBgl,
+      entries: multisampled ? [{ binding: 0, resource: source.createView() }] : [
+        { binding: 0, resource: source.createView() },
+        { binding: 1, resource: getBilinearSampler(engine) }
+      ]
+    });
+    return { _pipeline: pipeline, _bindGroup: bindGroup };
+  }
+  function blitToTransmission(state, engine) {
+    const blit = state._blit;
+    const pass = engine._currentEncoder.beginRenderPass({
+      colorAttachments: [{ view: state._baseView, loadOp: "clear", storeOp: "store", clearValue: { r: 0, g: 0, b: 0, a: 0 } }]
+    });
+    pass.setPipeline(blit._pipeline);
+    pass.setBindGroup(0, blit._bindGroup);
+    pass.draw(3);
+    pass.end();
+  }
+  function canUpdateTransmission(state) {
+    return state._copyCount === 0 || state._copies < state._copyCount;
+  }
+  function beginTaskPass(task, resolveTarget, sampleCount, load) {
+    const att = task._colorAttachment;
+    const depthLoadOp = load || !task._config.clr ? "load" : "clear";
+    if (load) {
+      att.loadOp = "load";
+    }
+    const depthAttachment = task._renderPassDescriptor.depthStencilAttachment;
+    if (depthAttachment) {
+      depthAttachment.depthLoadOp = depthLoadOp;
+      if (depthAttachment.stencilLoadOp) {
+        depthAttachment.stencilLoadOp = depthLoadOp;
+      }
+    }
+    if (sampleCount > 1) {
+      att.resolveTarget = resolveTarget ?? void 0;
+    } else {
+      att.resolveTarget = void 0;
+    }
+    return task.engine._currentEncoder.beginRenderPass(task._renderPassDescriptor);
+  }
+  function setPassState(task, pass) {
+    const cfg = task._config;
+    const rt = cfg.rt;
+    const scene = task.scene;
+    const camera = cfg.cam ?? scene.camera;
+    const v = camera?.viewport;
+    if (v) {
+      const rw = rt._width;
+      const rh = rt._height;
+      const x = Math.floor(v.x * rw);
+      const y = Math.floor((1 - v.y - v.height) * rh);
+      const w = Math.ceil((v.x + v.width) * rw) - x;
+      const h = Math.ceil((1 - v.y) * rh) - y;
+      pass.setViewport(x, y, w, h, 0, 1);
+      pass.setScissorRect(x, y, w, h);
+    }
+    pass.setBindGroup(0, task._sceneBG);
+  }
+  function drawBaseTask(task, pass) {
+    const eng = task.engine;
+    const rt = task._config.rt;
+    const scene = task.scene;
+    const opaqueBindings = task._opaqueBindings;
+    const opaqueBundles = task._opaqueBundles;
+    setPassState(task, pass);
+    if (task._lastVersion !== scene._renderableVersion || task._lastVis !== _vis || opaqueBundles.length === 0) {
+      const desc = rt._descriptor;
+      const be = eng._device.createRenderBundleEncoder({
+        colorFormats: desc.format ? [desc.format] : [],
+        depthStencilFormat: desc.dFormat,
+        sampleCount: desc.samples ?? 1
+      });
+      be.setBindGroup(0, task._sceneBG);
+      drawList2(be, opaqueBindings, eng);
+      opaqueBundles[0] = be.finish();
+      task._lastVersion = scene._renderableVersion;
+      task._lastVis = _vis;
+    }
+    let draws = opaqueBindings.length;
+    pass.executeBundles(opaqueBundles);
+    pass.setBindGroup(0, task._sceneBG);
+    draws += drawList2(pass, task._directBindings, eng);
+    return draws;
+  }
+  function drawList2(enc, list, engine) {
+    let lp = null;
+    let draws = 0;
+    for (const b of list) {
+      const mesh = b.renderable.mesh;
+      if (mesh && mesh.visible === false) {
+        continue;
+      }
+      if (b.pipeline !== lp) {
+        enc.setPipeline(b.pipeline);
+        lp = b.pipeline;
+      }
+      draws += b.draw(enc, engine);
+    }
+    return draws;
+  }
+  function normalizeCopyCount(cfg) {
+    const count = cfg?.copyCount ?? 1;
+    return count === Infinity ? 0 : Math.max(0, count | 0);
+  }
+  function applyTransmissionOptions(task, options) {
+    if (!options) {
+      return;
+    }
+    let next = task._config.transmission;
+    let changed = false;
+    const set = (key, value) => {
+      if (value === void 0) {
+        return;
+      }
+      next = { ...next, [key]: value };
+      changed = true;
+    };
+    set("copyCount", options.copyCount);
+    set("generateMipmaps", options.generateMipmaps);
+    set("mipLevelCount", options.mipLevelCount);
+    if (changed) {
+      task._config.transmission = next;
+    }
+  }
+  function transmissionMipLevelCount(cfg, width, height) {
+    if (cfg?.generateMipmaps === false) {
+      return 1;
+    }
+    const full = Math.floor(Math.log2(Math.max(width, height))) + 1;
+    const defaultCount = biasedMipLevelCount(width, height, REFRACTION_LOD_BIAS);
+    const requested = cfg?.mipLevelCount;
+    if (requested === void 0) {
+      return Math.min(full, defaultCount);
+    }
+    return Math.min(full, Math.max(1, requested | 0));
+  }
+  var BLIT_SHADER2, BLIT_MSAA_SHADER, REFRACTION_LOD_BIAS, blitPipelines, blitShader, blitMsaaShader, blitBgl, blitMsaaBgl, blitDevice;
+  var init_transmission = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/transmission.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_engine();
+      init_render_target();
+      init_samplers();
+      init_trilinear_anisotropic_sampler();
+      init_generate_mipmaps();
+      init_mip_count();
+      init_image_processing_task();
+      BLIT_SHADER2 = `@group(0)@binding(0)var t:texture_2d<f32>;@group(0)@binding(1)var s:sampler;struct V{@builtin(position)p:vec4f,@location(0)u:vec2f};@vertex fn vs(@builtin(vertex_index)i:u32)->V{var p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));var u=array<vec2f,3>(vec2f(0,1),vec2f(2,1),vec2f(0,-1));return V(vec4f(p[i],0,1),u[i]);}@fragment fn fs(v:V)->@location(0)vec4f{return textureSample(t,s,v.u);}`;
+      BLIT_MSAA_SHADER = `@group(0)@binding(0)var t:texture_multisampled_2d<f32>;struct V{@builtin(position)p:vec4f,@location(0)u:vec2f};@vertex fn vs(@builtin(vertex_index)i:u32)->V{var p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));var u=array<vec2f,3>(vec2f(0,1),vec2f(2,1),vec2f(0,-1));return V(vec4f(p[i],0,1),u[i]);}fn l(p:vec2i)->vec4f{let n=textureNumSamples(t);var c=vec4f(0);for(var i=0u;i<n;i++){c+=textureLoad(t,p,i);}return c/f32(n);}@fragment fn fs(v:V)->@location(0)vec4f{let d=vec2i(textureDimensions(t));let q=clamp(v.u*vec2f(d)-.5,vec2f(0),vec2f(d-vec2i(1)));let p=vec2i(floor(q));let f=fract(q);let p1=min(p+vec2i(1),d-vec2i(1));return mix(mix(l(p),l(vec2i(p1.x,p.y)),f.x),mix(l(vec2i(p.x,p1.y)),l(p1),f.x),f.y);}`;
+      REFRACTION_LOD_BIAS = 4;
+      blitPipelines = null;
+      blitShader = null;
+      blitMsaaShader = null;
+      blitBgl = null;
+      blitMsaaBgl = null;
+      blitDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-invert.ts
+  function mat4Invert(input) {
+    const m = input;
+    const a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3];
+    const a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7];
+    const a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11];
+    const a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15];
+    const b00 = a00 * a11 - a01 * a10;
+    const b01 = a00 * a12 - a02 * a10;
+    const b02 = a00 * a13 - a03 * a10;
+    const b03 = a01 * a12 - a02 * a11;
+    const b04 = a01 * a13 - a03 * a11;
+    const b05 = a02 * a13 - a03 * a12;
+    const b06 = a20 * a31 - a21 * a30;
+    const b07 = a20 * a32 - a22 * a30;
+    const b08 = a20 * a33 - a23 * a30;
+    const b09 = a21 * a32 - a22 * a31;
+    const b10 = a21 * a33 - a23 * a31;
+    const b11 = a22 * a33 - a23 * a32;
+    let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    if (Math.abs(det) < 1e-10) {
+      return null;
+    }
+    det = 1 / det;
+    const out = new F32(16);
+    out[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+    out[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+    out[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+    out[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+    out[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+    out[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+    out[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+    out[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+    out[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+    out[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+    out[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+    out[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+    out[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
+    out[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+    out[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+    out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+    return out;
+  }
+  var init_mat4_invert = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-invert.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/light-base.ts
+  function createLightBase(getLocalMatrix) {
+    const wm = createWorldMatrixState(getLocalMatrix);
+    const lvs = {
+      _lightVersion: 0,
+      bump() {
+        lvs._lightVersion++;
+      }
+    };
+    const onDirty = () => {
+      wm.markLocalDirty();
+      lvs._lightVersion++;
+    };
+    return { wm, onDirty, lvs };
+  }
+  function applyWorldMatrixAccessors(target, wm, lvs) {
+    Object.defineProperties(target, {
+      parent: {
+        get() {
+          return wm.parent;
+        },
+        set(v) {
+          wm.parent = v;
+        },
+        enumerable: true,
+        configurable: true
+      },
+      worldMatrix: {
+        get() {
+          return wm.getWorldMatrix();
+        },
+        enumerable: true,
+        configurable: true
+      },
+      worldMatrixVersion: {
+        get() {
+          return wm.getWorldMatrixVersion();
+        },
+        enumerable: true,
+        configurable: true
+      }
+    });
+    if (lvs) {
+      Object.defineProperty(target, "_lightVersion", {
+        get() {
+          return lvs._lightVersion;
+        },
+        enumerable: false,
+        configurable: true
+      });
+    }
+    attachWorldMatrixState(target, wm);
+    return target;
+  }
+  var init_light_base = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/light-base.ts"() {
+      "use strict";
+      init_world_matrix_state();
+      init_observable_vec3();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/light-matrix.ts
+  function localMatrixFromDirection(dx, dy, dz, px = 0, py = 0, pz = 0, out) {
+    const flen = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const fx = dx / flen, fy = dy / flen, fz = dz / flen;
+    let rx = -fz, rz = fx;
+    const ry = 0;
+    const rlen = Math.sqrt(rx * rx + ry * ry + rz * rz) || 1;
+    rx /= rlen;
+    rz /= rlen;
+    const ux = fy * rz - fz * ry, uy = fz * rx - fx * rz, uz = fx * ry - fy * rx;
+    const out4 = out ?? new F32(16);
+    const m = out4;
+    m[0] = rx;
+    m[1] = ry;
+    m[2] = rz;
+    m[3] = 0;
+    m[4] = ux;
+    m[5] = uy;
+    m[6] = uz;
+    m[7] = 0;
+    m[8] = fx;
+    m[9] = fy;
+    m[10] = fz;
+    m[11] = 0;
+    m[12] = px;
+    m[13] = py;
+    m[14] = pz;
+    m[15] = 1;
+    return out4;
+  }
+  var init_light_matrix = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/light-matrix.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/point-light.ts
+  var point_light_exports = {};
+  __export(point_light_exports, {
+    createPointLight: () => createPointLight
+  });
+  function createPointLight(position, intensity = 1) {
+    const m = allocateMat4();
+    m[0] = 1;
+    m[5] = 1;
+    m[10] = 1;
+    m[15] = 1;
+    const _localMatrix = m;
+    const { wm, onDirty, lvs } = createLightBase(() => {
+      m[12] = light.position.x;
+      m[13] = light.position.y;
+      m[14] = light.position.z;
+      return _localMatrix;
+    });
+    const light = applyWorldMatrixAccessors(
+      {
+        lightType: "point",
+        children: [],
+        position: new ObservableVec3(position[0], position[1], position[2], onDirty),
+        diffuse: [1, 1, 1],
+        specular: [1, 1, 1],
+        intensity,
+        range: Number.MAX_VALUE,
+        _writeLightUbo: (data, offset) => {
+          const o = offset;
+          const w = light.worldMatrix;
+          data[o] = w[12];
+          data[o + 1] = w[13];
+          data[o + 2] = w[14];
+          data[o + 3] = 0;
+          data[o + 4] = light.diffuse[0] * light.intensity;
+          data[o + 5] = light.diffuse[1] * light.intensity;
+          data[o + 6] = light.diffuse[2] * light.intensity;
+          data[o + 7] = light.range;
+          data[o + 8] = light.specular[0] * light.intensity;
+          data[o + 9] = light.specular[1] * light.intensity;
+          data[o + 10] = light.specular[2] * light.intensity;
+        }
+      },
+      wm,
+      lvs
+    );
+    return light;
+  }
+  var init_point_light = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/point-light.ts"() {
+      "use strict";
+      init_light_base();
+      init_matrix_allocator();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/directional-light.ts
+  var directional_light_exports = {};
+  __export(directional_light_exports, {
+    createDirectionalLight: () => createDirectionalLight
+  });
+  function createDirectionalLight(direction, intensity = 1) {
+    const _localMatrix = allocateMat4();
+    const { wm, onDirty, lvs } = createLightBase(() => {
+      return localMatrixFromDirection(light.direction.x, light.direction.y, light.direction.z, light.position.x, light.position.y, light.position.z, _localMatrix);
+    });
+    const light = applyWorldMatrixAccessors(
+      {
+        lightType: "directional",
+        children: [],
+        direction: new ObservableVec3(direction[0], direction[1], direction[2], onDirty),
+        position: new ObservableVec3(0, 0, 0, onDirty),
+        diffuse: [1, 1, 1],
+        specular: [1, 1, 1],
+        intensity,
+        _writeLightUbo: (data, offset) => {
+          const o = offset;
+          const w = light.worldMatrix;
+          data[o] = w[8];
+          data[o + 1] = w[9];
+          data[o + 2] = w[10];
+          data[o + 3] = 1;
+          data[o + 4] = light.diffuse[0] * light.intensity;
+          data[o + 5] = light.diffuse[1] * light.intensity;
+          data[o + 6] = light.diffuse[2] * light.intensity;
+          data[o + 7] = Number.MAX_VALUE;
+          data[o + 8] = light.specular[0] * light.intensity;
+          data[o + 9] = light.specular[1] * light.intensity;
+          data[o + 10] = light.specular[2] * light.intensity;
+        }
+      },
+      wm,
+      lvs
+    );
+    return light;
+  }
+  var init_directional_light = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/directional-light.ts"() {
+      "use strict";
+      init_light_base();
+      init_light_matrix();
+      init_matrix_allocator();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/spot-light.ts
+  var spot_light_exports = {};
+  __export(spot_light_exports, {
+    createSpotLight: () => createSpotLight
+  });
+  function createSpotLight(position, direction, angle, exponent, intensity = 1) {
+    const _localMatrix = allocateMat4();
+    const { wm, onDirty, lvs } = createLightBase(() => {
+      return localMatrixFromDirection(light.direction.x, light.direction.y, light.direction.z, light.position.x, light.position.y, light.position.z, _localMatrix);
+    });
+    let _angle = angle;
+    let _cosHalfAngle = Math.cos(angle * 0.5);
+    const light = applyWorldMatrixAccessors(
+      {
+        lightType: "spot",
+        children: [],
+        position: new ObservableVec3(position[0], position[1], position[2], onDirty),
+        direction: new ObservableVec3(direction[0], direction[1], direction[2], onDirty),
+        angle: 0,
+        // placeholder — overridden by defineProperty below
+        exponent,
+        diffuse: [1, 1, 1],
+        specular: [1, 1, 1],
+        intensity,
+        range: Number.MAX_VALUE,
+        _writeLightUbo: (data, offset) => {
+          const o = offset;
+          const w = light.worldMatrix;
+          data[o] = w[12];
+          data[o + 1] = w[13];
+          data[o + 2] = w[14];
+          data[o + 3] = 2;
+          data[o + 4] = light.diffuse[0] * light.intensity;
+          data[o + 5] = light.diffuse[1] * light.intensity;
+          data[o + 6] = light.diffuse[2] * light.intensity;
+          data[o + 7] = light.range;
+          data[o + 8] = light.specular[0] * light.intensity;
+          data[o + 9] = light.specular[1] * light.intensity;
+          data[o + 10] = light.specular[2] * light.intensity;
+          data[o + 11] = light.exponent;
+          data[o + 12] = w[8];
+          data[o + 13] = w[9];
+          data[o + 14] = w[10];
+          data[o + 15] = _cosHalfAngle;
+        }
+      },
+      wm,
+      lvs
+    );
+    Object.defineProperty(light, "angle", {
+      get() {
+        return _angle;
+      },
+      set(v) {
+        if (v !== _angle) {
+          _angle = v;
+          _cosHalfAngle = Math.cos(v * 0.5);
+          lvs.bump();
+        }
+      },
+      configurable: true,
+      enumerable: true
+    });
+    return light;
+  }
+  var init_spot_light = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/spot-light.ts"() {
+      "use strict";
+      init_light_base();
+      init_light_matrix();
+      init_matrix_allocator();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-flag-bits.ts
+  var PBR_HAS_NORMAL_MAP, PBR_HAS_EMISSIVE, PBR_HAS_ENV, PBR_HAS_ALPHA_TEST, PBR_HAS_TONEMAP, PBR_HAS_FOG, PBR_HAS_ALPHA_BLEND, PBR_HAS_SPEC_GLOSS, PBR_HAS_DOUBLE_SIDED, PBR_HAS_COTANGENT_NORMAL, PBR_HAS_METALLIC_REFLECTANCE_MAP, PBR_HAS_REFLECTANCE_MAP, PBR_HAS_USE_ALPHA_ONLY_MR, PBR_HAS_OCCLUSION, PBR_HAS_SPECULAR_AA, PBR_HAS_CLEARCOAT, PBR_HAS_EMISSIVE_COLOR, PBR_HAS_SHEEN, PBR_HAS_SHEEN_TEXTURE, PBR_HAS_GAMMA_ALBEDO, PBR_HAS_ANISOTROPY, PBR_HAS_SUBSURFACE, PBR_HAS_THICKNESS_MAP, PBR_HAS_SKYBOX, PBR_HAS_SHEEN_ALBEDO_SCALING, PBR2_CC_INT_MAP, PBR2_CC_ROUGH_MAP, PBR2_CC_NORMAL_MAP, PBR2_CC_F0_REMAP_OFF, PBR2_HAS_REFRACTION, PBR2_HAS_VOLUME, PBR2_HAS_REFRACTION_MAP, PBR2_HAS_THICKNESS_GLTF_CHANNEL, PBR2_HAS_UNLIT, PBR2_HAS_UV_TRANSFORM, PBR2_HAS_REFLECTANCE_FACTORS, PBR2_HAS_UV2, PBR2_HAS_BASE_COLOR_FACTOR, PBR2_HAS_SHEEN_UV_TX, PBR2_LINEAR_IMAGE_PROCESSING, PBR2_NO_COLOR_OUTPUT, PBR2_ESM_SHADOW_OUTPUT, PBR2_HAS_IRIDESCENCE, PBR2_HAS_IRIDESCENCE_MAP, PBR2_HAS_IRIDESCENCE_THICKNESS_MAP, PBR2_HAS_DISPERSION, PBR2_GEOMETRY_OUTPUT;
+  var init_pbr_flag_bits = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-flag-bits.ts"() {
+      "use strict";
+      PBR_HAS_NORMAL_MAP = 1 << 0;
+      PBR_HAS_EMISSIVE = 1 << 1;
+      PBR_HAS_ENV = 1 << 2;
+      PBR_HAS_ALPHA_TEST = 1 << 3;
+      PBR_HAS_TONEMAP = 1 << 4;
+      PBR_HAS_FOG = 1 << 5;
+      PBR_HAS_ALPHA_BLEND = 1 << 6;
+      PBR_HAS_SPEC_GLOSS = 1 << 7;
+      PBR_HAS_DOUBLE_SIDED = 1 << 8;
+      PBR_HAS_COTANGENT_NORMAL = 1 << 9;
+      PBR_HAS_METALLIC_REFLECTANCE_MAP = 1 << 10;
+      PBR_HAS_REFLECTANCE_MAP = 1 << 11;
+      PBR_HAS_USE_ALPHA_ONLY_MR = 1 << 12;
+      PBR_HAS_OCCLUSION = 1 << 15;
+      PBR_HAS_SPECULAR_AA = 1 << 17;
+      PBR_HAS_CLEARCOAT = 1 << 20;
+      PBR_HAS_EMISSIVE_COLOR = 1 << 21;
+      PBR_HAS_SHEEN = 1 << 22;
+      PBR_HAS_SHEEN_TEXTURE = 1 << 23;
+      PBR_HAS_GAMMA_ALBEDO = 1 << 25;
+      PBR_HAS_ANISOTROPY = 1 << 26;
+      PBR_HAS_SUBSURFACE = 1 << 27;
+      PBR_HAS_THICKNESS_MAP = 1 << 28;
+      PBR_HAS_SKYBOX = 1 << 29;
+      PBR_HAS_SHEEN_ALBEDO_SCALING = 1 << 30;
+      PBR2_CC_INT_MAP = 1 << 0;
+      PBR2_CC_ROUGH_MAP = 1 << 1;
+      PBR2_CC_NORMAL_MAP = 1 << 2;
+      PBR2_CC_F0_REMAP_OFF = 1 << 3;
+      PBR2_HAS_REFRACTION = 1 << 4;
+      PBR2_HAS_VOLUME = 1 << 5;
+      PBR2_HAS_REFRACTION_MAP = 1 << 6;
+      PBR2_HAS_THICKNESS_GLTF_CHANNEL = 1 << 7;
+      PBR2_HAS_UNLIT = 1 << 8;
+      PBR2_HAS_UV_TRANSFORM = 1 << 9;
+      PBR2_HAS_REFLECTANCE_FACTORS = 1 << 10;
+      PBR2_HAS_UV2 = 1 << 11;
+      PBR2_HAS_BASE_COLOR_FACTOR = 1 << 12;
+      PBR2_HAS_SHEEN_UV_TX = 1 << 13;
+      PBR2_LINEAR_IMAGE_PROCESSING = 1 << 14;
+      PBR2_NO_COLOR_OUTPUT = 1 << 15;
+      PBR2_ESM_SHADOW_OUTPUT = 1 << 16;
+      PBR2_HAS_IRIDESCENCE = 1 << 17;
+      PBR2_HAS_IRIDESCENCE_MAP = 1 << 18;
+      PBR2_HAS_IRIDESCENCE_THICKNESS_MAP = 1 << 19;
+      PBR2_HAS_DISPERSION = 1 << 20;
+      PBR2_GEOMETRY_OUTPUT = 1 << 21;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-flags.ts
+  function _registerPbrExt(ext14) {
+    (_pbrExts ?? (_pbrExts = /* @__PURE__ */ new Map())).set(ext14.id, ext14);
+    _pbrExtsSorted = null;
+  }
+  function _getPbrExts() {
+    return _pbrExts ?? (_pbrExts = /* @__PURE__ */ new Map());
+  }
+  function _getPbrExtsSorted() {
+    if (!_pbrExtsSorted) {
+      const map = _pbrExts;
+      _pbrExtsSorted = map ? Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id)) : [];
+    }
+    return _pbrExtsSorted;
+  }
+  var _pbrExts, _pbrExtsSorted;
+  var init_pbr_flags = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-flags.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      _pbrExts = null;
+      _pbrExtsSorted = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose-into.ts
+  function mat4ComposeInto(dst, off, tx, ty, tz, qx, qy, qz, qw, sx, sy, sz) {
+    const xx = qx * qx, yy = qy * qy, zz = qz * qz;
+    const xy = qx * qy, xz = qx * qz, yz = qy * qz;
+    const wx = qw * qx, wy = qw * qy, wz = qw * qz;
+    dst[off] = (1 - 2 * (yy + zz)) * sx;
+    dst[off + 1] = 2 * (xy + wz) * sx;
+    dst[off + 2] = 2 * (xz - wy) * sx;
+    dst[off + 3] = 0;
+    dst[off + 4] = 2 * (xy - wz) * sy;
+    dst[off + 5] = (1 - 2 * (xx + zz)) * sy;
+    dst[off + 6] = 2 * (yz + wx) * sy;
+    dst[off + 7] = 0;
+    dst[off + 8] = 2 * (xz + wy) * sz;
+    dst[off + 9] = 2 * (yz - wx) * sz;
+    dst[off + 10] = (1 - 2 * (xx + yy)) * sz;
+    dst[off + 11] = 0;
+    dst[off + 12] = tx;
+    dst[off + 13] = ty;
+    dst[off + 14] = tz;
+    dst[off + 15] = 1;
+  }
+  var init_mat4_compose_into = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose-into.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose.ts
+  function mat4Compose(tx, ty, tz, qx, qy, qz, qw, sx, sy, sz) {
+    const out = new F32(16);
+    mat4ComposeInto(out, 0, tx, ty, tz, qx, qy, qz, qw, sx, sy, sz);
+    return out;
+  }
+  var init_mat4_compose = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-compose.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_mat4_compose_into();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/observable-quat.ts
+  var ObservableQuat;
+  var init_observable_quat = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/observable-quat.ts"() {
+      "use strict";
+      ObservableQuat = class {
+        constructor(x, y, z, w, onDirty) {
+          __publicField(this, "_x");
+          __publicField(this, "_y");
+          __publicField(this, "_z");
+          __publicField(this, "_w");
+          __publicField(this, "_onDirty");
+          /** Bumped on every value change. Lets derived caches (e.g. the Euler proxy) detect
+           *  external quaternion writes and re-sync only when needed. */
+          __publicField(this, "_version", 0);
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._w = w;
+          this._onDirty = onDirty;
+        }
+        /** Monotonic change counter — incremented whenever any component changes. */
+        get version() {
+          return this._version;
+        }
+        get x() {
+          return this._x;
+        }
+        set x(v) {
+          if (this._x !== v) {
+            this._x = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        get y() {
+          return this._y;
+        }
+        set y(v) {
+          if (this._y !== v) {
+            this._y = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        get z() {
+          return this._z;
+        }
+        set z(v) {
+          if (this._z !== v) {
+            this._z = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        get w() {
+          return this._w;
+        }
+        set w(v) {
+          if (this._w !== v) {
+            this._w = v;
+            this._version++;
+            this._onDirty();
+          }
+        }
+        /** Bulk set — one dirty notification instead of four. */
+        set(x, y, z, w) {
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._w = w;
+          this._version++;
+          this._onDirty();
+        }
+        /** Copy values from another quaternion. */
+        copyFrom(q) {
+          this.set(q.x, q.y, q.z, q.w);
+        }
+        /** Copy into a Float32Array at offset. */
+        toArray(out, offset = 0) {
+          out[offset] = this._x;
+          out[offset + 1] = this._y;
+          out[offset + 2] = this._z;
+          out[offset + 3] = this._w;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-node.ts
+  function eulerToQuat(rx, ry, rz) {
+    const cx = Math.cos(rx * 0.5), sx_ = Math.sin(rx * 0.5);
+    const cy = Math.cos(ry * 0.5), sy_ = Math.sin(ry * 0.5);
+    const cz = Math.cos(rz * 0.5), sz_ = Math.sin(rz * 0.5);
+    return [sx_ * cy * cz + cx * sy_ * sz_, cx * sy_ * cz - sx_ * cy * sz_, cx * cy * sz_ + sx_ * sy_ * cz, cx * cy * cz - sx_ * sy_ * sz_];
+  }
+  function quatToEulerXYZ(qx, qy, qz, qw) {
+    const sinY = 2 * (qx * qz + qw * qy);
+    const ry = Math.asin(Math.max(-1, Math.min(1, sinY)));
+    const rx = Math.atan2(-(2 * (qy * qz - qw * qx)), 1 - 2 * (qx * qx + qy * qy));
+    const rz = Math.atan2(-(2 * (qx * qy - qw * qz)), 1 - 2 * (qy * qy + qz * qz));
+    return [rx, ry, rz];
+  }
+  function createEulerProxy(rq) {
+    let ex = 0;
+    let ey = 0;
+    let ez = 0;
+    let syncedVersion = -1;
+    const sync = () => {
+      if (rq.version !== syncedVersion) {
+        const e = quatToEulerXYZ(rq.x, rq.y, rq.z, rq.w);
+        ex = e[0];
+        ey = e[1];
+        ez = e[2];
+        syncedVersion = rq.version;
+      }
+    };
+    const apply = (x, y, z) => {
+      ex = x;
+      ey = y;
+      ez = z;
+      const [a, b, c, d] = eulerToQuat(x, y, z);
+      rq.set(a, b, c, d);
+      syncedVersion = rq.version;
+    };
+    return {
+      get x() {
+        sync();
+        return ex;
+      },
+      set x(v) {
+        sync();
+        apply(v, ey, ez);
+      },
+      get y() {
+        sync();
+        return ey;
+      },
+      set y(v) {
+        sync();
+        apply(ex, v, ez);
+      },
+      get z() {
+        sync();
+        return ez;
+      },
+      set z(v) {
+        sync();
+        apply(ex, ey, v);
+      },
+      set: apply
+    };
+  }
+  function createSceneNode(name, px = 0, py = 0, pz = 0, qx = 0, qy = 0, qz = 0, qw = 1, sx = 1, sy = 1, sz = 1) {
+    return createSceneNodeCore(name, null, px, py, pz, qx, qy, qz, qw, sx, sy, sz);
+  }
+  function createSceneNodeFromMatrix(name, matrix) {
+    return createSceneNodeCore(name, matrix);
+  }
+  function createSceneNodeCore(name, matrix, px = 0, py = 0, pz = 0, qx = 0, qy = 0, qz = 0, qw = 1, sx = 1, sy = 1, sz = 1) {
+    const wm = createWorldMatrixState(() => {
+      if (matrix) {
+        return matrix;
+      }
+      const p = node.position, rq2 = node.rotationQuaternion, s = node.scaling;
+      const isIdentity = p.x === 0 && p.y === 0 && p.z === 0 && rq2.x === 0 && rq2.y === 0 && rq2.z === 0 && rq2.w === 1 && s.x === 1 && s.y === 1 && s.z === 1;
+      return isIdentity ? mat4Identity() : mat4Compose(p.x, p.y, p.z, rq2.x, rq2.y, rq2.z, rq2.w, s.x, s.y, s.z);
+    });
+    const onWmDirty = () => {
+      if (!matrix) {
+        wm.markLocalDirty();
+      }
+    };
+    const rq = new ObservableQuat(qx, qy, qz, qw, onWmDirty);
+    const node = {
+      name,
+      children: [],
+      position: new ObservableVec3(px, py, pz, onWmDirty),
+      rotationQuaternion: rq,
+      rotation: createEulerProxy(rq),
+      scaling: new ObservableVec3(sx, sy, sz, onWmDirty),
+      get parent() {
+        return wm.parent;
+      },
+      set parent(v) {
+        wm.parent = v;
+      },
+      get worldMatrix() {
+        return wm.getWorldMatrix();
+      },
+      get worldMatrixVersion() {
+        return wm.getWorldMatrixVersion();
+      }
+    };
+    if (matrix) {
+      node._localMatrix = matrix;
+    }
+    attachWorldMatrixState(node, wm);
+    return node;
+  }
+  var init_scene_node = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-node.ts"() {
+      "use strict";
+      init_mat4_compose();
+      init_mat4_identity();
+      init_observable_vec3();
+      init_observable_quat();
+      init_world_matrix_state();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/mesh.ts
+  function initMeshTransform(mesh, px = 0, py = 0, pz = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+    const wm = createWorldMatrixState(() => {
+      const p = mesh.position, rq2 = mesh.rotationQuaternion, s = mesh.scaling;
+      const isIdentity = p.x === 0 && p.y === 0 && p.z === 0 && rq2.x === 0 && rq2.y === 0 && rq2.z === 0 && rq2.w === 1 && s.x === 1 && s.y === 1 && s.z === 1;
+      return isIdentity ? mat4Identity() : mat4Compose(p.x, p.y, p.z, rq2.x, rq2.y, rq2.z, rq2.w, s.x, s.y, s.z);
+    });
+    const onWmDirty = () => wm.markLocalDirty();
+    const [iqx, iqy, iqz, iqw] = eulerToQuat(rx, ry, rz);
+    const rq = new ObservableQuat(iqx, iqy, iqz, iqw, onWmDirty);
+    mesh.rotationQuaternion = rq;
+    mesh.rotation = createEulerProxy(rq);
+    mesh.position = new ObservableVec3(px, py, pz, onWmDirty);
+    mesh.scaling = new ObservableVec3(sx, sy, sz, onWmDirty);
+    if (!mesh.children) {
+      mesh.children = [];
+    }
+    Object.defineProperty(mesh, "parent", {
+      get() {
+        return wm.parent;
+      },
+      set(v) {
+        wm.parent = v;
+      },
+      configurable: true,
+      enumerable: true
+    });
+    Object.defineProperty(mesh, "worldMatrix", {
+      get() {
+        return wm.getWorldMatrix();
+      },
+      configurable: true,
+      enumerable: false
+    });
+    Object.defineProperty(mesh, "worldMatrixVersion", {
+      get() {
+        return wm.getWorldMatrixVersion();
+      },
+      configurable: true,
+      enumerable: false
+    });
+    attachWorldMatrixState(mesh, wm);
+  }
+  var init_mesh = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/mesh.ts"() {
+      "use strict";
+      init_mat4_compose();
+      init_mat4_identity();
+      init_observable_vec3();
+      init_observable_quat();
+      init_world_matrix_state();
+      init_scene_node();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/compute-aabb.ts
+  function computeAabb(positions, world) {
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    if (world) {
+      const m0 = world[0], m1 = world[1], m2 = world[2], m4 = world[4], m5 = world[5], m6 = world[6], m8 = world[8], m9 = world[9], m10 = world[10], m12 = world[12], m13 = world[13], m14 = world[14];
+      for (let i = 0; i < positions.length; i += 3) {
+        const lx = positions[i];
+        const ly = positions[i + 1];
+        const lz = positions[i + 2];
+        const x = m0 * lx + m4 * ly + m8 * lz + m12;
+        const y = m1 * lx + m5 * ly + m9 * lz + m13;
+        const z = m2 * lx + m6 * ly + m10 * lz + m14;
+        if (x < minX) {
+          minX = x;
+        }
+        if (x > maxX) {
+          maxX = x;
+        }
+        if (y < minY) {
+          minY = y;
+        }
+        if (y > maxY) {
+          maxY = y;
+        }
+        if (z < minZ) {
+          minZ = z;
+        }
+        if (z > maxZ) {
+          maxZ = z;
+        }
+      }
+    } else {
+      for (let i = 0; i < positions.length; i += 3) {
+        const x = positions[i];
+        const y = positions[i + 1];
+        const z = positions[i + 2];
+        if (x < minX) {
+          minX = x;
+        }
+        if (x > maxX) {
+          maxX = x;
+        }
+        if (y < minY) {
+          minY = y;
+        }
+        if (y > maxY) {
+          maxY = y;
+        }
+        if (z < minZ) {
+          minZ = z;
+        }
+        if (z > maxZ) {
+          maxZ = z;
+        }
+      }
+    }
+    return [
+      [minX, minY, minZ],
+      [maxX, maxY, maxZ]
+    ];
+  }
+  var init_compute_aabb = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/compute-aabb.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/texture-2d.ts
+  function cloneTexture2D(base, transform) {
+    return { ...base, ...transform };
+  }
+  function loadTexture2D(engine, url, opts = {}) {
+    const device = engine._device;
+    if (!_tex2dCache) {
+      _tex2dCache = /* @__PURE__ */ new WeakMap();
+    }
+    let dc = _tex2dCache.get(device);
+    if (!dc) {
+      dc = /* @__PURE__ */ new Map();
+      _tex2dCache.set(device, dc);
+    }
+    const key = `${url}\0${opts.mipMaps ?? true}\0${opts.addressModeU ?? "repeat"}\0${opts.addressModeV ?? "repeat"}\0${opts.minFilter ?? "linear"}\0${opts.magFilter ?? "linear"}\0${opts.invertY ?? true}\0${opts.srgb ?? false}\0${opts.premultiplyAlpha ?? false}`;
+    const hit = dc.get(key);
+    if (hit) {
+      return hit;
+    }
+    const map = dc;
+    const p = loadTexture2DImpl(engine, url, opts);
+    map.set(key, p);
+    p.catch(() => map.delete(key));
+    return p;
+  }
+  async function loadTexture2DImpl(engine, url, opts) {
+    const device = engine._device;
+    const mipMaps = opts.mipMaps ?? true;
+    const addressModeU = opts.addressModeU ?? "repeat";
+    const addressModeV = opts.addressModeV ?? "repeat";
+    const invertY = opts.invertY ?? true;
+    const srgb = opts.srgb ?? false;
+    const premultiplyAlpha = opts.premultiplyAlpha ?? false;
+    const format = srgb ? "rgba8unorm-srgb" : "rgba8unorm";
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const imageBitmap = await createImageBitmap(blob, {
+      premultiplyAlpha: premultiplyAlpha ? "premultiply" : "none",
+      colorSpaceConversion: "none"
+    });
+    const width = imageBitmap.width;
+    const height = imageBitmap.height;
+    const mipLevelCount2 = mipMaps ? Math.floor(Math.log2(Math.max(width, height))) + 1 : 1;
+    const texture = device.createTexture({
+      size: { width, height },
+      format,
+      mipLevelCount: mipLevelCount2,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT
+    });
+    device.queue.copyExternalImageToTexture({ source: imageBitmap, flipY: invertY }, { texture, premultipliedAlpha: premultiplyAlpha }, { width, height });
+    imageBitmap.close();
+    if (mipMaps && mipLevelCount2 > 1) {
+      const { generateMipmaps: generateMipmaps2 } = await Promise.resolve().then(() => (init_generate_mipmaps(), generate_mipmaps_exports));
+      generateMipmaps2(engine, texture);
+    }
+    const minF = opts.minFilter ?? "linear";
+    const magF = opts.magFilter ?? "linear";
+    const mipF = mipMaps ? "linear" : "nearest";
+    const allLinear = minF === "linear" && magF === "linear" && mipF === "linear";
+    const sampler = getOrCreateSampler(engine, {
+      addressModeU,
+      addressModeV,
+      minFilter: minF,
+      magFilter: magF,
+      mipmapFilter: mipF,
+      maxAnisotropy: allLinear ? 4 : 1
+    });
+    const tex2d = { texture, view: texture.createView(), sampler, width, height };
+    engine._dlr?.u(tex2d, url, opts);
+    acquireTexture(tex2d);
+    return tex2d;
+  }
+  var _tex2dCache;
+  var init_texture_2d = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/texture-2d.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_gpu_pool();
+      _tex2dCache = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/compressed-formats.ts
+  function getTable() {
+    if (_table) {
+      return _table;
+    }
+    const t = /* @__PURE__ */ new Map();
+    _table = t;
+    function add(gl, gpuFormat, feature11, blockW, blockH, blockBytes) {
+      t.set(gl, { gpuFormat, feature: feature11, blockW, blockH, blockBytes });
+    }
+    const BC = "texture-compression-bc";
+    const ETC = "texture-compression-etc2";
+    const ASTC = "texture-compression-astc";
+    add(33776, "bc1-rgba-unorm", BC, 4, 4, 8);
+    add(33777, "bc1-rgba-unorm", BC, 4, 4, 8);
+    add(33778, "bc2-rgba-unorm", BC, 4, 4, 16);
+    add(33779, "bc3-rgba-unorm", BC, 4, 4, 16);
+    add(36283, "bc4-r-unorm", BC, 4, 4, 8);
+    add(36284, "bc4-r-snorm", BC, 4, 4, 8);
+    add(36285, "bc5-rg-unorm", BC, 4, 4, 16);
+    add(36286, "bc5-rg-snorm", BC, 4, 4, 16);
+    add(36495, "bc6h-rgb-ufloat", BC, 4, 4, 16);
+    add(36494, "bc6h-rgb-float", BC, 4, 4, 16);
+    add(36492, "bc7-rgba-unorm", BC, 4, 4, 16);
+    add(36493, "bc7-rgba-unorm-srgb", BC, 4, 4, 16);
+    add(37488, "eac-r11unorm", ETC, 4, 4, 8);
+    add(37489, "eac-r11snorm", ETC, 4, 4, 8);
+    add(37490, "eac-rg11unorm", ETC, 4, 4, 16);
+    add(37491, "eac-rg11snorm", ETC, 4, 4, 16);
+    add(37492, "etc2-rgb8unorm", ETC, 4, 4, 8);
+    add(37493, "etc2-rgb8unorm-srgb", ETC, 4, 4, 8);
+    add(37494, "etc2-rgb8a1unorm", ETC, 4, 4, 8);
+    add(37495, "etc2-rgb8a1unorm-srgb", ETC, 4, 4, 8);
+    add(37496, "etc2-rgba8unorm", ETC, 4, 4, 16);
+    add(37497, "etc2-rgba8unorm-srgb", ETC, 4, 4, 16);
+    const ASTC_BLOCKS = [
+      [4, 4],
+      [5, 4],
+      [5, 5],
+      [6, 5],
+      [6, 6],
+      [8, 5],
+      [8, 6],
+      [8, 8],
+      [10, 5],
+      [10, 6],
+      [10, 8],
+      [10, 10],
+      [12, 10],
+      [12, 12]
+    ];
+    for (let i = 0; i < ASTC_BLOCKS.length; i++) {
+      const [w, h] = ASTC_BLOCKS[i];
+      const tag = `${w}x${h}`;
+      add(37808 + i, `astc-${tag}-unorm`, ASTC, w, h, 16);
+      add(37840 + i, `astc-${tag}-unorm-srgb`, ASTC, w, h, 16);
+    }
+    return t;
+  }
+  function getCompressedFormat(glInternalFormat) {
+    return getTable().get(glInternalFormat);
+  }
+  var _table;
+  var init_compressed_formats = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/compressed-formats.ts"() {
+      "use strict";
+      _table = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/ktx2-loader.ts
+  function deviceKtx2Caps(engine) {
+    const f = engine._device.features;
+    const bc = f.has("texture-compression-bc");
+    const etc2 = f.has("texture-compression-etc2");
+    return {
+      astc: f.has("texture-compression-astc"),
+      bptc: bc,
+      // BC6H/BC7
+      s3tc: bc,
+      // BC1/BC2/BC3
+      pvrtc: false,
+      // unsupported on WebGPU
+      etc2,
+      etc1: etc2
+      // ETC1 content transcodes on ETC2-capable GPUs
+    };
+  }
+  function loadKtx2Decoder() {
+    if (_ktx2DecoderPromise) {
+      return _ktx2DecoderPromise;
+    }
+    _ktx2DecoderPromise = new Promise((resolve, reject) => {
+      const w = globalThis;
+      const init = () => {
+        const mod = w.KTX2DECODER;
+        if (!mod) {
+          reject(new Error("KTX2: decoder global KTX2DECODER not found after script load"));
+          return;
+        }
+        mod.MSCTranscoder.UseFromWorkerThread = false;
+        mod.WASMMemoryManager.LoadBinariesFromCurrentThread = true;
+        if (_ktx2WasmUrls) {
+          const m = mod;
+          for (const tName of Object.keys(_ktx2WasmUrls)) {
+            const t = m[tName];
+            if (t) {
+              for (const prop of Object.keys(_ktx2WasmUrls[tName])) {
+                t[prop] = _ktx2WasmUrls[tName][prop];
+              }
+            }
+          }
+        }
+        resolve(new mod.KTX2Decoder());
+      };
+      if (w.KTX2DECODER) {
+        init();
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = _ktx2DecoderUrl;
+      script.async = true;
+      script.onload = init;
+      script.onerror = () => reject(new Error(`KTX2: failed to load ${script.src}`));
+      document.head.appendChild(script);
+    });
+    _ktx2DecoderPromise.catch(() => {
+      _ktx2DecoderPromise = null;
+    });
+    return _ktx2DecoderPromise;
+  }
+  function srgbFormat(format) {
+    switch (format) {
+      case "rgba8unorm":
+        return "rgba8unorm-srgb";
+      case "bc1-rgba-unorm":
+        return "bc1-rgba-unorm-srgb";
+      case "bc2-rgba-unorm":
+        return "bc2-rgba-unorm-srgb";
+      case "bc3-rgba-unorm":
+        return "bc3-rgba-unorm-srgb";
+      case "bc7-rgba-unorm":
+        return "bc7-rgba-unorm-srgb";
+      case "etc2-rgb8unorm":
+        return "etc2-rgb8unorm-srgb";
+      case "etc2-rgb8a1unorm":
+        return "etc2-rgb8a1unorm-srgb";
+      case "etc2-rgba8unorm":
+        return "etc2-rgba8unorm-srgb";
+      case "astc-4x4-unorm":
+        return "astc-4x4-unorm-srgb";
+      case "astc-5x4-unorm":
+        return "astc-5x4-unorm-srgb";
+      case "astc-5x5-unorm":
+        return "astc-5x5-unorm-srgb";
+      case "astc-6x5-unorm":
+        return "astc-6x5-unorm-srgb";
+      case "astc-6x6-unorm":
+        return "astc-6x6-unorm-srgb";
+      case "astc-8x5-unorm":
+        return "astc-8x5-unorm-srgb";
+      case "astc-8x6-unorm":
+        return "astc-8x6-unorm-srgb";
+      case "astc-8x8-unorm":
+        return "astc-8x8-unorm-srgb";
+      case "astc-10x5-unorm":
+        return "astc-10x5-unorm-srgb";
+      case "astc-10x6-unorm":
+        return "astc-10x6-unorm-srgb";
+      case "astc-10x8-unorm":
+        return "astc-10x8-unorm-srgb";
+      case "astc-10x10-unorm":
+        return "astc-10x10-unorm-srgb";
+      case "astc-12x10-unorm":
+        return "astc-12x10-unorm-srgb";
+      case "astc-12x12-unorm":
+        return "astc-12x12-unorm-srgb";
+      default:
+        return format;
+    }
+  }
+  function uncompressedInfo(glFormat) {
+    switch (glFormat) {
+      case GL_RGBA8:
+        return { format: "rgba8unorm", bytesPerPixel: 4 };
+      case GL_R8:
+        return { format: "r8unorm", bytesPerPixel: 1 };
+      case GL_RG8:
+        return { format: "rg8unorm", bytesPerPixel: 2 };
+      default:
+        return null;
+    }
+  }
+  function validateDecoded(decoded) {
+    if (decoded.errors) {
+      throw new Error(`KTX2: ${decoded.errors}`);
+    }
+    if (!decoded.mipmaps.length) {
+      throw new Error("KTX2: decoder produced no mipmaps");
+    }
+    for (let i = 0; i < decoded.mipmaps.length; i++) {
+      if (!decoded.mipmaps[i]?.data) {
+        throw new Error(`KTX2: decoder produced an empty mip ${i}`);
+      }
+    }
+    return decoded.mipmaps;
+  }
+  function makeSampler(engine, mipCount) {
+    return getOrCreateSampler(engine, {
+      addressModeU: "repeat",
+      addressModeV: "repeat",
+      minFilter: "linear",
+      magFilter: "linear",
+      mipmapFilter: mipCount > 1 ? "linear" : "nearest",
+      maxAnisotropy: mipCount > 1 ? 4 : 1
+    });
+  }
+  function uploadCompressed(engine, mips, format, sRGB) {
+    if (!engine._device.features.has(format.feature)) {
+      throw new Error(`KTX2: device does not support ${format.feature}`);
+    }
+    const width = mips[0].width;
+    const height = mips[0].height;
+    const texture = engine._device.createTexture({
+      size: { width, height },
+      format: sRGB ? srgbFormat(format.gpuFormat) : format.gpuFormat,
+      mipLevelCount: mips.length,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST
+    });
+    for (let level = 0; level < mips.length; level++) {
+      const mip = mips[level];
+      const blocksPerRow = Math.ceil(mip.width / format.blockW);
+      const rowBytes = blocksPerRow * format.blockBytes;
+      const copyW = blocksPerRow * format.blockW;
+      const copyH = Math.ceil(mip.height / format.blockH) * format.blockH;
+      engine._device.queue.writeTexture({ texture, mipLevel: level }, mip.data, { bytesPerRow: rowBytes }, { width: copyW, height: copyH });
+    }
+    const tex2d = { texture, view: texture.createView(), sampler: makeSampler(engine, mips.length), width, height, invertY: true };
+    acquireTexture(tex2d);
+    return tex2d;
+  }
+  function uploadUncompressed(engine, mips, info, sRGB) {
+    const width = mips[0].width;
+    const height = mips[0].height;
+    const texture = engine._device.createTexture({
+      size: { width, height },
+      format: sRGB ? srgbFormat(info.format) : info.format,
+      mipLevelCount: mips.length,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST
+    });
+    for (let level = 0; level < mips.length; level++) {
+      const mip = mips[level];
+      const expected = mip.width * mip.height * info.bytesPerPixel;
+      if (mip.data.length !== expected) {
+        throw new Error(`KTX2: uncompressed mip ${level} has ${mip.data.length} bytes, expected ${expected}`);
+      }
+      engine._device.queue.writeTexture(
+        { texture, mipLevel: level },
+        mip.data,
+        { bytesPerRow: mip.width * info.bytesPerPixel },
+        { width: mip.width, height: mip.height }
+      );
+    }
+    const tex2d = { texture, view: texture.createView(), sampler: makeSampler(engine, mips.length), width, height, invertY: true };
+    acquireTexture(tex2d);
+    return tex2d;
+  }
+  async function uploadKtx2Texture2D(engine, buffer, sRGB) {
+    const decoder = await loadKtx2Decoder();
+    const decoded = await decoder.decode(new U8(buffer), deviceKtx2Caps(engine));
+    const mips = validateDecoded(decoded);
+    const compressed = getCompressedFormat(decoded.transcodedFormat);
+    if (compressed) {
+      return uploadCompressed(engine, mips, compressed, sRGB);
+    }
+    const uncompressed = uncompressedInfo(decoded.transcodedFormat);
+    if (uncompressed) {
+      return uploadUncompressed(engine, mips, uncompressed, sRGB);
+    }
+    throw new Error(`KTX2: unsupported transcoded format 0x${decoded.transcodedFormat.toString(16)}`);
+  }
+  async function decodeKtx2ImageBitmapFromBuffer(buffer) {
+    const decoder = await loadKtx2Decoder();
+    const decoded = await decoder.decode(new U8(buffer), RGBA_CAPS, { forceRGBA: true });
+    const mip0 = validateDecoded(decoded)[0];
+    if (mip0.data.length !== mip0.width * mip0.height * 4) {
+      throw new Error("KTX2: RGBA decode size does not match image dimensions");
+    }
+    const pixels = new U8C(mip0.data.length);
+    pixels.set(mip0.data);
+    return createImageBitmap(new ImageData(pixels, mip0.width, mip0.height));
+  }
+  var _ktx2DecoderUrl, _ktx2WasmUrls, _ktx2DecoderPromise, GL_RGBA8, GL_R8, GL_RG8, RGBA_CAPS;
+  var init_ktx2_loader = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/ktx2-loader.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_gpu_pool();
+      init_compressed_formats();
+      _ktx2DecoderUrl = "https://cdn.babylonjs.com/babylon.ktx2Decoder.js";
+      _ktx2WasmUrls = null;
+      _ktx2DecoderPromise = null;
+      GL_RGBA8 = 32856;
+      GL_R8 = 33321;
+      GL_RG8 = 33323;
+      RGBA_CAPS = { astc: false, bptc: false, s3tc: false, pvrtc: false, etc2: false, etc1: false };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/mesh-features.ts
+  function _computeMeshFeatures(mesh, receiveShadows = false) {
+    const gpu = mesh._gpu;
+    let features = 0;
+    if (gpu.tangentBuffer) {
+      features |= MSH_HAS_TANGENTS;
+    }
+    if (mesh.vat) {
+      features |= MSH_VAT;
+      if (mesh.vat.joints1Buffer) {
+        features |= MSH_HAS_SKELETON_8;
+      }
+    } else if (mesh.skeleton) {
+      features |= MSH_HAS_SKELETON;
+      if (mesh.skeleton.joints1Buffer) {
+        features |= MSH_HAS_SKELETON_8;
+      }
+    }
+    if (mesh.morphTargets) {
+      features |= MSH_HAS_MORPH_TARGETS;
+    }
+    if (mesh.thinInstances) {
+      features |= MSH_HAS_THIN_INSTANCES;
+      if (mesh.thinInstances.colors) {
+        features |= MSH_HAS_INSTANCE_COLOR;
+      }
+    }
+    if (gpu.colorBuffer) {
+      features |= MSH_HAS_VERTEX_COLOR;
+    }
+    if (gpu.uv2Buffer) {
+      features |= MSH_HAS_UV2;
+    }
+    if (receiveShadows) {
+      features |= MSH_RECEIVE_SHADOWS;
+    }
+    return features;
+  }
+  var MSH_HAS_TANGENTS, MSH_HAS_SKELETON, MSH_HAS_SKELETON_8, MSH_HAS_MORPH_TARGETS, MSH_HAS_THIN_INSTANCES, MSH_HAS_INSTANCE_COLOR, MSH_HAS_VERTEX_COLOR, MSH_HAS_UV2, MSH_RECEIVE_SHADOWS, MSH_VAT;
+  var init_mesh_features = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/mesh-features.ts"() {
+      "use strict";
+      MSH_HAS_TANGENTS = 1 << 0;
+      MSH_HAS_SKELETON = 1 << 1;
+      MSH_HAS_SKELETON_8 = 1 << 2;
+      MSH_HAS_MORPH_TARGETS = 1 << 3;
+      MSH_HAS_THIN_INSTANCES = 1 << 4;
+      MSH_HAS_INSTANCE_COLOR = 1 << 5;
+      MSH_HAS_VERTEX_COLOR = 1 << 6;
+      MSH_HAS_UV2 = 1 << 7;
+      MSH_RECEIVE_SHADOWS = 1 << 8;
+      MSH_VAT = 1 << 9;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-pipeline.ts
+  function ensureDevice(engine) {
+    if (_cachedDevice2 !== engine._device) {
+      _bindingsCache.clear();
+      _cachedDevice2 = engine._device;
+    }
+  }
+  function clearPbrPipelineCache() {
+    _bindingsCache.clear();
+    _cachedDevice2 = null;
+  }
+  function getOrCreatePbrBindings(engine, features, features2, meshFeatures, sceneFeatures, composed, shaderKey = "", stencil = null) {
+    ensureDevice(engine);
+    const resolvedStencil = stencil && _stencilResolver ? _stencilResolver(stencil) : null;
+    const key = `${features}:${features2}:${meshFeatures}:${sceneFeatures}:${shaderKey}${resolvedStencil ? resolvedStencil._key : ""}`;
+    const cached = _bindingsCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const device = engine._device;
+    const meshBGL = device.createBindGroupLayout(composed._meshBGLDescriptor);
+    let shadowBGL = null;
+    if (composed._shadowBGLDescriptor) {
+      shadowBGL = device.createBindGroupLayout(composed._shadowBGLDescriptor);
+    }
+    const bindings = {
+      _features: features,
+      _features2: features2,
+      _meshFeatures: meshFeatures,
+      _meshBGL: meshBGL,
+      _shadowBGL: shadowBGL,
+      _composed: composed,
+      _pipelines: /* @__PURE__ */ new Map()
+    };
+    if (resolvedStencil) {
+      bindings._stencil = resolvedStencil._desc;
+    }
+    _bindingsCache.set(key, bindings);
+    return bindings;
+  }
+  function getOrCreatePbrPipeline(engine, sig, bindings) {
+    ensureDevice(engine);
+    const key = targetSignatureKey(sig);
+    const cached = bindings._pipelines.get(key);
+    if (cached) {
+      return cached;
+    }
+    const device = engine._device;
+    const { _features: features, _features2: features2, _composed: composed } = bindings;
+    const esmShadowOutput = (features2 & PBR2_ESM_SHADOW_OUTPUT) !== 0;
+    const hasAlpha = !esmShadowOutput && (features & PBR_HAS_ALPHA_BLEND) !== 0;
+    const hasDoubleSided = (features & PBR_HAS_DOUBLE_SIDED) !== 0;
+    const sceneBGL = getSceneBindGroupLayout(engine);
+    const bgls = bindings._shadowBGL ? [sceneBGL, bindings._meshBGL, bindings._shadowBGL] : [sceneBGL, bindings._meshBGL];
+    const vertModule = device.createShaderModule({ code: composed._vertexWGSL });
+    const noColorOutput = (features2 & PBR2_NO_COLOR_OUTPUT) !== 0;
+    const fragModule = !sig._colorFormat && !noColorOutput ? null : device.createShaderModule({ code: composed._fragmentWGSL });
+    const fragTarget = noColorOutput ? null : { format: sig._colorFormat, writeMask: CW.ALL };
+    if (hasAlpha && fragTarget) {
+      fragTarget.blend = {
+        color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+        alpha: { srcFactor: "one", dstFactor: "one", operation: "add" }
+      };
+    }
+    const pipeline = device.createRenderPipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: bgls }),
+      vertex: { module: vertModule, entryPoint: "main", buffers: composed._vertexBufferLayouts },
+      ...fragModule ? { fragment: { module: fragModule, entryPoint: "main", targets: fragTarget ? [fragTarget] : [] } } : {},
+      ...sig._depthStencilFormat ? {
+        depthStencil: {
+          format: sig._depthStencilFormat,
+          depthCompare: sig._depthCompare ?? REVERSE_DEPTH_COMPARE,
+          depthWriteEnabled: noColorOutput || esmShadowOutput || !hasAlpha,
+          // Pre-baked stencil sub-fields, applied only on a stencil-capable target — the same
+          // material in the depth32float shadow/depth pass keeps plain depth state (no stencil → no
+          // format mismatch). Gated on `_stencilResolver` (the opt-in hook) so the entire branch —
+          // including the `bindings._stencil` reads — folds out of stencil-free bundles.
+          ..._stencilResolver && bindings._stencil && sig._depthStencilFormat.includes("stencil") ? bindings._stencil : {}
+        }
+      } : {},
+      multisample: { count: sig._sampleCount },
+      primitive: { topology: "triangle-list", cullMode: hasDoubleSided ? "none" : "back", frontFace: "ccw" }
+    });
+    bindings._pipelines.set(key, pipeline);
+    return pipeline;
+  }
+  function createPbrMeshBindGroup(engine, bindings, composed, meshUBO, materialUBO, material, env, meshCtx, refractionTexture) {
+    const device = engine._device;
+    const features = bindings._features;
+    const features2 = bindings._features2;
+    const meshFeatures = bindings._meshFeatures;
+    const hasNormal = (features & PBR_HAS_NORMAL_MAP) !== 0 && (meshFeatures & MSH_HAS_TANGENTS) !== 0;
+    const hasCotangentNormal = (features & PBR_HAS_NORMAL_MAP) !== 0 && (meshFeatures & MSH_HAS_TANGENTS) === 0;
+    const hasAnyNormal = hasNormal || hasCotangentNormal;
+    const hasEmissive = (features & PBR_HAS_EMISSIVE) !== 0;
+    const hasSpecGloss = (features & PBR_HAS_SPEC_GLOSS) !== 0;
+    const esmShadowOutput = (features2 & PBR2_ESM_SHADOW_OUTPUT) !== 0;
+    const entries = [];
+    let b = 0;
+    const addTex = (t) => {
+      entries.push({ binding: b++, resource: t.view });
+      entries.push({ binding: b++, resource: t.sampler });
+    };
+    const ctx = {
+      _engine: engine,
+      _features: features,
+      _features2: features2,
+      _meshFeatures: meshFeatures,
+      _material: material,
+      _mesh: meshCtx ?? void 0,
+      _env: env,
+      _refractionTexture: refractionTexture
+    };
+    const sortedExts = _getPbrExtsSorted();
+    const fragIds = composed._fragmentKey ? composed._fragmentKey.split("|").filter((s) => s.length > 0) : [];
+    entries.push({ binding: b++, resource: { buffer: meshUBO } });
+    entries.push({ binding: b++, resource: { buffer: materialUBO } });
+    for (const ext14 of sortedExts) {
+      if (ext14.phase === "vertex" && ext14.bind) {
+        b = ext14.bind(ctx, entries, b);
+      }
+    }
+    addTex(material.baseColorTexture ?? _pbrFallbackResolver?.(engine));
+    if (hasAnyNormal) {
+      addTex(material.normalTexture);
+    }
+    addTex(material.ormTexture ?? _pbrFallbackResolver?.(engine));
+    if ((features2 & PBR2_HAS_UV2) !== 0 && (meshFeatures & MSH_HAS_UV2) !== 0 && material.occlusionTexture) {
+      addTex(material.occlusionTexture);
+    }
+    if (hasEmissive) {
+      addTex(material.emissiveTexture);
+    }
+    if (hasSpecGloss) {
+      addTex(material.specGlossTexture);
+    }
+    if (esmShadowOutput) {
+      entries.push({
+        binding: b++,
+        resource: { buffer: material._esmShadowParamsUBO }
+      });
+    }
+    const seenExts = [];
+    for (const fid of fragIds) {
+      const ext14 = sortedExts.find((e) => e.id === fid || fid.startsWith(e.id + "-"));
+      if (!ext14 || ext14.phase === "vertex" || !ext14.bind || seenExts.includes(ext14)) {
+        continue;
+      }
+      seenExts.push(ext14);
+      b = ext14.bind(ctx, entries, b);
+    }
+    return device.createBindGroup({ layout: bindings._meshBGL, entries });
+  }
+  var _stencilResolver, _pbrFallbackResolver, _bindingsCache, _cachedDevice2;
+  var init_pbr_pipeline = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-pipeline.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_pbr_flags();
+      init_pbr_flags();
+      init_mesh_features();
+      init_render_target();
+      init_scene_helpers();
+      _stencilResolver = null;
+      _pbrFallbackResolver = null;
+      _bindingsCache = /* @__PURE__ */ new Map();
+      _cachedDevice2 = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/ubo-layout.ts
+  function alignUp(offset, alignment) {
+    return offset + alignment - 1 & ~(alignment - 1);
+  }
+  function typeInfo(type) {
+    const info = TYPE_INFO[type];
+    if (info) {
+      return info;
+    }
+    const m = /^array<vec4<u32>,\s*(\d+)>$/.exec(type);
+    if (m) {
+      return { align: 16, size: Number(m[1]) * 16 };
+    }
+    throw new Error(`Unknown UBO field type: ${type}`);
+  }
+  function computeUboLayout(fields) {
+    const _offsets = /* @__PURE__ */ new Map();
+    const lines = [];
+    let cursor = 0;
+    for (const field of fields) {
+      const info = typeInfo(field._type);
+      cursor = alignUp(cursor, info.align);
+      _offsets.set(field._name, cursor);
+      lines.push(`${field._name}: ${field._type},`);
+      cursor += info.size;
+    }
+    const _totalBytes = fields.length > 0 ? alignUp(cursor, 16) : 0;
+    const _structBody = lines.join("\n");
+    return {
+      _totalBytes,
+      _offsets,
+      _structBody
+    };
+  }
+  var TYPE_INFO;
+  var init_ubo_layout = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/ubo-layout.ts"() {
+      "use strict";
+      TYPE_INFO = {
+        f32: { align: 4, size: 4 },
+        u32: { align: 4, size: 4 },
+        i32: { align: 4, size: 4 },
+        "vec2<f32>": { align: 8, size: 8 },
+        "vec3<f32>": { align: 16, size: 12 },
+        "vec4<f32>": { align: 16, size: 16 },
+        "vec4<u32>": { align: 16, size: 16 },
+        "mat4x4<f32>": { align: 16, size: 64 }
+      };
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\scene-uniforms.wgsl
+  var scene_uniforms_default;
+  var init_scene_uniforms = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\scene-uniforms.wgsl"() {
+      scene_uniforms_default = "struct SceneUniforms {\r\nviewProjection: mat4x4<f32>,\r\nview: mat4x4<f32>,\r\nvEyePosition: vec4<f32>,\r\nenvRotationY: f32,\r\n_envPad0: f32, _envPad1: f32, _envPad2: f32,\r\nvSphericalL00: vec4<f32>,\r\nvSphericalL1_1: vec4<f32>,\r\nvSphericalL10: vec4<f32>,\r\nvSphericalL11: vec4<f32>,\r\nvSphericalL2_2: vec4<f32>,\r\nvSphericalL2_1: vec4<f32>,\r\nvSphericalL20: vec4<f32>,\r\nvSphericalL21: vec4<f32>,\r\nvSphericalL22: vec4<f32>,\r\nvImageInfos: vec4<f32>, // exposureLinear, contrast, lodGenerationScale, toneMappingEnabled\r\nvFogInfos: vec4<f32>,\r\nvFogColor: vec4<f32>,\r\nclipPlane: vec4<f32>,\r\n}\r\n@group(0) @binding(0) var<uniform> scene: SceneUniforms;\r\n";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms.ts
+  var SCENE_UBO_WGSL;
+  var init_scene_uniforms2 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms.ts"() {
+      "use strict";
+      init_scene_uniforms();
+      SCENE_UBO_WGSL = scene_uniforms_default;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/shader-composer.ts
+  function topoSort(fragments) {
+    const byId = /* @__PURE__ */ new Map();
+    for (const f of fragments) {
+      if (byId.has(f._id)) {
+        throw Error();
+      }
+      byId.set(f._id, f);
+    }
+    const inDeg = /* @__PURE__ */ new Map();
+    const deps = /* @__PURE__ */ new Map();
+    for (const f of fragments) {
+      if (!inDeg.has(f._id)) {
+        inDeg.set(f._id, 0);
+      }
+      for (const d of f._dependencies ?? []) {
+        if (!byId.has(d)) {
+          throw Error();
+        }
+        inDeg.set(f._id, (inDeg.get(f._id) ?? 0) + 1);
+        let arr = deps.get(d);
+        if (!arr) {
+          arr = [];
+          deps.set(d, arr);
+        }
+        arr.push(f._id);
+      }
+    }
+    const q = [];
+    for (const [id, d] of inDeg) {
+      if (d === 0) {
+        q.push(id);
+      }
+    }
+    q.sort();
+    const out = [];
+    let qi = 0;
+    while (qi < q.length) {
+      const id = q[qi++];
+      out.push(byId.get(id));
+      for (const d of deps.get(id) ?? []) {
+        const nd = (inDeg.get(d) ?? 1) - 1;
+        inDeg.set(d, nd);
+        if (nd === 0) {
+          let i = qi;
+          while (i < q.length && q[i] < d) {
+            i++;
+          }
+          q.splice(i, 0, d);
+        }
+      }
+    }
+    if (out.length !== fragments.length) {
+      throw Error();
+    }
+    return out;
+  }
+  function dedup(base, extra) {
+    const seen = /* @__PURE__ */ new Set();
+    const all = [];
+    for (const v of base) {
+      if (!seen.has(v._name)) {
+        seen.add(v._name);
+        all.push(v);
+      }
+    }
+    for (const v of extra) {
+      if (!seen.has(v._name)) {
+        seen.add(v._name);
+        all.push(v);
+      }
+    }
+    return all;
+  }
+  function bglEntry(binding, decl) {
+    const e = { binding, visibility: decl._visibility };
+    switch (decl._type._kind) {
+      case "uniform-buffer":
+        e.buffer = { type: "uniform" };
+        break;
+      case "texture": {
+        const def = decl._type._textureType === "texture_depth_2d" ? "depth" : decl._type._textureType === "texture_2d<u32>" ? "uint" : "float";
+        e.texture = {
+          sampleType: decl._type._sampleType ?? def,
+          viewDimension: decl._type._textureType.includes("array") ? "2d-array" : decl._type._textureType.includes("cube") ? "cube" : "2d"
+        };
+        break;
+      }
+      case "sampler":
+        e.sampler = {
+          type: decl._type._samplerType === "sampler_comparison" ? "comparison" : decl._type._samplerType === "sampler_non_filtering" ? "non-filtering" : "filtering"
+        };
+        break;
+      case "storage-texture":
+        e.storageTexture = { access: decl._type._access, format: decl._type._format };
+        break;
+    }
+    return e;
+  }
+  function declWGSL(g, b, d) {
+    switch (d._type._kind) {
+      case "uniform-buffer":
+        return `@group(${g})@binding(${b}) var<uniform> ${d._name}:${d._name}Uniforms;`;
+      case "texture":
+        return `@group(${g})@binding(${b}) var ${d._name}:${d._type._textureType};`;
+      case "sampler":
+        return `@group(${g})@binding(${b}) var ${d._name}:${d._type._samplerType === "sampler_non_filtering" ? "sampler" : d._type._samplerType};`;
+      case "storage-texture":
+        return `@group(${g})@binding(${b}) var ${d._name}:texture_storage_2d<${d._type._format},${d._type._access}>;`;
+    }
+  }
+  function injectSlots(tpl, sorted, key) {
+    return tpl.replace(SLOT_RE, (_, slot) => {
+      const parts = [];
+      for (const f of sorted) {
+        const s = f[key];
+        if (s?.[slot]) {
+          parts.push(s[slot]);
+        }
+      }
+      return parts.join("\n");
+    });
+  }
+  function composeShader(template, fragments) {
+    const sorted = topoSort(fragments);
+    const fragAttrs = [];
+    const fragVaryings = [];
+    const helpers = [];
+    const vHelpers = [];
+    const vBuiltins = [];
+    for (const f of sorted) {
+      if (f._vertexAttributes) {
+        fragAttrs.push(...f._vertexAttributes);
+      }
+      if (f._varyings) {
+        fragVaryings.push(...f._varyings);
+      }
+      if (f._helperFunctions) {
+        helpers.push(f._helperFunctions);
+      }
+      if (f._vertexHelperFunctions) {
+        vHelpers.push(f._vertexHelperFunctions);
+      }
+      for (const b of f._vertexBuiltins ?? []) {
+        vBuiltins.push(`@builtin(${b._builtin}) ${b._name}:${b._type},`);
+      }
+    }
+    const allAttrs = dedup(template._baseVertexAttributes, fragAttrs);
+    const inputLines = [];
+    const _vertexBufferLayouts = [];
+    const groups = /* @__PURE__ */ new Map();
+    const firstOfGroup = /* @__PURE__ */ new Map();
+    for (let i = 0; i < allAttrs.length; i++) {
+      const a = allAttrs[i];
+      inputLines.push(`@location(${i}) ${a._name}:${a._type},`);
+      if (a._bufferGroup) {
+        if (!groups.has(a._bufferGroup)) {
+          groups.set(a._bufferGroup, []);
+          firstOfGroup.set(a._bufferGroup, a);
+        }
+        groups.get(a._bufferGroup).push({ loc: i, off: a._offset ?? 0, fmt: a._gpuFormat });
+      } else {
+        _vertexBufferLayouts.push({
+          arrayStride: a._arrayStride,
+          stepMode: a._stepMode ?? "vertex",
+          attributes: [{ shaderLocation: i, offset: a._offset ?? 0, format: a._gpuFormat }]
+        });
+      }
+    }
+    for (const [grp, attrs] of groups) {
+      const f = firstOfGroup.get(grp);
+      _vertexBufferLayouts.push({
+        arrayStride: f._arrayStride,
+        stepMode: f._stepMode ?? "vertex",
+        attributes: attrs.map((a) => ({ shaderLocation: a.loc, offset: a.off, format: a.fmt }))
+      });
+    }
+    let nextLoc = allAttrs.length;
+    for (const f of sorted) {
+      if (f._pipelineVertexBuffers) {
+        const r = f._pipelineVertexBuffers(nextLoc);
+        _vertexBufferLayouts.push(...r._buffers);
+        nextLoc = r._nextLoc;
+      }
+    }
+    const allVary = dedup(template._baseVaryings, fragVaryings);
+    const varyBody = `@builtin(position) clipPos:vec4f,
+` + allVary.map((v, i) => `@location(${i}) ${v._name}:${v._type},`).join("\n");
+    const hasMaterialUbo = !!(template._baseMaterialUboFields && template._baseMaterialUboFields.length > 0);
+    const meshFields = [...template._baseMeshUboFields];
+    const materialFields = hasMaterialUbo ? [...template._baseMaterialUboFields] : [];
+    for (const f of sorted) {
+      if (f._uboFields?.length) {
+        (hasMaterialUbo ? materialFields : meshFields).push(...f._uboFields);
+      }
+    }
+    const _meshUboSpec = computeUboLayout(meshFields);
+    const _materialUboSpec = hasMaterialUbo ? computeUboLayout(materialFields) : void 0;
+    const meshBGL = [{ binding: 0, visibility: STAGE_VERTEX | STAGE_FRAGMENT, buffer: { type: "uniform" } }];
+    if (hasMaterialUbo) {
+      meshBGL.push({ binding: 1, visibility: STAGE_FRAGMENT, buffer: { type: "uniform" } });
+    }
+    const shadowBGL = [];
+    const vDecls = [];
+    const fDecls = [];
+    let mb = hasMaterialUbo ? 2 : 1, sb = 0;
+    function addBinding(d, _isVertex) {
+      const isShadow = d._group === "shadow";
+      const b = isShadow ? sb++ : mb++;
+      const g = isShadow ? 2 : 1;
+      (isShadow ? shadowBGL : meshBGL).push(bglEntry(b, d));
+      const w = declWGSL(g, b, d);
+      if (d._visibility & STAGE_VERTEX) {
+        vDecls.push(w);
+      }
+      if (d._visibility & STAGE_FRAGMENT) {
+        fDecls.push(w);
+      }
+    }
+    for (const d of template._baseVertexBindings ?? []) {
+      addBinding(d, true);
+    }
+    for (const f of sorted) {
+      for (const d of f._vertexBindings ?? []) {
+        addBinding(d, true);
+      }
+    }
+    for (const d of template._baseBindings ?? []) {
+      addBinding(d, false);
+    }
+    for (const f of sorted) {
+      for (const d of (f._bindings ?? []).filter((b) => (b._group ?? "mesh") === "mesh")) {
+        addBinding(d, false);
+      }
+    }
+    for (const f of sorted) {
+      for (const d of (f._bindings ?? []).filter((b) => b._group === "shadow")) {
+        addBinding(d, false);
+      }
+    }
+    const _fragmentKey = sorted.map((f) => f._id).join("|");
+    const vParams = (vBuiltins.length ? vBuiltins.join("\n") + "\n" : "") + inputLines.join("\n");
+    const meshStruct = `struct MeshUniforms{
+${_meshUboSpec._structBody}
+}`;
+    const materialStruct = _materialUboSpec ? `
+struct MaterialUniforms{
+${_materialUboSpec._structBody}
+}
+@group(1)@binding(1) var<uniform> material:MaterialUniforms;` : "";
+    let _vertexWGSL = template._vertexTemplate;
+    _vertexWGSL = _vertexWGSL.replace("/*SU*/", SCENE_UBO_WGSL);
+    _vertexWGSL = _vertexWGSL.replace("/*MU*/", meshStruct);
+    _vertexWGSL = _vertexWGSL.replace("/*VI*/", `struct VertexInput{
+${inputLines.join("\n")}
+}`);
+    _vertexWGSL = _vertexWGSL.replace("/*VO*/", `struct VertexOutput{
+${varyBody}
+}`);
+    _vertexWGSL = _vertexWGSL.replace("/*VD*/", vDecls.join("\n"));
+    _vertexWGSL = _vertexWGSL.replace("/*VP*/", vParams);
+    _vertexWGSL = _vertexWGSL.replace("/*VH*/", vHelpers.join("\n"));
+    _vertexWGSL = injectSlots(_vertexWGSL, sorted, "_vertexSlots");
+    let _fragmentWGSL = template._fragmentTemplate;
+    _fragmentWGSL = _fragmentWGSL.replace("/*SU*/", SCENE_UBO_WGSL);
+    _fragmentWGSL = _fragmentWGSL.replace("/*MU*/", meshStruct + materialStruct);
+    _fragmentWGSL = _fragmentWGSL.replace("/*FI*/", `struct FragmentInput{
+${varyBody}
+}`);
+    _fragmentWGSL = _fragmentWGSL.replace("/*HF*/", helpers.join("\n"));
+    _fragmentWGSL = _fragmentWGSL.replace("/*FB*/", fDecls.join("\n"));
+    _fragmentWGSL = injectSlots(_fragmentWGSL, sorted, "_fragmentSlots");
+    const _meshBGLDescriptor = { entries: meshBGL };
+    const _shadowBGLDescriptor = shadowBGL.length ? { entries: shadowBGL } : null;
+    return {
+      _vertexWGSL,
+      _fragmentWGSL,
+      _meshBGLDescriptor,
+      _shadowBGLDescriptor,
+      _vertexBufferLayouts,
+      _meshUboSpec,
+      _materialUboSpec,
+      _fragmentKey
+    };
+  }
+  var STAGE_VERTEX, STAGE_FRAGMENT, SLOT_RE;
+  var init_shader_composer = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/shader-composer.ts"() {
+      "use strict";
+      init_ubo_layout();
+      init_scene_uniforms2();
+      STAGE_VERTEX = 1;
+      STAGE_FRAGMENT = 2;
+      SLOT_RE = /\/\*([A-Z_0-9]+)\*\//g;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-template.ts
+  function createPbrTemplate(config) {
+    const {
+      _hasSingleLight = false,
+      _hasMultiLight = false,
+      _singleLightWGSL = "",
+      _singleLightBlock = "",
+      _multiLightWGSL = "",
+      _multiLightLoop = "",
+      _normalMode = "none",
+      _hasEmissiveTexture = false,
+      _hasSpecGloss = false,
+      _hasDoubleSided = false,
+      _hasTonemap = false,
+      _fogHelper = "",
+      _fogBlock = "",
+      _acesHelpers = "",
+      _acesTonemapCall = "",
+      _hasAlphaBlend = false,
+      _hasSpecularAA = false,
+      _hasGammaAlbedo = false,
+      _hasBaseColorFactor = false,
+      _hasMorph = false,
+      _hasOcclusion = false,
+      _hasEmissiveColor = false,
+      _hasReflectanceExt = false,
+      _hasIbl = false,
+      _hasAnisotropy = false,
+      _anisoBrdfFunctions = "",
+      _anisoTBBlock = "",
+      _ext,
+      _noColorOutput = false,
+      _esmShadowOutput = false,
+      _esmShadowDepthCode = "",
+      _vbStrides
+    } = config;
+    const hasNormal = _normalMode === "tangent";
+    const hasCotangentNormal = _normalMode === "cotangent";
+    const hasAnyNormal = hasNormal || hasCotangentNormal;
+    const _baseVertexAttributes = [
+      { _name: "position", _type: "vec3<f32>", _gpuFormat: "float32x3", _arrayStride: _vbStrides?._p?._stride ?? 12, _offset: _vbStrides?._p?._offset ?? 0 },
+      { _name: "normal", _type: "vec3<f32>", _gpuFormat: "float32x3", _arrayStride: _vbStrides?._n?._stride ?? 12, _offset: _vbStrides?._n?._offset ?? 0 }
+    ];
+    if (hasNormal) {
+      _baseVertexAttributes.push({
+        _name: "tangent",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: _vbStrides?._t?._stride ?? 16,
+        _offset: _vbStrides?._t?._offset ?? 0
+      });
+    }
+    _baseVertexAttributes.push({ _name: "uv", _type: "vec2<f32>", _gpuFormat: "float32x2", _arrayStride: _vbStrides?._u?._stride ?? 8, _offset: _vbStrides?._u?._offset ?? 0 });
+    if (_ext) {
+      _baseVertexAttributes.push(..._ext.extraVertexAttributes);
+    }
+    const _baseVaryings = [
+      { _name: "worldPos", _type: "vec3<f32>" },
+      { _name: "worldNormal", _type: "vec3<f32>" }
+    ];
+    if (hasNormal) {
+      _baseVaryings.push({ _name: "worldTangent", _type: "vec3<f32>" }, { _name: "worldBitangent", _type: "vec3<f32>" });
+    }
+    _baseVaryings.push({ _name: "uv", _type: "vec2<f32>" });
+    if (_ext) {
+      _baseVaryings.push(..._ext.extraVaryings);
+    }
+    const _baseMeshUboFields = [{ _name: "world", _type: "mat4x4<f32>" }];
+    appendMeshLightUboFields(_baseMeshUboFields);
+    const _baseMaterialUboFields = [
+      { _name: "environmentIntensity", _type: "f32" },
+      { _name: "directIntensity", _type: "f32" },
+      { _name: "reflectance", _type: "f32" },
+      { _name: "materialAlpha", _type: "f32" },
+      ..._hasBaseColorFactor ? [{ _name: "baseColorFactor", _type: "vec4<f32>" }] : [],
+      // glTF metallicFactor / roughnessFactor (default 1.0) — applied over MR texture channels.
+      { _name: "metallicFactor", _type: "f32" },
+      { _name: "roughnessFactor", _type: "f32" },
+      { _name: "normalScale", _type: "f32" },
+      { _name: "lightFalloffMode", _type: "f32" },
+      // Anisotropy UBO field stays on the base template because anisotropy is
+      // template-only (no ShaderFragment) — the anisotropyExt just writes its
+      // slice through the unified ext.writeUbo hook.
+      ..._hasAnisotropy ? [{ _name: "anisotropyParams", _type: "vec4<f32>" }] : [],
+      // ── Extension fields (per-texture UV transforms, etc.) ─
+      ..._ext ? _ext.extraMaterialUboFields : []
+    ];
+    const tex2d = (name, sampler) => [
+      { _name: name, _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT2 },
+      { _name: sampler, _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT2 }
+    ];
+    const _baseBindings = tex2d("baseColorTexture", "baseColorSampler");
+    if (hasAnyNormal) {
+      _baseBindings.push(...tex2d("normalTexture", "normalSampler_"));
+    }
+    _baseBindings.push(...tex2d("ormTexture", "ormSampler"));
+    if (_ext) {
+      _baseBindings.push(..._ext.extraBindings);
+    }
+    if (_hasEmissiveTexture) {
+      _baseBindings.push(...tex2d("emissiveTexture", "emissiveSampler"));
+    }
+    if (_hasSpecGloss) {
+      _baseBindings.push(...tex2d("specGlossTexture", "specGlossSampler"));
+    }
+    if (_esmShadowOutput) {
+      _baseBindings.push({ _name: "shadowParams", _type: { _kind: "uniform-buffer" }, _visibility: STAGE_FRAGMENT2 });
+    }
+    const posVar = _hasMorph ? "morphedPos" : "position";
+    const normVar = _hasMorph ? "morphedNorm" : "normal";
+    const tangentBlock = hasNormal ? `let N_local=normalize(${normVar});
+let T_local=normalize(tangent.xyz);
+let B_local=cross(N_local,T_local)*tangent.w;
+out.worldTangent=(finalWorld*vec4<f32>(T_local,0.0)).xyz;
+out.worldBitangent=(finalWorld*vec4<f32>(B_local,0.0)).xyz;` : "";
+    const _vertexTemplate = `/*SU*/
+/*MU*/
+@group(1) @binding(0) var<uniform> mesh: MeshUniforms;
+/*VH*/
+/*VD*/
+/*VO*/
+@vertex fn main(
+/*VP*/
+) -> VertexOutput {
+var out: VertexOutput;
+/*VR*/
+var finalWorld = mesh.world;
+/*VW*/
+let worldPos4 = finalWorld * vec4<f32>(${posVar}, 1.0);
+out.worldPos = worldPos4.xyz;
+out.clipPos = scene.viewProjection * worldPos4;
+out.worldNormal = (finalWorld * vec4<f32>(normalize(${normVar}), 0.0)).xyz;
+${tangentBlock}
+out.uv = uv;
+    ${_ext ? _ext.vertexBodyExtra : ""}/*VB*/
+return out;
+}`;
+    const normalUV = _ext?.uvForNormal ?? "input.uv";
+    const normalScaleMod = _ext?.normalScaleMod ?? "";
+    const normalRef = _ext?.normalScaleMod ? "scaledNormal" : "normalMapRaw";
+    const normalRefCt = _ext?.normalScaleMod ? "scaledNormalCT" : "normalMapSample";
+    let normalBlock;
+    if (hasNormal) {
+      normalBlock = `let normalMapRaw=textureSample(normalTexture,normalSampler_,${normalUV}).rgb*2.0-1.0;
+${normalScaleMod}let normalMapNorm=normalize(${normalRef});
+let N_geom=normalize(input.worldNormal);
+let TBN=mat3x3<f32>(input.worldTangent,input.worldBitangent,input.worldNormal);
+var N=normalize(TBN*normalMapNorm);`;
+    } else if (hasCotangentNormal) {
+      normalBlock = `let normalMapSample=textureSample(normalTexture,normalSampler_,${normalUV}).rgb*2.0-1.0;
+${normalScaleMod.replace(/normalMapRaw/g, "normalMapSample").replace(/scaledNormal/g, "scaledNormalCT")}let N_geom=normalize(input.worldNormal);
+let dp1=dpdx(input.worldPos);
+let dp2=dpdy(input.worldPos);
+let duv1=dpdx(${normalUV});
+let duv2=dpdy(${normalUV});
+let dp2perp=cross(dp2,N_geom);
+let dp1perp=cross(N_geom,dp1);
+let tangent_ct=dp2perp*duv1.x+dp1perp*duv2.x;
+let bitangent_ct=-(dp2perp*duv1.y+dp1perp*duv2.y);
+let det=max(dot(tangent_ct,tangent_ct),dot(bitangent_ct,bitangent_ct));
+let invmax=select(inverseSqrt(det),0.0,det==0.0);
+let cotangentFrame=mat3x3<f32>(tangent_ct*invmax,bitangent_ct*invmax,N_geom);
+var N=normalize(cotangentFrame*normalize(${normalRefCt}));`;
+    } else {
+      normalBlock = `let N_geom=normalize(input.worldNormal);
+var N=N_geom;`;
+    }
+    const anisotropyTBBlock = _hasAnisotropy ? _anisoTBBlock : "";
+    const vertexColorMod = _ext?.baseColorMod ?? "";
+    const baseColorFactorRgb = _hasBaseColorFactor ? "*material.baseColorFactor.rgb" : "";
+    const baseColorFactorAlpha = _hasBaseColorFactor ? "*material.baseColorFactor.a" : "";
+    const baseColorDecode = _hasGammaAlbedo ? `var baseColor=pow(baseColorSample.rgb,vec3<f32>(2.2))${baseColorFactorRgb};
+var alpha=baseColorSample.a${baseColorFactorAlpha};${vertexColorMod}` : `var baseColor=baseColorSample.rgb${baseColorFactorRgb};
+var alpha=baseColorSample.a${baseColorFactorAlpha};${vertexColorMod}`;
+    const specGlossUV = _ext?.uvForSpecGloss ?? "input.uv";
+    const roughnessMetallic = _hasSpecGloss ? `let specGloss=textureSample(specGlossTexture,specGlossSampler,${specGlossUV});
+let roughness=clamp(1.0-specGloss.a,0.0,1.0);
+let metallic=0.0;` : `let roughness=clamp(orm.g*material.roughnessFactor,0.0,1.0);
+let metallic=orm.b*material.metallicFactor;`;
+    const emissiveUV = _ext?.uvForEmissive ?? "input.uv";
+    const emissiveDefault = _hasEmissiveColor || !_hasEmissiveTexture ? `var emissive:vec3f;` : `let emissive=textureSample(emissiveTexture,emissiveSampler,${emissiveUV}).rgb;`;
+    const occlusionDefault = _hasReflectanceExt ? `` : _ext?.occlusionOverride ? _ext.occlusionOverride : _hasOcclusion ? `let occlusion=orm.r;` : `let occlusion=1.0;`;
+    const f0Default = _hasReflectanceExt ? `` : _hasSpecGloss ? `var colorF0=specGloss.rgb;
+let colorF90=vec3<f32>(1.0);
+let maxSpecular=max(colorF0.r,max(colorF0.g,colorF0.b));
+let surfaceAlbedo=baseColor*(1.0-maxSpecular);` : `let dielectricF0=material.reflectance;
+var colorF0=mix(vec3<f32>(dielectricF0),baseColor,metallic);
+let colorF90=vec3<f32>(1.0);
+let surfaceAlbedo=baseColor*(1.0-dielectricF0)*(1.0-metallic);`;
+    const specularAABlock = _hasSpecularAA || hasAnyNormal ? `var AA_factor_x=0.0;
+var AA_factor_y=0.0;
+{let nDfdx_AA=dpdx(N);
+let nDfdy_AA=dpdy(N);
+let slopeSquare_AA=max(dot(nDfdx_AA,nDfdx_AA),dot(nDfdy_AA,nDfdy_AA));
+AA_factor_x=pow(saturate(slopeSquare_AA),0.333);
+AA_factor_y=sqrt(slopeSquare_AA)*0.75;
+alphaG+=AA_factor_y;}` : `var AA_factor_x=0.0;
+var AA_factor_y=0.0;`;
+    const directLightBlock = _hasMultiLight ? _multiLightLoop : _hasSingleLight ? _singleLightBlock : `var directDiffuse=vec3<f32>(0.0);
+var directSpecular=vec3<f32>(0.0);
+/*BL*/`;
+    const useAces = _hasTonemap && _acesTonemapCall !== "";
+    const acesBlock = useAces ? _acesHelpers : "";
+    const tonemapBlock = _hasTonemap ? useAces ? _acesTonemapCall : `color*=scene.vImageInfos.x;
+color=1.0-exp2(-1.590579*color);` : `color*=scene.vImageInfos.x;`;
+    const fogHelper = _fogHelper;
+    const fogBlock = _fogBlock;
+    const alphaBlock = _noColorOutput ? "" : _hasAlphaBlend ? `var finalAlpha=alpha*material.materialAlpha;
+var luminanceOverAlpha=0.0;
+/*BA*/
+luminanceOverAlpha+=dot(${_hasIbl ? `finalSpecularScaled` : `directSpecular`},vec3<f32>(0.2126,0.7152,0.0722));
+finalAlpha=saturate(finalAlpha+luminanceOverAlpha*luminanceOverAlpha);
+return vec4<f32>(color,finalAlpha);` : `return vec4<f32>(color,alpha*material.materialAlpha);`;
+    const doubleSidedEntry = _hasDoubleSided ? `@fragment fn main(input: FragmentInput, @builtin(front_facing) frontFacing: bool)${_noColorOutput ? "" : " -> @location(0) vec4<f32>"} {` : `@fragment fn main(input: FragmentInput)${_noColorOutput ? "" : " -> @location(0) vec4<f32>"} {`;
+    const doubleSidedFlip = _hasDoubleSided ? `if (!frontFacing) { N = -N; }` : "";
+    const lightDecls = _hasMultiLight ? _multiLightWGSL : _hasSingleLight ? _singleLightWGSL : "";
+    const lightBindingDecl = _hasSingleLight || _hasMultiLight ? `@group(0) @binding(1) var<uniform> lights: lightsUniforms;` : "";
+    const meshLightIndexHelper = _hasSingleLight || _hasMultiLight ? meshLightIndexWGSL("mesh") : "";
+    const anisoBrdfBlock = _hasAnisotropy ? _anisoBrdfFunctions : "";
+    const fragmentHelpers = _ext?.fragmentHelpers ?? "";
+    const fragmentPrelude = _ext?.fragmentPrelude ?? "";
+    const baseColorUV = _ext?.uvForBaseColor ?? "input.uv";
+    const ormUV = _ext?.uvForOrm ?? "input.uv";
+    const _fragmentTemplate = `/*SU*/
+${_esmShadowOutput ? "struct shadowParamsUniforms { biasAndScale: vec4<f32>, depthValues: vec4<f32>, }" : ""}
+/*MU*/
+@group(1) @binding(0) var<uniform> mesh: MeshUniforms;
+/*HF*/
+/*FB*/
+/*FI*/
+${BRDF_FUNCTIONS}
+${acesBlock}
+${fogHelper}
+${anisoBrdfBlock}
+${lightDecls}
+${lightBindingDecl}
+${meshLightIndexHelper}
+${fragmentHelpers}
+${doubleSidedEntry}
+${fragmentPrelude}/*SV*/
+let baseColorSample=textureSample(baseColorTexture,baseColorSampler,${baseColorUV});
+${baseColorDecode}
+let orm=textureSample(ormTexture,ormSampler,${ormUV}).rgb;
+${occlusionDefault}
+${roughnessMetallic}
+${emissiveDefault}
+/*AT*/
+${// When the fragment terminates early (no color output, or ESM shadow
+    // depth output), emit only the terminating return. Appending the
+    // color-path body after the return would make it unreachable and
+    // trigger a "code is unreachable" shader compilation warning.
+    _noColorOutput ? "return;" : _esmShadowOutput ? _esmShadowDepthCode : `${normalBlock}
+${doubleSidedFlip}
+${anisotropyTBBlock}
+/*AC*/
+let V=normalize(scene.vEyePosition.xyz-input.worldPos);
+let NdotVUnclamped=dot(N,V);
+let NdotV=abs(NdotVUnclamped)+0.0000001;
+${f0Default}
+/*MF*/
+var alphaG=roughness*roughness+0.0005;
+${specularAABlock}
+${directLightBlock}
+var color=directDiffuse+directSpecular+emissive;
+/*AI*/
+/*NI*/
+${fogBlock}
+${tonemapBlock}
+color=pow(color,vec3<f32>(1.0/2.2));
+color=clamp(color,vec3<f32>(0.0),vec3<f32>(1.0));
+let highContrast=color*color*(3.0-2.0*color);
+if(scene.vImageInfos.y<1.0){color=mix(vec3<f32>(0.5),color,scene.vImageInfos.y);}
+else{color=mix(color,highContrast,scene.vImageInfos.y-1.0);}
+color=max(color,vec3<f32>(0.0));
+/*BC*/
+${alphaBlock}`}
+}`;
+    return {
+      _vertexTemplate,
+      _fragmentTemplate,
+      _baseMeshUboFields,
+      _baseMaterialUboFields,
+      _baseVertexAttributes,
+      _baseVaryings,
+      _baseBindings
+    };
+  }
+  var STAGE_FRAGMENT2, BRDF_FUNCTIONS;
+  var init_pbr_template = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-template.ts"() {
+      "use strict";
+      init_lights_ubo();
+      STAGE_FRAGMENT2 = 2;
+      BRDF_FUNCTIONS = `
+const PI:f32=3.14159265358979323846;
+fn distributionGGX(NdotH:f32,alphaG:f32)->f32{
+let a2=alphaG*alphaG;
+let d=NdotH*NdotH*(a2-1.0)+1.0;
+return a2/(PI*d*d);
+}
+fn geometrySmithGGX(NdotL:f32,NdotV:f32,alphaG:f32)->f32{
+let a2=alphaG*alphaG;
+let gl=NdotL*sqrt(NdotV*(NdotV-a2*NdotV)+a2);
+let gv=NdotV*sqrt(NdotL*(NdotL-a2*NdotL)+a2);
+return 0.5/(gl+gv);
+}
+fn fresnelSchlick(cosTheta:f32,F0:vec3<f32>,F90:vec3<f32>)->vec3<f32>{
+let t=1.0-cosTheta;
+let t2=t*t;
+return F0+(F90-F0)*(t2*t2*t);
+}
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-compose.ts
+  function createPbrComposer(deps) {
+    const cache = /* @__PURE__ */ new Map();
+    const {
+      _singleLightWGSL,
+      _getSingleLightBlock,
+      _multiLightWGSL,
+      _multiLightLoop,
+      _acesHelpers,
+      _acesTonemapCall,
+      _fogHelper,
+      _fogBlock,
+      _createPbrTemplateExt,
+      _anisoExt,
+      _iblSkyboxCalc,
+      _createPbrShadowFragment,
+      _shadowLights,
+      _createThinInstanceFragment
+    } = deps;
+    return function composePbr(features, features2 = 0, meshFeatures = 0, sceneFeatures = 0, lightMode = 0, singleLightType = "", _esmShadowDepthCode = "", vbStrides, vbKey = "") {
+      const ckey = `${features}:${features2}:${meshFeatures}:${sceneFeatures}:${lightMode}:${singleLightType}${vbKey}`;
+      const cached = cache.get(ckey);
+      if (cached) {
+        return cached;
+      }
+      const has = (bit) => (features & bit) !== 0;
+      const hasMesh = (bit) => (meshFeatures & bit) !== 0;
+      const hasScene = (bit) => (sceneFeatures & bit) !== 0;
+      const hasNormal = has(PBR_HAS_NORMAL_MAP) && hasMesh(MSH_HAS_TANGENTS);
+      const hasCotangent = has(PBR_HAS_NORMAL_MAP) && !hasMesh(MSH_HAS_TANGENTS);
+      const _hasAnyNormal = hasNormal || hasCotangent;
+      const _hasReflectanceExt = has(PBR_HAS_METALLIC_REFLECTANCE_MAP | PBR_HAS_REFLECTANCE_MAP) || (features2 & PBR2_HAS_REFLECTANCE_FACTORS) !== 0;
+      const _hasIbl = hasScene(PBR_HAS_ENV);
+      const _hasMorph = hasMesh(MSH_HAS_MORPH_TARGETS);
+      const hasShadow = hasMesh(MSH_RECEIVE_SHADOWS);
+      const _hasAnisotropy = has(PBR_HAS_ANISOTROPY);
+      const _hasEmissiveColor = has(PBR_HAS_EMISSIVE_COLOR);
+      const _hasEmissiveTexture = has(PBR_HAS_EMISSIVE);
+      const hasTI = hasMesh(MSH_HAS_THIN_INSTANCES);
+      const _hasUvTransform = (features2 & PBR2_HAS_UV_TRANSFORM) !== 0;
+      const _hasVertexColor = hasMesh(MSH_HAS_VERTEX_COLOR);
+      const _hasUv2 = (features2 & PBR2_HAS_UV2) !== 0 && hasMesh(MSH_HAS_UV2);
+      const needsExt = _hasUvTransform || _hasVertexColor || _hasUv2;
+      const _hasSpecularAA = has(PBR_HAS_SPECULAR_AA);
+      const _ext = needsExt && _createPbrTemplateExt ? _createPbrTemplateExt({
+        _hasUvTransform,
+        _hasVertexColor,
+        _hasUv2,
+        _hasOcclusionUv2: _hasUv2,
+        _hasAnyNormal,
+        _hasEmissiveTexture,
+        _hasSpecGloss: has(PBR_HAS_SPEC_GLOSS)
+      }) : void 0;
+      const template = createPbrTemplate({
+        _hasSingleLight: lightMode === 1,
+        _hasMultiLight: lightMode === 2,
+        _singleLightWGSL,
+        _singleLightBlock: lightMode === 1 && _getSingleLightBlock ? _getSingleLightBlock(singleLightType) : "",
+        _multiLightWGSL,
+        _multiLightLoop,
+        _normalMode: hasNormal ? "tangent" : hasCotangent ? "cotangent" : "none",
+        _hasEmissiveTexture,
+        _hasSpecGloss: has(PBR_HAS_SPEC_GLOSS),
+        _hasDoubleSided: has(PBR_HAS_DOUBLE_SIDED),
+        _hasTonemap: hasScene(PBR_HAS_TONEMAP),
+        _fogHelper: hasScene(PBR_HAS_FOG) ? _fogHelper : "",
+        _fogBlock: hasScene(PBR_HAS_FOG) ? _fogBlock : "",
+        _acesHelpers,
+        _acesTonemapCall,
+        _hasAlphaBlend: has(PBR_HAS_ALPHA_BLEND),
+        _hasSpecularAA,
+        _hasGammaAlbedo: has(PBR_HAS_GAMMA_ALBEDO),
+        _hasBaseColorFactor: (features2 & PBR2_HAS_BASE_COLOR_FACTOR) !== 0,
+        _hasMorph,
+        _hasOcclusion: has(PBR_HAS_OCCLUSION) && !_hasReflectanceExt,
+        _hasEmissiveColor,
+        _hasReflectanceExt,
+        _hasIbl,
+        _hasAnisotropy,
+        _anisoBrdfFunctions: _hasAnisotropy && _anisoExt ? _anisoExt.ANISO_BRDF_FUNCTIONS : "",
+        _anisoTBBlock: _hasAnisotropy && _anisoExt ? _anisoExt.makeAnisotropyTBBlock(hasNormal) : "",
+        _ext,
+        _noColorOutput: (features2 & PBR2_NO_COLOR_OUTPUT) !== 0,
+        _esmShadowOutput: (features2 & PBR2_ESM_SHADOW_OUTPUT) !== 0,
+        _esmShadowDepthCode,
+        _vbStrides: vbStrides
+      });
+      const frags = [];
+      const fragCtx = {
+        _features: features,
+        _features2: features2,
+        _meshFeatures: meshFeatures,
+        _hasIbl,
+        _hasAnyNormal,
+        _hasSpecularAA,
+        _anisoBentNormalCode: _hasAnisotropy && _anisoExt ? _anisoExt.ANISO_BENT_NORMAL : "",
+        _iblSkyboxCalc: has(PBR_HAS_SKYBOX) ? _iblSkyboxCalc : ""
+      };
+      for (const regExt of _getPbrExts().values()) {
+        if (regExt.frag) {
+          const fr = regExt.frag(fragCtx);
+          if (fr) {
+            frags.push(fr);
+          }
+        }
+      }
+      if (hasShadow && _createPbrShadowFragment) {
+        const slots = _shadowLights.map((sl) => ({ lightIndex: sl.lightIndex, shadowType: sl.shadowType }));
+        frags.push(_createPbrShadowFragment(slots));
+      }
+      if (hasTI && _createThinInstanceFragment) {
+        frags.push(_createThinInstanceFragment(hasMesh(MSH_HAS_INSTANCE_COLOR)));
+      }
+      const composed = composeShader(template, frags);
+      cache.set(ckey, composed);
+      return composed;
+    };
+  }
+  var init_pbr_compose = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-compose.ts"() {
+      "use strict";
+      init_shader_composer();
+      init_pbr_template();
+      init_pbr_flag_bits();
+      init_pbr_flags();
+      init_mesh_features();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/ibl-fragment.ts
+  var ibl_fragment_exports = {};
+  __export(ibl_fragment_exports, {
+    createIblFragment: () => createIblFragment,
+    pbrExt: () => pbrExt
+  });
+  function makeIblCalculation(hasNormalMap, anisoBentNormalCode = "", skyboxCalculation = "") {
+    if (skyboxCalculation) {
+      return skyboxCalculation;
+    }
+    const ehoLine = hasNormalMap ? `let eho = environmentHorizonOcclusion(-V, N, N_geom);` : `let eho = 1.0;`;
+    const reflectionDir = anisoBentNormalCode ? anisoBentNormalCode : `let R_raw = reflect(-V, N);`;
+    const irradianceCode = `let environmentIrradiance = (scene.vSphericalL00.rgb
+  + scene.vSphericalL1_1.rgb * N_env.y + scene.vSphericalL10.rgb * N_env.z + scene.vSphericalL11.rgb * N_env.x
+  + scene.vSphericalL2_2.rgb * (N_env.y * N_env.x) + scene.vSphericalL2_1.rgb * (N_env.y * N_env.z)
+  + scene.vSphericalL20.rgb * (3.0 * N_env.z * N_env.z - 1.0) + scene.vSphericalL21.rgb * (N_env.z * N_env.x)
+  + scene.vSphericalL22.rgb * (N_env.x * N_env.x - N_env.y * N_env.y)) * material.environmentIntensity;`;
+    return `${reflectionDir}
+let R = rotateY(R_raw, scene.envRotationY);
+let N_env = rotateY(N, scene.envRotationY);
+let brdf = textureSample(brdfLUT, brdfSampler_, vec2<f32>(NdotV, roughness));
+let environmentBrdf = brdf.rgb;
+let specularEnvironmentReflectance = (colorF90 - colorF0) * environmentBrdf.x + colorF0 * environmentBrdf.y;
+let seo = clamp((NdotVUnclamped + occlusion) * (NdotVUnclamped + occlusion) - 1.0 + occlusion, 0.0, 1.0);
+${ehoLine}
+let colorSpecularEnvReflectance = specularEnvironmentReflectance * seo * eho;
+let energyConservation = getEnergyConservationFactor(colorF0, max(environmentBrdf.y, 0.001));
+${irradianceCode}
+let maxLod = f32(textureNumLevels(iblTexture) - 1);
+let cubemapDim = f32(textureDimensions(iblTexture).x);
+var specLod = log2(cubemapDim * alphaG) * scene.vImageInfos.z;
+var environmentRadiance = textureSampleLevel(iblTexture, iblSampler, R, clamp(specLod, 0.0, maxLod)).rgb * material.environmentIntensity;
+environmentRadiance = mix(environmentRadiance, environmentIrradiance, alphaG);
+let finalIrradiance = environmentIrradiance * surfaceAlbedo * occlusion;
+let finalSpecularScaled = directSpecular * energyConservation;
+let finalRadianceScaled = environmentRadiance * colorSpecularEnvReflectance * energyConservation;
+color = finalIrradiance + finalRadianceScaled + finalSpecularScaled + directDiffuse + emissive;`;
+  }
+  function createIblFragment(hasNormalMap, anisoBentNormalCode = "", skyboxCalculation = "") {
+    return {
+      _id: "ibl",
+      // SH coefficients are in the PBR template's baseSceneUboFields (not here)
+      // to preserve fixed scene UBO layout compatibility.
+      _bindings: [
+        { _name: "brdfLUT", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT3 },
+        { _name: "brdfSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT3 },
+        { _name: "iblTexture", _type: { _kind: "texture", _textureType: "texture_cube<f32>" }, _visibility: STAGE_FRAGMENT3 },
+        { _name: "iblSampler", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT3 }
+      ],
+      _helperFunctions: IBL_HELPERS,
+      _fragmentSlots: {
+        AI: makeIblCalculation(hasNormalMap, anisoBentNormalCode, skyboxCalculation),
+        BA: `luminanceOverAlpha += dot(finalRadianceScaled, vec3<f32>(0.2126, 0.7152, 0.0722));`
+      }
+    };
+  }
+  var STAGE_FRAGMENT3, IBL_HELPERS, pbrExt;
+  var init_ibl_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/ibl-fragment.ts"() {
+      "use strict";
+      STAGE_FRAGMENT3 = 2;
+      IBL_HELPERS = `
+fn environmentHorizonOcclusion(V: vec3<f32>, N: vec3<f32>, geoN: vec3<f32>) -> f32 {
+let R = reflect(V, N);
+let temp = saturate(1.0 + 1.1 * dot(R, geoN));
+return temp * temp;
+}
+fn getEnergyConservationFactor(F0: vec3<f32>, brdfY: f32) -> vec3<f32> {
+return 1.0 + F0 * (1.0 / brdfY - 1.0);
+}
+fn rotateY(v: vec3<f32>, angle: f32) -> vec3<f32> {
+let c = cos(angle);
+let s = sin(angle);
+return vec3<f32>(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+}
+`;
+      pbrExt = {
+        id: "ibl",
+        phase: "ibl",
+        frag(ctx) {
+          if (!ctx._hasIbl) {
+            return null;
+          }
+          return createIblFragment(ctx._hasAnyNormal, ctx._anisoBentNormalCode ?? "", ctx._iblSkyboxCalc ?? "");
+        },
+        bind(ctx, entries, b) {
+          if (!ctx._env) {
+            return b;
+          }
+          entries.push({ binding: b++, resource: ctx._env.brdfLutView });
+          entries.push({ binding: b++, resource: ctx._env.brdfSampler });
+          entries.push({ binding: b++, resource: ctx._env.specularCubeView });
+          entries.push({ binding: b++, resource: ctx._env.cubeSampler });
+          return b;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/ibl-skybox-wgsl.ts
+  var ibl_skybox_wgsl_exports = {};
+  __export(ibl_skybox_wgsl_exports, {
+    IBL_SKYBOX_CALCULATION: () => IBL_SKYBOX_CALCULATION
+  });
+  var IBL_SKYBOX_CALCULATION;
+  var init_ibl_skybox_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/ibl-skybox-wgsl.ts"() {
+      "use strict";
+      IBL_SKYBOX_CALCULATION = `let R = input.worldPos - scene.vEyePosition.xyz;
+let maxLod = f32(textureNumLevels(iblTexture) - 1);
+let cubemapDim = f32(textureDimensions(iblTexture).x);
+let skyboxAlphaG = max(roughness * roughness, 0.000001);
+var specLod = log2(cubemapDim * skyboxAlphaG) * scene.vImageInfos.z;
+var environmentRadiance = textureSampleLevel(iblTexture, iblSampler, R, clamp(specLod, 0.0, maxLod)).rgb * material.environmentIntensity;
+let finalSpecularScaled = vec3<f32>(0.0);
+let finalRadianceScaled = environmentRadiance;
+color = finalRadianceScaled + emissive;`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/multilight-wgsl.ts
+  var multilight_wgsl_exports = {};
+  __export(multilight_wgsl_exports, {
+    COMPUTE_PBR_LIGHT: () => COMPUTE_PBR_LIGHT,
+    MULTI_LIGHT_STRUCTS: () => MULTI_LIGHT_STRUCTS,
+    getMultiLightLoop: () => getMultiLightLoop
+  });
+  function MULTI_LIGHT_STRUCTS() {
+    return `
+struct LightEntry {
+vLightData: vec4<f32>,
+vLightDiffuse: vec4<f32>,
+vLightSpecular: vec4<f32>,
+vLightDirection: vec4<f32>,
+};
+struct lightsUniforms {
+count: u32, _p0: u32, _p1: u32, _p2: u32,
+lights: array<LightEntry, ${MAX_LIGHTS}>,
+};
+`;
+  }
+  function getMultiLightLoop() {
+    return `var directDiffuse = vec3<f32>(0.0);
+var directSpecular = vec3<f32>(0.0);
+// BJS direct-light specular: roughness is clamped by the geometric AA factor
+// BEFORE being squared (matches BJS pbrDirectLightingFunctions.fx line 103).
+// The IBL-path alphaG already has AA_factor_y additively baked in; direct
+// specular uses its own squaring after max(roughness, AA_factor_x).
+let directRoughness = max(roughness, AA_factor_x);
+let directAlphaG = directRoughness * directRoughness + 0.0005;
+var shadowFactors = array<f32, ${MAX_LIGHTS}>(${new Array(MAX_LIGHTS).fill("1.0").join(", ")});
+let lightCount = min(mesh.lc, ${MAX_LIGHTS}u);
+/*AS*/
+// First-light aliases \u2014 kept at directLightBlock scope so the AD slot below
+// (clearcoat / sheen / subsurface) sees the same single-light variable names
+// it was originally written against. Multi-light direct contributions
+// for those ancillary BRDFs are not yet supported (single-light parity only).
+let lightIndex0 = mli(0u);
+let entry0 = lights.lights[lightIndex0];
+let pl0 = computePbrLight(entry0, N, input.worldPos, material.lightFalloffMode);
+let L = pl0.L;
+let NdotL = pl0.NdotL;
+let lightColor = pl0.specColor;
+let lightAtten = pl0.atten * shadowFactors[lightIndex0];
+let H = normalize(V + L);
+let NdotH = clamp(dot(N, H), 0.0000001, 1.0);
+let VdotH = saturate(dot(V, H));
+for (var li = 0u; li < lightCount; li++) {
+var pl: PbrLightResult;
+let lightIndex = mli(li);
+if (li == 0u) { pl = pl0; } else { pl = computePbrLight(lights.lights[lightIndex], N, input.worldPos, material.lightFalloffMode); }
+let sf = shadowFactors[lightIndex];
+if (pl.isHemi) {
+directDiffuse += pl.color * surfaceAlbedo * material.directIntensity * sf;
+} else {
+directDiffuse += surfaceAlbedo * (1.0 / PI) * pl.NdotL * pl.color * pl.atten * material.directIntensity * sf;
+}
+// Specular uses pl.NdotL (hemispheric 0.5+0.5*dot for hemi, max(dot,0) for others)
+// and pl.specColor (un-mixed light diffuse \u2014 matches single-light fast path
+// and Std's LIGHTING_FN which uses vLightSpecular for the specular bounce).
+if (pl.NdotL > 0.0 && pl.atten > 0.0) {
+let specH = normalize(V + pl.L);
+let specNdotH = clamp(dot(N, specH), 0.0000001, 1.0);
+let specVdotH = saturate(dot(V, specH));
+let D = distributionGGX(specNdotH, directAlphaG);
+let G = geometrySmithGGX(pl.NdotL, NdotV, directAlphaG);
+let coloredFresnel = fresnelSchlick(specVdotH, colorF0, colorF90);
+directSpecular += coloredFresnel * D * G * pl.NdotL * pl.specColor * pl.atten * material.directIntensity * sf;
+}
+}
+/*AD*/`;
+  }
+  var COMPUTE_PBR_LIGHT;
+  var init_multilight_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/multilight-wgsl.ts"() {
+      "use strict";
+      init_types();
+      COMPUTE_PBR_LIGHT = `
+struct PbrLightResult { L: vec3<f32>, NdotL: f32, atten: f32, color: vec3<f32>, specColor: vec3<f32>, isHemi: bool };
+fn computePbrLight(entry: LightEntry, N: vec3<f32>, worldPos: vec3<f32>, lightFalloffMode: f32) -> PbrLightResult {
+var r: PbrLightResult;
+let t = u32(entry.vLightData.w);
+r.isHemi = t == 3u;
+r.specColor = entry.vLightDiffuse.rgb;
+if (t == 3u) {
+r.L = normalize(entry.vLightData.xyz);
+r.NdotL = dot(N, r.L) * 0.5 + 0.5;
+r.atten = 1.0;
+r.color = mix(entry.vLightDirection.xyz, entry.vLightDiffuse.rgb, r.NdotL);
+return r;
+}
+if (t == 1u) {
+r.L = normalize(-entry.vLightData.xyz);
+r.atten = 1.0;
+} else {
+let toLight = entry.vLightData.xyz - worldPos;
+let d2 = dot(toLight, toLight);
+let dist = sqrt(d2);
+r.L = toLight / max(dist, 0.0001);
+        let physicalFalloff = lightFalloffMode >= 0.5;
+        let rangeAtt = select(max(0.0, 1.0 - dist / entry.vLightDiffuse.a), 1.0 / max(d2, 0.0000001), physicalFalloff);
+        if (t == 2u) {
+        let cosHalfAngle = entry.vLightDirection.w;
+        let c = dot(-entry.vLightDirection.xyz, r.L);
+        let standardDirFalloff = select(0.0, max(0.0, pow(max(c, 0.0), entry.vLightSpecular.a)), c >= cosHalfAngle);
+        let kappa = 6.64385618977 / max(1.0 - cosHalfAngle, 0.0001);
+        let physicalDirFalloff = exp2(kappa * (c - 1.0));
+        r.atten = rangeAtt * select(standardDirFalloff, physicalDirFalloff, physicalFalloff);
+        } else {
+        r.atten = rangeAtt;
+        }
+}
+r.NdotL = max(dot(N, r.L), 0.0);
+r.color = entry.vLightDiffuse.rgb;
+return r;
+}
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/shadow-fragment-core.ts
+  function createShadowFragment(id, shadowLights) {
+    const varyings = [];
+    const bindings = [];
+    const vertexLines = [];
+    const fragmentLines = [];
+    const helperParts = [];
+    for (const slot of shadowLights) {
+      const li = slot.lightIndex;
+      const suffix = `_${li}`;
+      varyings.push({ _name: `vPosFromLight${suffix}`, _type: "vec4<f32>" }, { _name: `vDepthMetric${suffix}`, _type: "f32" });
+      if (slot.shadowType === "pcf") {
+        bindings.push(
+          { _name: `shadowTex${suffix}`, _type: { _kind: "texture", _textureType: "texture_depth_2d", _sampleType: "depth" }, _group: "shadow", _visibility: STAGE_FRAGMENT4 },
+          { _name: `shadowComp${suffix}`, _type: { _kind: "sampler", _samplerType: "sampler_comparison" }, _group: "shadow", _visibility: STAGE_FRAGMENT4 }
+        );
+      } else {
+        bindings.push(
+          { _name: `shadowTex${suffix}`, _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _group: "shadow", _visibility: STAGE_FRAGMENT4 },
+          { _name: `shadowSamp${suffix}`, _type: { _kind: "sampler", _samplerType: "sampler" }, _group: "shadow", _visibility: STAGE_FRAGMENT4 }
+        );
+      }
+      bindings.push({ _name: `shadowInfo${suffix}`, _type: { _kind: "uniform-buffer" }, _group: "shadow", _visibility: STAGE_FRAGMENT4 | STAGE_VERTEX2 });
+      vertexLines.push(
+        `out.vPosFromLight${suffix} = shadowInfo${suffix}.lightMatrix * worldPos4;`,
+        `out.vDepthMetric${suffix} = (out.vPosFromLight${suffix}.z + shadowInfo${suffix}.depthValues.x) / shadowInfo${suffix}.depthValues.y;`
+      );
+      if (slot.shadowType === "pcf") {
+        fragmentLines.push(
+          `shadowFactors[${li}] = computeShadowPCF${suffix}(input.vPosFromLight${suffix}, input.vDepthMetric${suffix}, shadowInfo${suffix}.shadowsInfo.x, shadowInfo${suffix}.shadowsInfo.y, shadowInfo${suffix}.shadowsInfo.z);`
+        );
+      } else {
+        fragmentLines.push(
+          `shadowFactors[${li}] = computeShadowESM${suffix}(input.vPosFromLight${suffix}, input.vDepthMetric${suffix}, shadowInfo${suffix}.shadowsInfo.x, shadowInfo${suffix}.shadowsInfo.z, shadowInfo${suffix}.shadowsInfo.w);`
+        );
+      }
+    }
+    for (const slot of shadowLights) {
+      const li = slot.lightIndex;
+      const suffix = `_${li}`;
+      helperParts.push(`struct shadowInfo${suffix}Uniforms { lightMatrix: mat4x4<f32>, depthValues: vec4<f32>, shadowsInfo: vec4<f32> };`);
+      if (slot.shadowType === "pcf") {
+        helperParts.push(`
+fn computeShadowPCF${suffix}(posFromLight: vec4<f32>, depthMetric: f32, darkness: f32, mapSz: f32, invMapSz: f32) -> f32 {
+let clipSpace = posFromLight.xyz / posFromLight.w;
+let uv = vec2<f32>(0.5 * clipSpace.x + 0.5, 0.5 - 0.5 * clipSpace.y);
+if (depthMetric < 0.0 || depthMetric > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+let depthRef = clamp(clipSpace.z, 0.0, 1.0);
+var tc = uv * mapSz + 0.5;
+let st = fract(tc);
+let base = (floor(tc) - 0.5) * invMapSz;
+let uvw0 = 4.0 - 3.0 * st;
+let uvw1 = vec2<f32>(7.0);
+let uvw2 = 1.0 + 3.0 * st;
+let u = vec3<f32>((3.0 - 2.0 * st.x) / uvw0.x - 2.0, (3.0 + st.x) / uvw1.x, st.x / uvw2.x + 2.0) * invMapSz;
+let v = vec3<f32>((3.0 - 2.0 * st.y) / uvw0.y - 2.0, (3.0 + st.y) / uvw1.y, st.y / uvw2.y + 2.0) * invMapSz;
+var sh = 0.0;
+sh += uvw0.x * uvw0.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[0], v[0]), depthRef);
+sh += uvw1.x * uvw0.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[1], v[0]), depthRef);
+sh += uvw2.x * uvw0.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[2], v[0]), depthRef);
+sh += uvw0.x * uvw1.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[0], v[1]), depthRef);
+sh += uvw1.x * uvw1.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[1], v[1]), depthRef);
+sh += uvw2.x * uvw1.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[2], v[1]), depthRef);
+sh += uvw0.x * uvw2.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[0], v[2]), depthRef);
+sh += uvw1.x * uvw2.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[1], v[2]), depthRef);
+sh += uvw2.x * uvw2.y * textureSampleCompareLevel(shadowTex${suffix}, shadowComp${suffix}, base + vec2<f32>(u[2], v[2]), depthRef);
+sh /= 144.0;
+return mix(darkness, 1.0, sh);
+}`);
+      } else {
+        helperParts.push(`
+fn computeFallOff${suffix}(value: f32, clipSpace: vec2<f32>, frustumEdgeFalloff: f32) -> f32 {
+let mask = smoothstep(1.0 - frustumEdgeFalloff, 1.00000012, clamp(dot(clipSpace, clipSpace), 0.0, 1.0));
+return mix(value, 1.0, mask);
+}
+fn computeShadowESM${suffix}(posFromLight: vec4<f32>, depthMetric: f32, darkness: f32, depthScale: f32, frustumEdgeFalloff: f32) -> f32 {
+let clipSpace = posFromLight.xyz / posFromLight.w;
+let uv = vec2<f32>(0.5 * clipSpace.x + 0.5, 0.5 - 0.5 * clipSpace.y);
+if (depthMetric < 0.0 || depthMetric > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+let shadowPixelDepth = clamp(depthMetric, 0.0, 1.0);
+let shadowMapSample = textureSampleLevel(shadowTex${suffix}, shadowSamp${suffix}, uv, 0.0).x;
+let esm = 1.0 - clamp(exp(min(87.0, depthScale * shadowPixelDepth)) * shadowMapSample, 0.0, 1.0 - darkness);
+return computeFallOff${suffix}(esm, clipSpace.xy, frustumEdgeFalloff);
+}`);
+      }
+    }
+    const vertexHelperParts = [];
+    for (const slot of shadowLights) {
+      const suffix = `_${slot.lightIndex}`;
+      vertexHelperParts.push(`struct shadowInfo${suffix}Uniforms { lightMatrix: mat4x4<f32>, depthValues: vec4<f32>, shadowsInfo: vec4<f32> };`);
+    }
+    return {
+      _id: id,
+      _varyings: varyings,
+      _bindings: bindings,
+      _helperFunctions: helperParts.join("\n"),
+      _vertexHelperFunctions: vertexHelperParts.join("\n"),
+      _vertexSlots: {
+        VB: vertexLines.join("\n")
+      },
+      _fragmentSlots: {
+        AD: fragmentLines.join("\n")
+      }
+    };
+  }
+  var STAGE_FRAGMENT4, STAGE_VERTEX2;
+  var init_shadow_fragment_core = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/shadow-fragment-core.ts"() {
+      "use strict";
+      STAGE_FRAGMENT4 = 2;
+      STAGE_VERTEX2 = 1;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shadow/csm-receiver-registry.ts
+  function getCsmPbrReceiverFactory() {
+    return _pbrFactory;
+  }
+  var _pbrFactory;
+  var init_csm_receiver_registry = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shadow/csm-receiver-registry.ts"() {
+      "use strict";
+      _pbrFactory = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/pbr-shadow-fragment.ts
+  var pbr_shadow_fragment_exports = {};
+  __export(pbr_shadow_fragment_exports, {
+    createPbrShadowFragment: () => createPbrShadowFragment
+  });
+  function createPbrShadowFragment(shadowLights = [{ lightIndex: 0, shadowType: "esm" }]) {
+    const csmSlots = shadowLights.filter((sl) => sl.shadowType === "csm");
+    if (csmSlots.length > 0) {
+      return getCsmPbrReceiverFactory()(csmSlots.map((s) => ({ lightIndex: s.lightIndex })));
+    }
+    const fragment = createShadowFragment("pbr-shadow", shadowLights);
+    const shadowCode = fragment._fragmentSlots?.AD;
+    return {
+      ...fragment,
+      _fragmentSlots: shadowCode ? { AS: shadowCode } : void 0
+    };
+  }
+  var init_pbr_shadow_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/pbr-shadow-fragment.ts"() {
+      "use strict";
+      init_shadow_fragment_core();
+      init_csm_receiver_registry();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/alpha-test-fragment.ts
+  var alpha_test_fragment_exports = {};
+  __export(alpha_test_fragment_exports, {
+    pbrExt: () => pbrExt2
+  });
+  var pbrExt2;
+  var init_alpha_test_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/alpha-test-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      pbrExt2 = {
+        id: "alpha-test",
+        phase: "fragment",
+        frag(ctx) {
+          return ctx._features & PBR_HAS_ALPHA_TEST ? {
+            _id: "alpha-test",
+            _uboFields: [{ _name: "alphaCutOff", _type: "f32" }],
+            _fragmentSlots: { AT: `if(alpha*material.materialAlpha<material.alphaCutOff){discard;}` }
+          } : null;
+        },
+        writeUbo(data, mat, offsets) {
+          const off = offsets.get("alphaCutOff");
+          if (off !== void 0) {
+            data[off / 4] = mat.alphaCutOff ?? 0;
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/reflectance-fragment.ts
+  var reflectance_fragment_exports = {};
+  __export(reflectance_fragment_exports, {
+    createReflectanceFragment: () => createReflectanceFragment,
+    pbrExt: () => pbrExt3,
+    writeReflectanceUBO: () => writeReflectanceUBO
+  });
+  function writeReflectanceUBO(data, material, offsets) {
+    if (!offsets.has("occlusionStrength")) {
+      return;
+    }
+    const off = offsets.get("occlusionStrength") / 4;
+    data[off] = material.occlusionStrength ?? 1;
+    data[off + 1] = material.metallicF0Factor ?? 1;
+    data[off + 2] = material.specularWeight ?? material.metallicF0Factor ?? 1;
+    const mrc = material.metallicReflectanceColor;
+    data[off + 4] = mrc ? mrc[0] : 1;
+    data[off + 5] = mrc ? mrc[1] : 1;
+    data[off + 6] = mrc ? mrc[2] : 1;
+  }
+  function createReflectanceFragment(hasMetallicReflectanceMap, hasReflectanceMap, useAlphaOnlyMR, hasOcclusionUv2 = false) {
+    const bindings = [];
+    if (hasMetallicReflectanceMap) {
+      bindings.push(
+        { _name: "metallicReflectanceMap", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT5 },
+        { _name: "metallicReflectanceMapSampler", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT5 }
+      );
+    }
+    if (hasReflectanceMap) {
+      bindings.push(
+        { _name: "reflectanceMap", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT5 },
+        { _name: "reflectanceMapSampler", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT5 }
+      );
+    }
+    let f0Code = `var mrFactors = vec4<f32>(material.metallicReflectanceColor, material.metallicF0Factor);
+var specularWeight = material.specularWeight;`;
+    if (hasReflectanceMap) {
+      f0Code += `
+{ let rSample = textureSample(reflectanceMap, reflectanceMapSampler, input.uv);
+  let rLinear = pow(rSample.rgb, vec3<f32>(2.2));
+  mrFactors = vec4<f32>(mrFactors.rgb * rLinear, mrFactors.a); }`;
+    }
+    if (hasMetallicReflectanceMap) {
+      if (!useAlphaOnlyMR) {
+        f0Code += `
+{ let mrSample = textureSample(metallicReflectanceMap, metallicReflectanceMapSampler, input.uv);
+  let mrLinear = pow(mrSample.rgb, vec3<f32>(2.2));
+  mrFactors = vec4<f32>(mrFactors.rgb * mrLinear, mrFactors.a * mrSample.a);
+  specularWeight *= mrSample.a; }`;
+      } else {
+        f0Code += `
+{ let mrSample = textureSample(metallicReflectanceMap, metallicReflectanceMapSampler, input.uv);
+  mrFactors = vec4<f32>(mrFactors.rgb, mrFactors.a * mrSample.a);
+  specularWeight *= mrSample.a; }`;
+      }
+    }
+    f0Code += `
+let dielectricF0 = material.reflectance * mrFactors.a;
+let surfaceReflectivityColor = mrFactors.rgb;
+let dielectricColorF0 = vec3<f32>(dielectricF0) * surfaceReflectivityColor;
+let metallicColorF0 = baseColor;
+var colorF0 = mix(dielectricColorF0, metallicColorF0, metallic);
+let colorF90 = vec3<f32>(mix(specularWeight, 1.0, metallic));
+let surfaceAlbedo = baseColor * (vec3<f32>(1.0) - vec3<f32>(dielectricF0) * surfaceReflectivityColor) * (1.0 - metallic);`;
+    return {
+      _id: "reflectance",
+      _uboFields: [
+        { _name: "occlusionStrength", _type: "f32" },
+        { _name: "metallicF0Factor", _type: "f32" },
+        { _name: "specularWeight", _type: "f32" },
+        { _name: "_mrPad1", _type: "f32" },
+        { _name: "metallicReflectanceColor", _type: "vec3<f32>" },
+        { _name: "_mrPad2", _type: "f32" }
+      ],
+      _bindings: bindings,
+      _fragmentSlots: {
+        MF: f0Code,
+        AT: hasOcclusionUv2 ? `let occlusion = mix(1.0, textureSample(occlusionTexture, occlusionSampler_, input.uv2).r, material.occlusionStrength);` : `let occlusion = mix(1.0, orm.r, material.occlusionStrength);`
+      }
+    };
+  }
+  var STAGE_FRAGMENT5, pbrExt3;
+  var init_reflectance_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/reflectance-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      STAGE_FRAGMENT5 = 2;
+      pbrExt3 = {
+        id: "reflectance",
+        phase: "fragment",
+        detect(mat) {
+          const m = mat;
+          let f = 0;
+          let f2 = 0;
+          if (m.metallicReflectanceTexture) {
+            f |= PBR_HAS_METALLIC_REFLECTANCE_MAP;
+          }
+          if (m.reflectanceTexture) {
+            f |= PBR_HAS_REFLECTANCE_MAP;
+          }
+          if (f === 0) {
+            const hasNonDefaultF0 = m.metallicF0Factor != null && Math.abs(m.metallicF0Factor - 1) > 1e-6;
+            const mrc = m.metallicReflectanceColor;
+            const hasNonDefaultColor = mrc != null && (mrc[0] !== 1 || mrc[1] !== 1 || mrc[2] !== 1);
+            if (hasNonDefaultF0 || hasNonDefaultColor) {
+              f2 |= PBR2_HAS_REFLECTANCE_FACTORS;
+            }
+          }
+          if ((f !== 0 || f2 & PBR2_HAS_REFLECTANCE_FACTORS) && m.useOnlyMetallicFromMetallicReflectanceTexture) {
+            f |= PBR_HAS_USE_ALPHA_ONLY_MR;
+          }
+          return { f, f2 };
+        },
+        frag(ctx) {
+          const hasMR = (ctx._features & PBR_HAS_METALLIC_REFLECTANCE_MAP) !== 0;
+          const hasR = (ctx._features & PBR_HAS_REFLECTANCE_MAP) !== 0;
+          const hasFactors = (ctx._features2 & PBR2_HAS_REFLECTANCE_FACTORS) !== 0;
+          if (!hasMR && !hasR && !hasFactors) {
+            return null;
+          }
+          return createReflectanceFragment(hasMR, hasR, (ctx._features & PBR_HAS_USE_ALPHA_ONLY_MR) !== 0, (ctx._features2 & PBR2_HAS_UV2) !== 0);
+        },
+        writeUbo: writeReflectanceUBO,
+        bind(ctx, entries, b) {
+          if ((ctx._features & (PBR_HAS_METALLIC_REFLECTANCE_MAP | PBR_HAS_REFLECTANCE_MAP)) === 0) {
+            return b;
+          }
+          const m = ctx._material;
+          if (m.metallicReflectanceTexture) {
+            entries.push({ binding: b++, resource: m.metallicReflectanceTexture.view });
+            entries.push({ binding: b++, resource: m.metallicReflectanceTexture.sampler });
+          }
+          if (m.reflectanceTexture) {
+            entries.push({ binding: b++, resource: m.reflectanceTexture.view });
+            entries.push({ binding: b++, resource: m.reflectanceTexture.sampler });
+          }
+          return b;
+        },
+        textures(mat, t) {
+          const m = mat;
+          if (m.metallicReflectanceTexture) {
+            t.push(m.metallicReflectanceTexture);
+          }
+          if (m.reflectanceTexture) {
+            t.push(m.reflectanceTexture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/clearcoat-fragment.ts
+  var clearcoat_fragment_exports = {};
+  __export(clearcoat_fragment_exports, {
+    createClearcoatFragment: () => createClearcoatFragment,
+    pbrExt: () => pbrExt4,
+    writeClearcoatUBO: () => writeClearcoatUBO
+  });
+  function makeF0Remap(intensityExpr) {
+    return `
+{
+let ccInt_r = ${intensityExpr};
+let remappedF0 = getR0RemappedForClearCoat(colorF0, material.ccRefractionParams.z, material.ccRefractionParams.w);
+colorF0 = mix(colorF0, remappedF0, ccInt_r);
+}
+`;
+  }
+  function makeDirectMod(intensityExpr, roughnessExpr, hasNormalMap) {
+    const N = hasNormalMap ? "ccN" : "N_geom";
+    return `
+var ccDirectAttenuation = 1.0;
+var ccDirectSpecularTerm = vec3<f32>(0.0);
+{
+let ccInt_dl = ${intensityExpr};
+let ccRough_dl = ${roughnessExpr};
+let ccF0_dl = material.ccRefractionParams.x;
+let ccAlphaG_dl = ccRough_dl * ccRough_dl + 0.0005;
+let ccNdotL_dl = saturate(dot(${N}, L));
+let ccH_dl = normalize(V + L);
+let ccNdotH_dl = clamp(dot(${N}, ccH_dl), 0.0000001, 1.0);
+let ccVdotH_dl = saturate(dot(V, ccH_dl));
+let ccD_dl = distributionGGX(ccNdotH_dl, ccAlphaG_dl);
+let ccVis_dl = visibility_Kelemen(ccVdotH_dl);
+let ccFresnel_dl = ccSchlick(ccF0_dl, ccVdotH_dl);
+let ccTerm = ccFresnel_dl * ccD_dl * ccVis_dl * ccNdotL_dl;
+ccDirectSpecularTerm = vec3<f32>(ccTerm) * lightColor * lightAtten * material.directIntensity * ccInt_dl;
+ccDirectAttenuation = 1.0 - ccFresnel_dl * ccInt_dl;
+}
+`;
+  }
+  function makeIblMod(intensityExpr, roughnessExpr, hasNormalMap, hasSpecularAA, hasBaseNormalMap) {
+    const N = hasNormalMap ? "ccN" : "N_geom";
+    const alphaG = hasSpecularAA ? `let ccAlphaG_ibl_base = ccRough_ibl * ccRough_ibl + 0.0005;
+let cc_nDfdx_AA = dpdx(${N});
+let cc_nDfdy_AA = dpdy(${N});
+let cc_slopeSquare_AA = max(dot(cc_nDfdx_AA, cc_nDfdx_AA), dot(cc_nDfdy_AA, cc_nDfdy_AA));
+let ccAlphaG_ibl = ccAlphaG_ibl_base + sqrt(cc_slopeSquare_AA) * 0.75;` : `let ccAlphaG_ibl = ccRough_ibl * ccRough_ibl + 0.0005;`;
+    const ehoLine = hasBaseNormalMap ? `let ccEho_ibl = environmentHorizonOcclusion(-V, ${N}, N_geom);` : `let ccEho_ibl = 1.0;`;
+    return `
+{
+let ccInt_ibl = ${intensityExpr};
+let ccRough_ibl = ${roughnessExpr};
+let ccF0_ibl = material.ccRefractionParams.x;
+let ccR_raw = reflect(-V, ${N});
+let ccR_ibl = rotateY(ccR_raw, scene.envRotationY);
+let ccNdotV_ibl = abs(dot(${N}, V)) + 0.0000001;
+${alphaG}
+var ccSpecLod_ibl = log2(cubemapDim * ccAlphaG_ibl) * scene.vImageInfos.z;
+let ccEnvRadiance_ibl = textureSampleLevel(iblTexture, iblSampler, ccR_ibl, clamp(ccSpecLod_ibl, 0.0, maxLod)).rgb * material.environmentIntensity;
+let ccBrdf_ibl = textureSample(brdfLUT, brdfSampler_, vec2<f32>(ccNdotV_ibl, ccRough_ibl)).rgb;
+${ehoLine}
+let ccSpecEnvRefl = (vec3<f32>(ccF0_ibl) * ccBrdf_ibl.y + (vec3<f32>(1.0) - vec3<f32>(ccF0_ibl)) * ccBrdf_ibl.x) * ccInt_ibl * ccEho_ibl;
+let ccFresnelIBL = ccSchlick(ccF0_ibl, ccNdotV_ibl);
+let ccConservation_ibl = 1.0 - ccFresnelIBL * ccInt_ibl;
+let ccFinalRadiance_ibl = ccEnvRadiance_ibl * ccSpecEnvRefl;
+color = finalIrradiance * ccConservation_ibl
+      + finalRadianceScaled * ccConservation_ibl
+      + finalSpecularScaled * ccDirectAttenuation
+      + directDiffuse * ccDirectAttenuation
+      + ccDirectSpecularTerm
+      + ccFinalRadiance_ibl
+      + emissive;
+}
+`;
+  }
+  function makeNonIblMod(intensityExpr) {
+    return `
+{
+let ccF0_noIbl = material.ccRefractionParams.x;
+let ccInt_noIbl = ${intensityExpr};
+let ccFresnelNoIbl = ccSchlick(ccF0_noIbl, NdotV);
+let ccCons_noIbl = 1.0 - ccFresnelNoIbl * ccInt_noIbl;
+color = (color - emissive) * ccCons_noIbl + emissive + ccDirectSpecularTerm;
+}
+`;
+  }
+  function createClearcoatFragment(features, features2, hasIbl, hasBaseNormalMap, hasSpecularAA) {
+    if ((features & PBR_HAS_CLEARCOAT) === 0) {
+      return null;
+    }
+    const hasReflectance = (features & (PBR_HAS_METALLIC_REFLECTANCE_MAP | PBR_HAS_REFLECTANCE_MAP)) !== 0;
+    const hasIntensityMap = (features2 & PBR2_CC_INT_MAP) !== 0;
+    const hasRoughnessMap = (features2 & PBR2_CC_ROUGH_MAP) !== 0;
+    const hasNormalMap = (features2 & PBR2_CC_NORMAL_MAP) !== 0;
+    const disableF0Remap = (features2 & PBR2_CC_F0_REMAP_OFF) !== 0;
+    const intensityExpr = hasIntensityMap ? CC_INT_TEX : CC_INT_PLAIN;
+    const roughnessExpr = hasRoughnessMap ? CC_ROUGH_TEX : CC_ROUGH_PLAIN;
+    const slots = {
+      MF: disableF0Remap ? "" : makeF0Remap(intensityExpr),
+      AD: makeDirectMod(intensityExpr, roughnessExpr, hasNormalMap),
+      BL: `var ccDirectAttenuation = 1.0;
+var ccDirectSpecularTerm = vec3<f32>(0.0);`
+    };
+    if (hasNormalMap) {
+      slots.AC = CC_NORMAL_COMPUTE;
+    }
+    if (hasIbl) {
+      slots.AI = makeIblMod(intensityExpr, roughnessExpr, hasNormalMap, hasSpecularAA, hasBaseNormalMap);
+    } else {
+      slots.NI = makeNonIblMod(intensityExpr);
+    }
+    const deps = [];
+    if (hasIbl) {
+      deps.push("ibl");
+    }
+    if (hasReflectance) {
+      deps.push("reflectance");
+    }
+    const suffix = (hasIntensityMap ? "I" : "") + (hasRoughnessMap ? "R" : "") + (hasNormalMap ? "N" : "") + (disableF0Remap ? "X" : "") + (hasSpecularAA ? "A" : "") + (hasBaseNormalMap ? "B" : "");
+    const bindings = [];
+    if (hasIntensityMap) {
+      bindings.push(
+        { _name: "ccIntensityTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT6 },
+        { _name: "ccIntensitySampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT6 }
+      );
+    }
+    if (hasRoughnessMap) {
+      bindings.push(
+        { _name: "ccRoughnessTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT6 },
+        { _name: "ccRoughnessSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT6 }
+      );
+    }
+    if (hasNormalMap) {
+      bindings.push(
+        { _name: "ccNormalTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT6 },
+        { _name: "ccNormalSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT6 }
+      );
+    }
+    return {
+      _id: suffix ? `clearcoat-${suffix}` : "clearcoat",
+      _dependencies: deps.length > 0 ? deps : void 0,
+      _uboFields: [
+        { _name: "ccParams", _type: "vec4<f32>" },
+        { _name: "ccRefractionParams", _type: "vec4<f32>" }
+      ],
+      _bindings: bindings,
+      _helperFunctions: CC_HELPERS,
+      _fragmentSlots: slots
+    };
+  }
+  function writeClearcoatUBO(data, material, offsets) {
+    const cc = material.clearCoat;
+    if (!cc?.isEnabled || !offsets.has("ccParams")) {
+      return;
+    }
+    const off = offsets.get("ccParams") / 4;
+    const ior = cc.indexOfRefraction ?? 1.5;
+    const a = 1 - ior;
+    const b = 1 + ior;
+    data[off] = cc.intensity ?? 1;
+    data[off + 1] = cc.roughness ?? 0;
+    data[off + 2] = cc.bumpTextureScale ?? 1;
+    data[off + 4] = Math.pow(-a / b, 2);
+    data[off + 5] = 1 / ior;
+    data[off + 6] = a;
+    data[off + 7] = b;
+  }
+  var STAGE_FRAGMENT6, CC_HELPERS, CC_INT_TEX, CC_INT_PLAIN, CC_ROUGH_TEX, CC_ROUGH_PLAIN, CC_NORMAL_COMPUTE, CC_TEX, pbrExt4;
+  var init_clearcoat_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/clearcoat-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      STAGE_FRAGMENT6 = 2;
+      CC_HELPERS = `
+fn visibility_Kelemen(VdotH_kl: f32) -> f32 {
+return 0.25 / (VdotH_kl * VdotH_kl + 0.0000001);
+}
+fn getR0RemappedForClearCoat(f0_rc: vec3<f32>, ccA: f32, ccB: f32) -> vec3<f32> {
+let sf0 = sqrt(f0_rc);
+let num = ccA + ccB * sf0;
+let den = ccB + ccA * sf0;
+return saturate((num / den) * (num / den));
+}
+fn ccSchlick(f0: f32, cosTheta: f32) -> f32 {
+let t = 1.0 - cosTheta;
+let t2 = t * t;
+return f0 + (1.0 - f0) * (t2 * t2 * t);
+}
+`;
+      CC_INT_TEX = `material.ccParams.x * textureSample(ccIntensityTexture, ccIntensitySampler_, input.uv).r`;
+      CC_INT_PLAIN = `material.ccParams.x`;
+      CC_ROUGH_TEX = `clamp(material.ccParams.y * textureSample(ccRoughnessTexture, ccRoughnessSampler_, input.uv).g, 0.0, 1.0)`;
+      CC_ROUGH_PLAIN = `material.ccParams.y`;
+      CC_NORMAL_COMPUTE = `
+let cc_dp1 = dpdx(input.worldPos);
+let cc_dp2 = dpdy(input.worldPos);
+let cc_duv1 = dpdx(input.uv);
+let cc_duv2 = dpdy(input.uv);
+let cc_dp2perp = cross(cc_dp2, N_geom);
+let cc_dp1perp = cross(N_geom, cc_dp1);
+let cc_tFrame = cc_dp2perp * cc_duv1.x + cc_dp1perp * cc_duv2.x;
+let cc_bFrame = -(cc_dp2perp * cc_duv1.y + cc_dp1perp * cc_duv2.y);
+let cc_det = max(dot(cc_tFrame, cc_tFrame), dot(cc_bFrame, cc_bFrame));
+let cc_invmax = select(inverseSqrt(cc_det), 0.0, cc_det == 0.0);
+let cc_frame = mat3x3<f32>(cc_tFrame * cc_invmax, cc_bFrame * cc_invmax, N_geom);
+let ccNormSampleRaw = textureSample(ccNormalTexture, ccNormalSampler_, input.uv).rgb * 2.0 - 1.0;
+let ccNormScale = material.ccParams.z;
+var ccN = normalize(cc_frame * normalize(ccNormSampleRaw * vec3<f32>(ccNormScale, ccNormScale, 1.0)));
+`;
+      CC_TEX = [
+        [PBR2_CC_INT_MAP, "texture"],
+        [PBR2_CC_ROUGH_MAP, "roughnessTexture"],
+        [PBR2_CC_NORMAL_MAP, "bumpTexture"]
+      ];
+      pbrExt4 = {
+        id: "clearcoat",
+        phase: "base-tex",
+        detect(mat) {
+          const cc = mat.clearCoat;
+          if (!cc?.isEnabled) {
+            return { f: 0, f2: 0 };
+          }
+          let f2 = 0;
+          for (const [flag, key] of CC_TEX) {
+            if (cc[key]) {
+              f2 |= flag;
+            }
+          }
+          if (cc.useF0Remap === false) {
+            f2 |= PBR2_CC_F0_REMAP_OFF;
+          }
+          return { f: PBR_HAS_CLEARCOAT, f2 };
+        },
+        frag: (ctx) => createClearcoatFragment(ctx._features, ctx._features2, ctx._hasIbl, ctx._hasAnyNormal, ctx._hasSpecularAA),
+        writeUbo: writeClearcoatUBO,
+        bind(ctx, entries, b) {
+          const cc = ctx._material.clearCoat;
+          if (!cc) {
+            return b;
+          }
+          for (const [flag, key] of CC_TEX) {
+            const tex = cc[key];
+            if ((ctx._features2 & flag) !== 0 && tex) {
+              entries.push({ binding: b++, resource: tex.view });
+              entries.push({ binding: b++, resource: tex.sampler });
+            }
+          }
+          return b;
+        },
+        textures(mat, t) {
+          const cc = mat.clearCoat;
+          if (!cc) {
+            return;
+          }
+          for (const [, key] of CC_TEX) {
+            const tex = cc[key];
+            if (tex) {
+              t.push(tex);
+            }
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/sheen-fragment.ts
+  var sheen_fragment_exports = {};
+  __export(sheen_fragment_exports, {
+    createSheenFragment: () => createSheenFragment,
+    pbrExt: () => pbrExt5,
+    writeSheenUBO: () => writeSheenUBO
+  });
+  function createSheenFragment(hasSheenTexture, hasIbl = false, hasAlbedoScaling = false, hasSheenUvTx = false) {
+    let scopeVars = `var sheenDirectTerm = vec3<f32>(0.0);
+var sheenIblTerm = vec3<f32>(0.0);
+var sheenAlbedoScaling = 1.0;
+var sheenColorFinal = material.sheenParams.rgb;
+var sheenRoughnessAdjusted = material.sheenParams2.x;`;
+    if (hasSheenTexture) {
+      const gammaStmt = hasAlbedoScaling ? "sheenMapData.rgb" : "pow(sheenMapData.rgb, vec3<f32>(2.2))";
+      const sheenUvDecl = hasSheenUvTx ? "let sheenUV = vec2<f32>(dot(material.sheenUVm.xy, input.uv), dot(material.sheenUVm.zw, input.uv)) + material.sheenUVt.xy;" : "let sheenUV = input.uv;";
+      scopeVars += `
+{
+${sheenUvDecl}
+let sheenMapData = textureSample(sheenTexture_, sheenSampler_, sheenUV);
+sheenColorFinal *= ${gammaStmt};
+sheenRoughnessAdjusted *= sheenMapData.a;
+}`;
+    }
+    const intensityExpr = hasAlbedoScaling ? "material.sheenParams.a" : "material.sheenParams.a * (1.0 - dielectricF0)";
+    const slots = {
+      SV: scopeVars,
+      AD: SHEEN_DIRECT_MOD(intensityExpr)
+    };
+    if (hasIbl) {
+      slots.AI = SHEEN_IBL_MOD(intensityExpr, hasAlbedoScaling) + SHEEN_IBL_COLOR_MOD(hasAlbedoScaling);
+    } else {
+      slots.NI = SHEEN_NON_IBL_MOD;
+    }
+    const bindings = [];
+    if (hasSheenTexture) {
+      bindings.push(
+        { _name: "sheenTexture_", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT7 },
+        { _name: "sheenSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT7 }
+      );
+    }
+    const uboFields = [
+      { _name: "sheenParams", _type: "vec4<f32>" },
+      { _name: "sheenParams2", _type: "vec4<f32>" }
+    ];
+    if (hasSheenUvTx) {
+      uboFields.push({ _name: "sheenUVm", _type: "vec4<f32>" }, { _name: "sheenUVt", _type: "vec4<f32>" });
+    }
+    return {
+      _id: "sheen",
+      _dependencies: hasIbl ? ["ibl"] : void 0,
+      _uboFields: uboFields,
+      _bindings: bindings,
+      _helperFunctions: SHEEN_HELPERS,
+      _fragmentSlots: slots
+    };
+  }
+  function writeSheenUBO(data, material, offsets) {
+    const sh = material.sheen;
+    if (!sh?.isEnabled || !offsets.has("sheenParams")) {
+      return;
+    }
+    const off = offsets.get("sheenParams") / 4;
+    const color = sh.color ?? [1, 1, 1];
+    data[off] = color[0];
+    data[off + 1] = color[1];
+    data[off + 2] = color[2];
+    data[off + 3] = sh.intensity ?? 1;
+    data[off + 4] = sh.roughness ?? 0;
+    data[off + 5] = sh.texture ? 1 : 0;
+    const mOff = offsets.get("sheenUVm");
+    const tOff = offsets.get("sheenUVt");
+    if (mOff === void 0 || tOff === void 0) {
+      return;
+    }
+    const tex = sh.texture;
+    const sx = tex?.uScale ?? 1;
+    const sy = tex?.vScale ?? 1;
+    const ang = tex?.uAng ?? 0;
+    const ox = tex?.uOffset ?? 0;
+    const oy = tex?.vOffset ?? 0;
+    const mi = mOff / 4;
+    const ti = tOff / 4;
+    if (ang === 0) {
+      data[mi] = sx;
+      data[mi + 1] = 0;
+      data[mi + 2] = 0;
+      data[mi + 3] = sy;
+    } else {
+      const c = Math.cos(ang);
+      const s = Math.sin(ang);
+      data[mi] = c * sx;
+      data[mi + 1] = -s * sy;
+      data[mi + 2] = s * sx;
+      data[mi + 3] = c * sy;
+    }
+    data[ti] = ox;
+    data[ti + 1] = oy;
+    data[ti + 2] = 0;
+    data[ti + 3] = 0;
+  }
+  var STAGE_FRAGMENT7, SHEEN_HELPERS, SHEEN_DIRECT_MOD, SHEEN_IBL_MOD, SHEEN_IBL_COLOR_MOD, SHEEN_NON_IBL_MOD, pbrExt5;
+  var init_sheen_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/sheen-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      STAGE_FRAGMENT7 = 2;
+      SHEEN_HELPERS = `
+fn normalDistributionFunction_CharlieSheen(NdotH_sh: f32, alphaG_sh: f32) -> f32 {
+let invR = 1.0 / alphaG_sh;
+let cos2h = NdotH_sh * NdotH_sh;
+let sin2h = 1.0 - cos2h;
+return (2.0 + invR) * pow(sin2h, invR * 0.5) / (2.0 * 3.141592653589793);
+}
+fn visibility_Ashikhmin(NdotL_sh: f32, NdotV_sh: f32) -> f32 {
+return 1.0 / (4.0 * (NdotL_sh + NdotV_sh - NdotL_sh * NdotV_sh));
+}
+`;
+      SHEEN_DIRECT_MOD = (intensityExpr) => `
+{
+let shIntensity = ${intensityExpr};
+let shColorScaled = sheenColorFinal * shIntensity;
+let shRoughness_clamped = max(sheenRoughnessAdjusted, AA_factor_x);
+let shAlphaG = shRoughness_clamped * shRoughness_clamped + 0.0005;
+let shD = normalDistributionFunction_CharlieSheen(NdotH, shAlphaG);
+let shV = visibility_Ashikhmin(NdotL, NdotV);
+sheenDirectTerm = shColorScaled * shD * shV * NdotL * lightColor * lightAtten * material.directIntensity;
+}
+`;
+      SHEEN_IBL_MOD = (intensityExpr, albedoScaling) => `
+{
+let shIntensity_ibl = ${intensityExpr};
+let shColorScaled = sheenColorFinal * shIntensity_ibl;
+let shRoughness_ibl = sheenRoughnessAdjusted;
+let shAlphaG_ibl = shRoughness_ibl * shRoughness_ibl + 0.0005 + AA_factor_y;
+var shSpecLod = log2(cubemapDim * shAlphaG_ibl) * scene.vImageInfos.z;
+let shEnvRadiance = textureSampleLevel(iblTexture, iblSampler, R, clamp(shSpecLod, 0.0, maxLod)).rgb * material.environmentIntensity;
+let shBrdf = textureSampleLevel(brdfLUT, brdfSampler_, vec2<f32>(NdotV, shRoughness_ibl), 0.0);
+let shEnvReflectance = shColorScaled * shBrdf.b${albedoScaling ? " * seo * eho" : ""};
+sheenIblTerm = shEnvRadiance * shEnvReflectance;
+${albedoScaling ? "let shMax = max(shColorScaled.r, max(shColorScaled.g, shColorScaled.b));\nsheenAlbedoScaling = 1.0 - shMax * shBrdf.b;" : ""}
+}
+`;
+      SHEEN_IBL_COLOR_MOD = (albedoScaling) => albedoScaling ? `
+{
+color = (finalIrradiance
+      + finalRadianceScaled
+      + finalSpecularScaled
+      + directDiffuse) * sheenAlbedoScaling
+      + sheenDirectTerm
+      + sheenIblTerm
+      + emissive;
+}
+` : `
+{
+color = finalIrradiance
+      + finalRadianceScaled
+      + finalSpecularScaled
+      + directDiffuse
+      + sheenDirectTerm
+      + sheenIblTerm
+      + emissive;
+}
+`;
+      SHEEN_NON_IBL_MOD = `
+{
+color = color + sheenDirectTerm;
+}
+`;
+      pbrExt5 = {
+        id: "sheen",
+        phase: "base-tex",
+        detect(mat) {
+          const sh = mat.sheen;
+          if (!sh?.isEnabled) {
+            return { f: 0, f2: 0 };
+          }
+          let f = PBR_HAS_SHEEN;
+          let f2 = 0;
+          if (sh.texture) {
+            f |= PBR_HAS_SHEEN_TEXTURE;
+            if (sh.texture._hasTx) {
+              f2 |= PBR2_HAS_SHEEN_UV_TX;
+            }
+          }
+          if (sh.albedoScaling) {
+            f |= PBR_HAS_SHEEN_ALBEDO_SCALING;
+          }
+          return { f, f2 };
+        },
+        frag(ctx) {
+          if (!(ctx._features & PBR_HAS_SHEEN)) {
+            return null;
+          }
+          return createSheenFragment(
+            (ctx._features & PBR_HAS_SHEEN_TEXTURE) !== 0,
+            ctx._hasIbl,
+            (ctx._features & PBR_HAS_SHEEN_ALBEDO_SCALING) !== 0,
+            (ctx._features2 & PBR2_HAS_SHEEN_UV_TX) !== 0
+          );
+        },
+        writeUbo: writeSheenUBO,
+        bind(ctx, entries, b) {
+          if ((ctx._features & PBR_HAS_SHEEN_TEXTURE) === 0) {
+            return b;
+          }
+          const sh = ctx._material.sheen;
+          if (sh?.texture) {
+            entries.push({ binding: b++, resource: sh.texture.view });
+            entries.push({ binding: b++, resource: sh.texture.sampler });
+          }
+          return b;
+        },
+        textures(mat, out) {
+          const sh = mat.sheen;
+          if (sh?.texture) {
+            out.push(sh.texture);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/iridescence-fragment.ts
+  var iridescence_fragment_exports = {};
+  __export(iridescence_fragment_exports, {
+    pbrExt: () => pbrExt6,
+    writeIridescenceUBO: () => writeIridescenceUBO
+  });
+  function uvBaseExpr(features2, meshFeatures, uv2Flag) {
+    return (features2 & uv2Flag) !== 0 && (meshFeatures & IRI_MSH_HAS_UV2) !== 0 ? "input.uv2" : "input.uv";
+  }
+  function uvDecl(name, baseUv, hasTx) {
+    return hasTx ? `let ${name}=vec2<f32>(dot(material.${name}m.xy,${baseUv}),dot(material.${name}m.zw,${baseUv}))+material.${name}t.xy;` : `let ${name}=${baseUv};`;
+  }
+  function uvTransformUboFields(name) {
+    return [
+      { _name: `${name}m`, _type: "vec4<f32>" },
+      { _name: `${name}t`, _type: "vec4<f32>" }
+    ];
+  }
+  function writeUvTransform(data, offsets, name, tex) {
+    const mOff = offsets.get(`${name}m`);
+    const tOff = offsets.get(`${name}t`);
+    if (mOff === void 0 || tOff === void 0) {
+      return;
+    }
+    const mi = mOff / 4;
+    const ti = tOff / 4;
+    const sx = tex?.uScale ?? 1;
+    const sy = tex?.vScale ?? 1;
+    const ang = tex?.uAng ?? 0;
+    const ox = tex?.uOffset ?? 0;
+    const oy = tex?.vOffset ?? 0;
+    if (ang === 0) {
+      data[mi] = sx;
+      data[mi + 1] = 0;
+      data[mi + 2] = 0;
+      data[mi + 3] = sy;
+    } else {
+      const c = Math.cos(ang);
+      const s = Math.sin(ang);
+      data[mi] = c * sx;
+      data[mi + 1] = -s * sy;
+      data[mi + 2] = s * sx;
+      data[mi + 3] = c * sy;
+    }
+    data[ti] = ox;
+    data[ti + 1] = oy;
+    data[ti + 2] = 0;
+    data[ti + 3] = 0;
+  }
+  function createIridescenceFragment(features, features2, meshFeatures) {
+    if ((features2 & PBR2_HAS_IRIDESCENCE) === 0) {
+      return null;
+    }
+    const hasIntensityMap = (features2 & PBR2_HAS_IRIDESCENCE_MAP) !== 0;
+    const hasThicknessMap = (features2 & PBR2_HAS_IRIDESCENCE_THICKNESS_MAP) !== 0;
+    const hasIntensityUvTx = (features2 & PBR2_HAS_IRIDESCENCE_UV_TX) !== 0;
+    const hasThicknessUvTx = (features2 & PBR2_HAS_IRIDESCENCE_THICKNESS_UV_TX) !== 0;
+    const bindings = [];
+    const uboFields = [{ _name: "iridescenceParams", _type: "vec4<f32>" }];
+    if (hasIntensityMap) {
+      bindings.push(
+        { _name: "iridescenceTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT8 },
+        { _name: "iridescenceSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT8 }
+      );
+      if (hasIntensityUvTx) {
+        uboFields.push(...uvTransformUboFields("iridescenceUV"));
+      }
+    }
+    if (hasThicknessMap) {
+      bindings.push(
+        { _name: "iridescenceThicknessTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT8 },
+        { _name: "iridescenceThicknessSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT8 }
+      );
+      if (hasThicknessUvTx) {
+        uboFields.push(...uvTransformUboFields("iridescenceThicknessUV"));
+      }
+    }
+    const scopeVars = [];
+    if (hasIntensityMap) {
+      scopeVars.push(uvDecl("iridescenceUV", uvBaseExpr(features2, meshFeatures, PBR2_HAS_IRIDESCENCE_UV2), hasIntensityUvTx));
+    }
+    if (hasThicknessMap) {
+      scopeVars.push(uvDecl("iridescenceThicknessUV", uvBaseExpr(features2, meshFeatures, PBR2_HAS_IRIDESCENCE_THICKNESS_UV2), hasThicknessUvTx));
+    }
+    const intensity = hasIntensityMap ? "material.iridescenceParams.x*textureSample(iridescenceTexture,iridescenceSampler_,iridescenceUV).r" : "material.iridescenceParams.x";
+    const thickness = hasThicknessMap ? "mix(material.iridescenceParams.z,material.iridescenceParams.w,textureSample(iridescenceThicknessTexture,iridescenceThicknessSampler_,iridescenceThicknessUV).g)" : "material.iridescenceParams.w";
+    return {
+      _id: "iridescence",
+      _dependencies: (features & (PBR_HAS_METALLIC_REFLECTANCE_MAP | PBR_HAS_REFLECTANCE_MAP)) !== 0 || (features2 & PBR2_HAS_REFLECTANCE_FACTORS) !== 0 ? ["reflectance"] : void 0,
+      _uboFields: uboFields,
+      _bindings: bindings,
+      _helperFunctions: IRIDESCENCE_HELPERS,
+      _fragmentSlots: {
+        ...scopeVars.length ? { SV: scopeVars.join("\n") } : void 0,
+        MF: `{
+let iriIntensity=clamp(${intensity},0.0,1.0);
+let iriThickness=max(${thickness},0.0);
+let iriF0=iri_eval(1.0,max(material.iridescenceParams.y,1.0001),NdotV,iriThickness,colorF0);
+colorF0=mix(colorF0,iriF0,iriIntensity);
+}`
+      }
+    };
+  }
+  function writeIridescenceUBO(data, material, offsets) {
+    const iri = material.iridescence;
+    if (!iri?.isEnabled || !offsets.has("iridescenceParams")) {
+      return;
+    }
+    const off = offsets.get("iridescenceParams") / 4;
+    data[off] = iri.intensity ?? 1;
+    data[off + 1] = iri.indexOfRefraction ?? 1.3;
+    data[off + 2] = iri.minimumThickness ?? 100;
+    data[off + 3] = iri.maximumThickness ?? 400;
+    writeUvTransform(data, offsets, "iridescenceUV", iri.texture);
+    writeUvTransform(data, offsets, "iridescenceThicknessUV", iri.thicknessTexture);
+  }
+  var STAGE_FRAGMENT8, PBR2_HAS_IRIDESCENCE_UV_TX, PBR2_HAS_IRIDESCENCE_THICKNESS_UV_TX, PBR2_HAS_IRIDESCENCE_UV2, PBR2_HAS_IRIDESCENCE_THICKNESS_UV2, IRI_MSH_HAS_UV2, IRIDESCENCE_HELPERS, IRI_TEX, pbrExt6;
+  var init_iridescence_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/iridescence-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      STAGE_FRAGMENT8 = 2;
+      PBR2_HAS_IRIDESCENCE_UV_TX = 1 << 20;
+      PBR2_HAS_IRIDESCENCE_THICKNESS_UV_TX = 1 << 21;
+      PBR2_HAS_IRIDESCENCE_UV2 = 1 << 22;
+      PBR2_HAS_IRIDESCENCE_THICKNESS_UV2 = 1 << 23;
+      IRI_MSH_HAS_UV2 = 1 << 7;
+      IRIDESCENCE_HELPERS = `const IRI_XYZ_TO_REC709:mat3x3<f32>=mat3x3<f32>(
+3.2404542,-0.9692660,0.0556434,
+-1.5371385,1.8760108,-0.2040259,
+-0.4985314,0.0415560,1.0572252);
+fn iri_square3(x:vec3<f32>)->vec3<f32>{return x*x;}
+fn iri_iorFromAirF0(f0:vec3<f32>)->vec3<f32>{
+let s=sqrt(clamp(f0,vec3<f32>(0.0),vec3<f32>(0.9999)));
+return (vec3<f32>(1.0)+s)/(vec3<f32>(1.0)-s);
+}
+fn iri_r0FromIor3(iorT:vec3<f32>,iorI:f32)->vec3<f32>{return iri_square3((iorT-vec3<f32>(iorI))/(iorT+vec3<f32>(iorI)));}
+fn iri_r0FromIor(iorT:f32,iorI:f32)->f32{let r=(iorT-iorI)/(iorT+iorI);return r*r;}
+fn iri_fresSchlick(c:f32,F0:vec3<f32>,F90:vec3<f32>)->vec3<f32>{
+let t=1.0-c;
+let t2=t*t;
+return F0+(F90-F0)*(t2*t2*t);
+}
+fn iri_evalSensitivity(opd:f32,shift:vec3<f32>)->vec3<f32>{
+let phase=6.283185307179586*opd*1.0e-9;
+let val=vec3<f32>(5.4856e-13,4.4201e-13,5.2481e-13);
+let pos=vec3<f32>(1.6810e+06,1.7953e+06,2.2084e+06);
+let vr=vec3<f32>(4.3278e+09,9.3046e+09,6.6121e+09);
+var xyz=val*sqrt(6.283185307179586*vr)*cos(pos*phase+shift)*exp(-(phase*phase)*vr);
+xyz.x=xyz.x+9.7470e-14*sqrt(6.283185307179586*4.5282e+09)*cos(2.2399e+06*phase+shift.x)*exp(-4.5282e+09*phase*phase);
+xyz=xyz/1.0685e-7;
+return IRI_XYZ_TO_REC709*xyz;
+}
+fn iri_eval(outsideIor:f32,eta2:f32,cosTheta1:f32,thickness:f32,baseF0:vec3<f32>)->vec3<f32>{
+let iridescenceIor=mix(outsideIor,eta2,smoothstep(0.0,0.03,thickness));
+let eta=outsideIor/iridescenceIor;
+let sinTheta2Sq=eta*eta*(1.0-cosTheta1*cosTheta1);
+let cosTheta2Sq=1.0-sinTheta2Sq;
+if(cosTheta2Sq<0.0){return vec3<f32>(1.0);}
+let cosTheta2=sqrt(cosTheta2Sq);
+let r0=iri_r0FromIor(iridescenceIor,outsideIor);
+let r12=iri_fresSchlick(cosTheta1,vec3<f32>(r0),vec3<f32>(1.0)).x;
+let t121=1.0-r12;
+var phi12=0.0;
+if(iridescenceIor<outsideIor){phi12=3.141592653589793;}
+let phi21=3.141592653589793-phi12;
+let baseIor=iri_iorFromAirF0(baseF0);
+let r1=iri_r0FromIor3(baseIor,iridescenceIor);
+let r23=iri_fresSchlick(cosTheta2,r1,vec3<f32>(1.0));
+var phi23=vec3<f32>(0.0);
+if(baseIor.x<iridescenceIor){phi23.x=3.141592653589793;}
+if(baseIor.y<iridescenceIor){phi23.y=3.141592653589793;}
+if(baseIor.z<iridescenceIor){phi23.z=3.141592653589793;}
+let opd=2.0*iridescenceIor*thickness*cosTheta2;
+let phi=vec3<f32>(phi21)+phi23;
+let r123=clamp(vec3<f32>(r12)*r23,vec3<f32>(1e-5),vec3<f32>(0.9999));
+let smallR123=sqrt(r123);
+let rs=(t121*t121)*r23/(vec3<f32>(1.0)-r123);
+var outI=vec3<f32>(r12)+rs;
+var cm=rs-vec3<f32>(t121);
+for(var m:i32=1;m<=2;m=m+1){
+cm=cm*smallR123;
+outI=outI+cm*(2.0*iri_evalSensitivity(f32(m)*opd,f32(m)*phi));
+}
+return max(outI,vec3<f32>(0.0));
+}`;
+      IRI_TEX = [
+        [PBR2_HAS_IRIDESCENCE_MAP, "texture"],
+        [PBR2_HAS_IRIDESCENCE_THICKNESS_MAP, "thicknessTexture"]
+      ];
+      pbrExt6 = {
+        id: "iridescence",
+        phase: "base-tex",
+        detect(mat) {
+          const iri = mat.iridescence;
+          if (!iri?.isEnabled) {
+            return { f: 0, f2: 0 };
+          }
+          let f2 = PBR2_HAS_IRIDESCENCE;
+          if (iri.texture) {
+            f2 |= PBR2_HAS_IRIDESCENCE_MAP;
+            if (iri.texture._hasTx) {
+              f2 |= PBR2_HAS_IRIDESCENCE_UV_TX;
+            }
+            if (iri.texture._texCoord === 1) {
+              f2 |= PBR2_HAS_IRIDESCENCE_UV2;
+            }
+          }
+          if (iri.thicknessTexture) {
+            f2 |= PBR2_HAS_IRIDESCENCE_THICKNESS_MAP;
+            if (iri.thicknessTexture._hasTx) {
+              f2 |= PBR2_HAS_IRIDESCENCE_THICKNESS_UV_TX;
+            }
+            if (iri.thicknessTexture._texCoord === 1) {
+              f2 |= PBR2_HAS_IRIDESCENCE_THICKNESS_UV2;
+            }
+          }
+          return { f: 0, f2 };
+        },
+        frag: (ctx) => createIridescenceFragment(ctx._features, ctx._features2, ctx._meshFeatures),
+        writeUbo: writeIridescenceUBO,
+        bind(ctx, entries, b) {
+          const iri = ctx._material.iridescence;
+          if (!iri) {
+            return b;
+          }
+          for (const [flag, key] of IRI_TEX) {
+            const tex = iri[key];
+            if ((ctx._features2 & flag) !== 0 && tex) {
+              entries.push({ binding: b++, resource: tex.view });
+              entries.push({ binding: b++, resource: tex.sampler });
+            }
+          }
+          return b;
+        },
+        textures(mat, t) {
+          const iri = mat.iridescence;
+          if (!iri) {
+            return;
+          }
+          for (const [, key] of IRI_TEX) {
+            const tex = iri[key];
+            if (tex) {
+              t.push(tex);
+            }
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/subsurface-fragment.ts
+  var subsurface_fragment_exports = {};
+  __export(subsurface_fragment_exports, {
+    createSubsurfaceFragment: () => createSubsurfaceFragment,
+    pbrExt: () => pbrExt7,
+    writeSubsurfaceUBO: () => writeSubsurfaceUBO
+  });
+  function makeThicknessBlock(hasThicknessMap, useGltfChannel) {
+    const chan = useGltfChannel ? "g" : "r";
+    const texSample = hasThicknessMap ? `let thicknessSample = textureSample(thicknessTexture_, thicknessSampler_, input.uv).${chan};` : `let thicknessSample = 1.0;`;
+    return `${texSample}
+let ssThickness = max(material.subsurfaceParams.y + thicknessSample * material.subsurfaceParams.z, 0.000001);
+let ssTranslucencyColor = material.subsurfaceParams3.rgb;
+let ssDiffDist = material.subsurfaceParams2.rgb;
+ssIntensity = material.subsurfaceParams.x;
+ssTransmittance = transmittanceBRDF_Burley(ssTranslucencyColor, ssDiffDist, ssThickness) * ssIntensity;`;
+  }
+  function createSubsurfaceFragment(hasThicknessMap, hasIbl, useGltfThicknessChannel) {
+    const bindings = hasThicknessMap ? [
+      { _name: "thicknessTexture_", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT9 },
+      { _name: "thicknessSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT9 }
+    ] : [];
+    const slots = {
+      SV: SS_SCOPE_VARS,
+      AT: makeThicknessBlock(hasThicknessMap, useGltfThicknessChannel),
+      AD: SS_DIRECT
+    };
+    if (hasIbl) {
+      slots.AI = SS_IBL_MOD;
+    } else {
+      slots.NI = SS_NO_IBL_MOD;
+    }
+    const deps = [];
+    if (hasIbl) {
+      deps.push("ibl");
+    }
+    return {
+      _id: "subsurface",
+      _dependencies: deps.length > 0 ? deps : void 0,
+      _bindings: bindings.length > 0 ? bindings : void 0,
+      _uboFields: [
+        { _name: "subsurfaceParams", _type: "vec4<f32>" },
+        { _name: "subsurfaceParams2", _type: "vec4<f32>" },
+        { _name: "subsurfaceParams3", _type: "vec4<f32>" }
+      ],
+      _helperFunctions: SS_HELPERS,
+      _fragmentSlots: slots
+    };
+  }
+  function writeSubsurfaceUBO(data, ss, offsets) {
+    const trans = ss.translucency;
+    const thick = ss.thickness;
+    const off = offsets.get("subsurfaceParams") / 4;
+    data[off] = trans.intensity ?? 1;
+    const minThick = thick?.min ?? 0;
+    const maxThick = thick?.max ?? 1;
+    data[off + 1] = minThick;
+    data[off + 2] = maxThick - minThick;
+    const off2 = offsets.get("subsurfaceParams2") / 4;
+    const dd = trans.diffusionDistance ?? [1, 1, 1];
+    data[off2] = dd[0];
+    data[off2 + 1] = dd[1];
+    data[off2 + 2] = dd[2];
+    const off3 = offsets.get("subsurfaceParams3") / 4;
+    const tc = trans.color ?? [1, 1, 1];
+    data[off3] = tc[0];
+    data[off3 + 1] = tc[1];
+    data[off3 + 2] = tc[2];
+  }
+  var SS_HELPERS, SS_SCOPE_VARS, SS_DIRECT, SS_IBL_MOD, SS_NO_IBL_MOD, STAGE_FRAGMENT9, pbrExt7;
+  var init_subsurface_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/subsurface-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      SS_HELPERS = `
+fn transmittanceBRDF_Burley(tintColor: vec3<f32>, diffusionDistance: vec3<f32>, thickness: f32) -> vec3<f32> {
+let S = 1.0 / max(vec3<f32>(0.000001), diffusionDistance);
+let temp = exp((-0.333333333 * thickness) * S);
+return tintColor * 0.25 * (temp * temp * temp + 3.0 * temp);
+}
+fn computeWrappedDiffuseNdotL(NdotL: f32, w: f32) -> f32 {
+let t = 1.0 + w;
+let invt2 = 1.0 / (t * t);
+return saturate((NdotL + w) * invt2);
+}
+`;
+      SS_SCOPE_VARS = `var translucencyDirect = vec3<f32>(0.0);
+var ssTransmittance = vec3<f32>(0.0);
+var ssIntensity = 0.0;`;
+      SS_DIRECT = `{
+let NdotLU = dot(N, L);
+if (NdotLU < 0.0) {
+let wrapNdotL = computeWrappedDiffuseNdotL(abs(NdotLU), 0.02);
+translucencyDirect += (1.0 / PI) * wrapNdotL * ssTransmittance * lightAtten * lightColor * material.directIntensity;
+}
+}`;
+      SS_IBL_MOD = `{
+let N_back = -N_env;
+let envIrrBack = (scene.vSphericalL00.rgb
+  + scene.vSphericalL1_1.rgb * N_back.y + scene.vSphericalL10.rgb * N_back.z + scene.vSphericalL11.rgb * N_back.x
+  + scene.vSphericalL2_2.rgb * (N_back.y * N_back.x) + scene.vSphericalL2_1.rgb * (N_back.y * N_back.z)
+  + scene.vSphericalL20.rgb * (3.0 * N_back.z * N_back.z - 1.0) + scene.vSphericalL21.rgb * (N_back.z * N_back.x)
+  + scene.vSphericalL22.rgb * (N_back.x * N_back.x - N_back.y * N_back.y)) * material.environmentIntensity;
+let refractionIrradiance = envIrrBack * ssTransmittance;
+color -= finalIrradiance * ssIntensity;
+color += refractionIrradiance * occlusion;
+color -= directDiffuse * ssIntensity;
+color += translucencyDirect * occlusion;
+}`;
+      SS_NO_IBL_MOD = `color -= directDiffuse * ssIntensity;
+color += translucencyDirect;`;
+      STAGE_FRAGMENT9 = 2;
+      pbrExt7 = {
+        id: "subsurface",
+        phase: "fragment",
+        detect(mat) {
+          const m = mat;
+          if (!m.subsurface?.translucency) {
+            return { f: 0, f2: 0 };
+          }
+          let f = PBR_HAS_SUBSURFACE;
+          let f2 = 0;
+          if (m.subsurface.thickness?.texture) {
+            f |= PBR_HAS_THICKNESS_MAP;
+          }
+          if (m.subsurface.thickness?.useGlTFChannel) {
+            f2 |= PBR2_HAS_THICKNESS_GLTF_CHANNEL;
+          }
+          return { f, f2 };
+        },
+        frag(ctx) {
+          if (!(ctx._features & PBR_HAS_SUBSURFACE)) {
+            return null;
+          }
+          return createSubsurfaceFragment((ctx._features & PBR_HAS_THICKNESS_MAP) !== 0, ctx._hasIbl, (ctx._features2 & PBR2_HAS_THICKNESS_GLTF_CHANNEL) !== 0);
+        },
+        writeUbo(data, mat, offsets) {
+          const m = mat;
+          if (m.subsurface?.translucency && offsets.has("subsurfaceParams")) {
+            writeSubsurfaceUBO(data, m.subsurface, offsets);
+          }
+        },
+        bind(ctx, entries, b) {
+          if ((ctx._features & PBR_HAS_THICKNESS_MAP) !== 0) {
+            const tex = ctx._material.subsurface?.thickness?.texture;
+            if (tex) {
+              entries.push({ binding: b++, resource: tex.view });
+              entries.push({ binding: b++, resource: tex.sampler });
+            }
+          }
+          return b;
+        },
+        textures(mat, out) {
+          const t = mat.subsurface?.thickness?.texture;
+          if (t) {
+            out.push(t);
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/refraction-dispersion-wgsl.ts
+  var refraction_dispersion_wgsl_exports = {};
+  __export(refraction_dispersion_wgsl_exports, {
+    DISPERSION_SAMPLE_WGSL: () => DISPERSION_SAMPLE_WGSL
+  });
+  var DISPERSION_SAMPLE_WGSL;
+  var init_refraction_dispersion_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/refraction-dispersion-wgsl.ts"() {
+      "use strict";
+      DISPERSION_SAMPLE_WGSL = `let eta=material.refractionParams.y;
+let realIOR=1.0/eta;
+let spread=0.04*material.volumeParams.w*(realIOR-1.0);
+let etaR=1.0/(realIOR-spread);
+let etaB=1.0/(realIOR+spread);
+let cpR=scene.viewProjection*vec4<f32>(input.worldPos+refract(-V,N,etaR)*th,1.0);
+let cpG=scene.viewProjection*vec4<f32>(input.worldPos+refract(-V,N,eta)*th,1.0);
+let cpB=scene.viewProjection*vec4<f32>(input.worldPos+refract(-V,N,etaB)*th,1.0);
+let uvR=(cpR.xy/cpR.w)*vec2<f32>(0.5,-0.5)+vec2<f32>(0.5,0.5);
+let uvG=(cpG.xy/cpG.w)*vec2<f32>(0.5,-0.5)+vec2<f32>(0.5,0.5);
+let uvB=(cpB.xy/cpB.w)*vec2<f32>(0.5,-0.5)+vec2<f32>(0.5,0.5);
+let er=vec3<f32>(textureSampleLevel(refractionTexture,refractionSampler_,uvR,lv).r,textureSampleLevel(refractionTexture,refractionSampler_,uvG,lv).g,textureSampleLevel(refractionTexture,refractionSampler_,uvB,lv).b)*material.environmentIntensity;`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/refraction-rtt-fragment.ts
+  function makeRefractionMod(hasVolume, hasMap, hasThicknessMap, useGltfThicknessChannel, hasDispersion, dispersionSampleWgsl) {
+    const thicknessScaleLine = hasVolume || hasThicknessMap ? `let ts=max(length(mesh.world[0].xyz),max(length(mesh.world[1].xyz),length(mesh.world[2].xyz)));` : ``;
+    const thicknessLine = hasThicknessMap ? `let ths=textureSample(thicknessTexture_,thicknessSampler_,input.uv).${useGltfThicknessChannel ? "g" : "r"};
+let th=(material.thicknessParams.x+ths*material.thicknessParams.y)*ts;` : hasVolume ? `let th=material.refractionParams.z*ts;` : `let th=material.refractionParams.z;`;
+    const textureLine = hasMap ? `let ri=material.refractionParams.x*textureSample(refractionMapTexture,refractionMapSampler,input.uv).r;` : `let ri=material.refractionParams.x;`;
+    const absorptionLine = hasVolume ? `let ab=exp(material.volumeParams.rgb*th);` : ``;
+    const refractionLine = hasVolume ? `let fr=er*surfaceAlbedo*(ri*ab)*(vec3<f32>(1.0)-colorSpecularEnvReflectance.rgb);` : `let fr=er*surfaceAlbedo*ri*(vec3<f32>(1.0)-colorSpecularEnvReflectance.rgb);`;
+    const sampleLines = hasDispersion && dispersionSampleWgsl ? dispersionSampleWgsl : `let rd=refract(-V,N,material.refractionParams.y);
+let cp=scene.viewProjection*vec4<f32>(input.worldPos+rd*th,1.0);
+let ruv=(cp.xy/cp.w)*vec2<f32>(0.5,-0.5)+vec2<f32>(0.5,0.5);
+let er=textureSampleLevel(refractionTexture,refractionSampler_,ruv,lv).rgb*material.environmentIntensity;`;
+    return `{
+${thicknessScaleLine}
+${textureLine}
+${thicknessLine}
+let ro=1.0-ri;
+let ra=mix(alphaG,0.0,clamp(material.refractionParams.w*3.0-2.0,0.0,1.0));
+let lv=clamp(log2(f32(textureDimensions(refractionTexture).x)*ra)-4.0,0.0,f32(textureNumLevels(refractionTexture)-1));
+${sampleLines}
+${absorptionLine}
+${refractionLine}
+color=finalIrradiance*ro*ro+finalRadianceScaled+finalSpecularScaled+directDiffuse*ro*ro+fr+emissive;
+}`;
+  }
+  function createRefractionRttFragment(hasVolume, hasMap, hasThicknessMap, useGltfThicknessChannel, linearImageProcessing, hasDispersion, dispersionSampleWgsl) {
+    const uboFields = [{ _name: "refractionParams", _type: "vec4<f32>" }];
+    if (hasVolume) {
+      uboFields.push({ _name: "volumeParams", _type: "vec4<f32>" });
+    }
+    if (hasThicknessMap) {
+      uboFields.push({ _name: "thicknessParams", _type: "vec4<f32>" });
+    }
+    const bindings = [
+      { _name: "refractionTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: 2 },
+      { _name: "refractionSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: 2 }
+    ];
+    if (hasMap) {
+      bindings.push(
+        { _name: "refractionMapTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: 2 },
+        { _name: "refractionMapSampler", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: 2 }
+      );
+    }
+    if (hasThicknessMap) {
+      bindings.push(
+        { _name: "thicknessTexture_", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: 2 },
+        { _name: "thicknessSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: 2 }
+      );
+    }
+    return {
+      _id: "refraction",
+      _dependencies: ["ibl"],
+      _uboFields: uboFields,
+      _bindings: bindings,
+      _fragmentSlots: linearImageProcessing ? { AI: makeRefractionMod(hasVolume, hasMap, hasThicknessMap, useGltfThicknessChannel, hasDispersion, dispersionSampleWgsl), ...LINEAR_IMAGE_PROCESSING_SLOTS } : { AI: makeRefractionMod(hasVolume, hasMap, hasThicknessMap, useGltfThicknessChannel, hasDispersion, dispersionSampleWgsl) }
+    };
+  }
+  function writeRefractionUBO(data, mat, offsets) {
+    const ss = mat.subsurface;
+    const refr = ss?.refraction;
+    if (!refr) {
+      return;
+    }
+    const off = offsets.get("refractionParams");
+    if (off === void 0) {
+      return;
+    }
+    const o = off / 4;
+    data[o] = refr.intensity ?? 0;
+    const ior = refr.indexOfRefraction ?? 1.5;
+    const thick = ss.thickness;
+    data[o + 1] = 1 / (refr.useThicknessAsDepth && thick?.max ? ior : 1);
+    data[o + 2] = refr.useThicknessAsDepth ? thick?.max ?? 0 : 1;
+    data[o + 3] = 1 / ior;
+    const vOff = offsets.get("volumeParams");
+    if (vOff !== void 0) {
+      const vo = vOff / 4;
+      const tint = ss.tint?.color ?? [1, 1, 1];
+      const dist = Math.max(ss.tint?.atDistance ?? 1, 1e-4);
+      data[vo] = Math.log(Math.max(tint[0], 1e-6)) / dist;
+      data[vo + 1] = Math.log(Math.max(tint[1], 1e-6)) / dist;
+      data[vo + 2] = Math.log(Math.max(tint[2], 1e-6)) / dist;
+      data[vo + 3] = refr.dispersion ?? 0;
+    }
+    const tOff = offsets.get("thicknessParams");
+    if (tOff !== void 0) {
+      const to = tOff / 4;
+      const min = thick?.min ?? 0;
+      const max = thick?.max ?? 1;
+      data[to] = min;
+      data[to + 1] = max - min;
+    }
+  }
+  function makeRefractionRttExt(dispersionSampleWgsl) {
+    return {
+      id: "refraction",
+      phase: "fragment",
+      detect(mat) {
+        const m = mat;
+        const ss = m.subsurface;
+        const refr = ss?.refraction;
+        const linearImageProcessing = m._linearImageProcessing ? PBR2_LINEAR_IMAGE_PROCESSING : 0;
+        const intensity = m.transmissive ? refr?.intensity ?? 0 : 0;
+        if (intensity <= 0) {
+          return { f: 0, f2: linearImageProcessing };
+        }
+        let f = 0;
+        let f2 = linearImageProcessing | PBR2_HAS_REFRACTION;
+        if (refr?.texture) {
+          f2 |= PBR2_HAS_REFRACTION_MAP;
+        }
+        if (ss?.thickness?.texture) {
+          f |= PBR_HAS_THICKNESS_MAP;
+        }
+        if (ss?.thickness?.useGlTFChannel) {
+          f2 |= PBR2_HAS_THICKNESS_GLTF_CHANNEL;
+        }
+        if (ss?.tint?.atDistance !== void 0) {
+          f2 |= PBR2_HAS_VOLUME;
+          if (refr?.dispersion) {
+            f2 |= PBR2_HAS_DISPERSION;
+          }
+        }
+        return { f, f2 };
+      },
+      frag(ctx) {
+        const linearImageProcessing = (ctx._features2 & PBR2_LINEAR_IMAGE_PROCESSING) !== 0;
+        if (!(ctx._features2 & PBR2_HAS_REFRACTION)) {
+          return linearImageProcessing ? { _id: "linear", _fragmentSlots: LINEAR_IMAGE_PROCESSING_SLOTS } : null;
+        }
+        return createRefractionRttFragment(
+          (ctx._features2 & PBR2_HAS_VOLUME) !== 0,
+          (ctx._features2 & PBR2_HAS_REFRACTION_MAP) !== 0,
+          (ctx._features & PBR_HAS_THICKNESS_MAP) !== 0,
+          (ctx._features2 & PBR2_HAS_THICKNESS_GLTF_CHANNEL) !== 0,
+          linearImageProcessing,
+          (ctx._features2 & PBR2_HAS_DISPERSION) !== 0,
+          dispersionSampleWgsl
+        );
+      },
+      writeUbo(data, mat, offsets) {
+        writeRefractionUBO(data, mat, offsets);
+      },
+      bind(ctx, entries, b) {
+        if (!(ctx._features2 & PBR2_HAS_REFRACTION)) {
+          return b;
+        }
+        const texture = ctx._refractionTexture;
+        if (!texture) {
+          throw new Error("PBR transmission requires a frame-graph refraction texture.");
+        }
+        entries.push({ binding: b++, resource: texture.view });
+        entries.push({ binding: b++, resource: texture.sampler });
+        if ((ctx._features2 & PBR2_HAS_REFRACTION_MAP) !== 0) {
+          const map = ctx._material.subsurface?.refraction?.texture;
+          entries.push({ binding: b++, resource: map.view });
+          entries.push({ binding: b++, resource: getTrilinearAnisotropicSampler(ctx._engine) });
+        }
+        if ((ctx._features & PBR_HAS_THICKNESS_MAP) !== 0) {
+          const thickness = ctx._material.subsurface?.thickness?.texture;
+          entries.push({ binding: b++, resource: thickness.view });
+          entries.push({ binding: b++, resource: thickness.sampler });
+        }
+        return b;
+      },
+      textures(mat, out) {
+        const tex = mat.subsurface?.refraction?.texture;
+        if (tex) {
+          out.push(tex);
+        }
+        const thickness = mat.subsurface?.thickness?.texture;
+        if (thickness) {
+          out.push(thickness);
+        }
+      }
+    };
+  }
+  var LINEAR_IMAGE_PROCESSING_SLOTS;
+  var init_refraction_rtt_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/refraction-rtt-fragment.ts"() {
+      "use strict";
+      init_trilinear_anisotropic_sampler();
+      init_pbr_flag_bits();
+      LINEAR_IMAGE_PROCESSING_SLOTS = { NI: `if(scene.vImageInfos.w>=0.0){`, BC: `}` };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-transmission-ext.ts
+  var pbr_transmission_ext_exports = {};
+  __export(pbr_transmission_ext_exports, {
+    registerPbrTransmission: () => registerPbrTransmission
+  });
+  function registerPbrTransmission(scene, engine, register, dispersionSampleWgsl) {
+    enableSceneTransmission(scene, engine);
+    register(makeRefractionRttExt(dispersionSampleWgsl));
+  }
+  var init_pbr_transmission_ext = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-transmission-ext.ts"() {
+      "use strict";
+      init_transmission();
+      init_refraction_rtt_fragment();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-refraction.ts
+  var pbr_refraction_exports = {};
+  __export(pbr_refraction_exports, {
+    registerPbrRefraction: () => registerPbrRefraction
+  });
+  async function registerPbrRefraction(scene, engine, register) {
+    let dispersionSampleWgsl;
+    for (const mesh of scene.meshes) {
+      const refr = mesh.material?.subsurface?.refraction;
+      if (refr?.dispersion) {
+        dispersionSampleWgsl = (await Promise.resolve().then(() => (init_refraction_dispersion_wgsl(), refraction_dispersion_wgsl_exports))).DISPERSION_SAMPLE_WGSL;
+        break;
+      }
+    }
+    const mod = await Promise.resolve().then(() => (init_pbr_transmission_ext(), pbr_transmission_ext_exports));
+    mod.registerPbrTransmission(scene, engine, register, dispersionSampleWgsl);
+  }
+  var init_pbr_refraction = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-refraction.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/emissive-fragment.ts
+  var emissive_fragment_exports = {};
+  __export(emissive_fragment_exports, {
+    createEmissiveColorFragment: () => createEmissiveColorFragment,
+    pbrExt: () => pbrExt8,
+    writeEmissiveUBO: () => writeEmissiveUBO
+  });
+  function createEmissiveColorFragment(hasEmissiveTexture) {
+    return {
+      _id: "emissive-color",
+      _uboFields: [
+        { _name: "emissiveColor", _type: "vec3<f32>" },
+        { _name: "_emissiveColorPad", _type: "f32" }
+      ],
+      _fragmentSlots: {
+        AT: hasEmissiveTexture ? `emissive=material.emissiveColor*textureSample(emissiveTexture,emissiveSampler,input.uv).rgb;` : `emissive=material.emissiveColor;`
+      }
+    };
+  }
+  function writeEmissiveUBO(data, material, offsets) {
+    if (!material.emissiveColor || !offsets.has("emissiveColor")) {
+      return;
+    }
+    const off = offsets.get("emissiveColor") / 4;
+    data[off] = material.emissiveColor[0];
+    data[off + 1] = material.emissiveColor[1];
+    data[off + 2] = material.emissiveColor[2];
+  }
+  var pbrExt8;
+  var init_emissive_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/emissive-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      pbrExt8 = {
+        id: "emissive-color",
+        phase: "fragment",
+        frag(ctx) {
+          if (!(ctx._features & PBR_HAS_EMISSIVE_COLOR)) {
+            return null;
+          }
+          return createEmissiveColorFragment((ctx._features & PBR_HAS_EMISSIVE) !== 0);
+        },
+        writeUbo: writeEmissiveUBO
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/unlit-fragment.ts
+  var unlit_fragment_exports = {};
+  __export(unlit_fragment_exports, {
+    createUnlitFragment: () => createUnlitFragment,
+    pbrExt: () => pbrExt9,
+    writeUnlitUBO: () => writeUnlitUBO
+  });
+  function createUnlitFragment(hasIbl) {
+    const assign = `color = baseColor * material.unlitColor;`;
+    return {
+      _id: "unlit",
+      _dependencies: hasIbl ? ["ibl"] : void 0,
+      _uboFields: [
+        { _name: "unlitColor", _type: "vec3<f32>" },
+        { _name: "_unlitColorPad", _type: "f32" }
+      ],
+      _fragmentSlots: hasIbl ? { AI: assign } : { NI: assign }
+    };
+  }
+  function writeUnlitUBO(data, material, offsets) {
+    if (!material.unlit || !offsets.has("unlitColor")) {
+      return;
+    }
+    const off = offsets.get("unlitColor") / 4;
+    const tint = material.unlitColor ?? [1, 1, 1];
+    data[off] = tint[0];
+    data[off + 1] = tint[1];
+    data[off + 2] = tint[2];
+  }
+  var pbrExt9;
+  var init_unlit_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/unlit-fragment.ts"() {
+      "use strict";
+      init_pbr_flag_bits();
+      pbrExt9 = {
+        id: "unlit",
+        phase: "fragment",
+        detect(mat) {
+          return mat.unlit ? { f: 0, f2: PBR2_HAS_UNLIT } : { f: 0, f2: 0 };
+        },
+        frag(ctx) {
+          if (!(ctx._features2 & PBR2_HAS_UNLIT)) {
+            return null;
+          }
+          return createUnlitFragment(ctx._hasIbl);
+        },
+        writeUbo: writeUnlitUBO
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/skeleton-fragment.ts
+  var skeleton_fragment_exports = {};
+  __export(skeleton_fragment_exports, {
+    createSkeletonFragment: () => createSkeletonFragment,
+    pbrExt: () => pbrExt10
+  });
+  function makeSkinningCode(has8Bones) {
+    let code = `var influence: mat4x4<f32> = readMatrixFromRawSampler(boneSampler, f32(joints[0])) * weights[0];
+influence = influence + readMatrixFromRawSampler(boneSampler, f32(joints[1])) * weights[1];
+influence = influence + readMatrixFromRawSampler(boneSampler, f32(joints[2])) * weights[2];
+influence = influence + readMatrixFromRawSampler(boneSampler, f32(joints[3])) * weights[3];`;
+    if (has8Bones) {
+      code += `
+influence = influence + readMatrixFromRawSampler(boneSampler, f32(joints1[0])) * weights1[0];
+influence = influence + readMatrixFromRawSampler(boneSampler, f32(joints1[1])) * weights1[1];
+influence = influence + readMatrixFromRawSampler(boneSampler, f32(joints1[2])) * weights1[2];
+influence = influence + readMatrixFromRawSampler(boneSampler, f32(joints1[3])) * weights1[3];`;
+    }
+    code += `
+finalWorld = mesh.world * influence;`;
+    return code;
+  }
+  function createSkeletonFragment(has8Bones) {
+    return {
+      _id: "skeleton",
+      _vertexAttributes: [
+        { _name: "joints", _type: "vec4<u32>", _gpuFormat: "uint32x4", _arrayStride: 16 },
+        { _name: "weights", _type: "vec4<f32>", _gpuFormat: "float32x4", _arrayStride: 16 },
+        ...has8Bones ? [
+          { _name: "joints1", _type: "vec4<u32>", _gpuFormat: "uint32x4", _arrayStride: 16 },
+          { _name: "weights1", _type: "vec4<f32>", _gpuFormat: "float32x4", _arrayStride: 16 }
+        ] : []
+      ],
+      _vertexBindings: [
+        { _name: "boneSampler", _type: { _kind: "texture", _textureType: "texture_2d<f32>", _sampleType: "unfilterable-float" }, _visibility: STAGE_VERTEX3 }
+      ],
+      _vertexHelperFunctions: SKELETON_HELPERS,
+      _vertexSlots: {
+        VW: makeSkinningCode(has8Bones)
+      }
+    };
+  }
+  var STAGE_VERTEX3, SKELETON_HELPERS, pbrExt10;
+  var init_skeleton_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/skeleton-fragment.ts"() {
+      "use strict";
+      init_mesh_features();
+      STAGE_VERTEX3 = 1;
+      SKELETON_HELPERS = `
+fn readMatrixFromRawSampler(smp: texture_2d<f32>, index: f32) -> mat4x4<f32> {
+let offset = i32(index) * 4;
+let m0 = textureLoad(smp, vec2<i32>(offset + 0, 0), 0);
+let m1 = textureLoad(smp, vec2<i32>(offset + 1, 0), 0);
+let m2 = textureLoad(smp, vec2<i32>(offset + 2, 0), 0);
+let m3 = textureLoad(smp, vec2<i32>(offset + 3, 0), 0);
+return mat4x4f(m0, m1, m2, m3);
+}
+`;
+      pbrExt10 = {
+        id: "skeleton",
+        phase: "vertex",
+        frag(ctx) {
+          if (!(ctx._meshFeatures & MSH_HAS_SKELETON)) {
+            return null;
+          }
+          return createSkeletonFragment((ctx._meshFeatures & MSH_HAS_SKELETON_8) !== 0);
+        },
+        bind(ctx, entries, b) {
+          const mesh = ctx._mesh;
+          if (!(ctx._meshFeatures & MSH_HAS_SKELETON) || !mesh?.skeleton) {
+            return b;
+          }
+          entries.push({ binding: b++, resource: mesh.skeleton.boneTexture.createView() });
+          return b;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/morph-fragment.ts
+  var morph_fragment_exports = {};
+  __export(morph_fragment_exports, {
+    createMorphFragment: () => createMorphFragment,
+    pbrExt: () => pbrExt11
+  });
+  function createMorphFragment() {
+    return {
+      _id: "morph",
+      _vertexBuiltins: [{ _name: "vertexIndex", _builtin: "vertex_index", _type: "u32" }],
+      _vertexHelperFunctions: `struct morphUniforms {
+weights: vec4<f32>,
+count: u32,
+texWidth: u32,
+rowsPerBand: u32,
+_p0: u32,
+}`,
+      _vertexBindings: [
+        { _name: "morphTargets", _type: { _kind: "texture", _textureType: "texture_2d<f32>", _sampleType: "unfilterable-float" }, _visibility: STAGE_VERTEX4 },
+        { _name: "morph", _type: { _kind: "uniform-buffer" }, _visibility: STAGE_VERTEX4 }
+      ],
+      _vertexSlots: {
+        VR: MORPH_PRE_SKINNING
+      }
+    };
+  }
+  var STAGE_VERTEX4, MORPH_PRE_SKINNING, pbrExt11;
+  var init_morph_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/morph-fragment.ts"() {
+      "use strict";
+      init_mesh_features();
+      STAGE_VERTEX4 = 1;
+      MORPH_PRE_SKINNING = `var morphedPos = position;
+var morphedNorm = normal;
+let mCol = i32(vertexIndex % morph.texWidth);
+let mRowInBand = i32(vertexIndex / morph.texWidth);
+for (var i = 0u; i < morph.count; i = i + 1u) {
+  let w = morph.weights[i];
+  let posBase = i32(i * 2u) * i32(morph.rowsPerBand);
+  let normBase = i32(i * 2u + 1u) * i32(morph.rowsPerBand);
+  morphedPos = morphedPos + w * textureLoad(morphTargets, vec2<i32>(mCol, posBase + mRowInBand), 0).xyz;
+  morphedNorm = morphedNorm + w * textureLoad(morphTargets, vec2<i32>(mCol, normBase + mRowInBand), 0).xyz;
+}`;
+      pbrExt11 = {
+        id: "morph",
+        phase: "vertex",
+        frag(ctx) {
+          if (!(ctx._meshFeatures & MSH_HAS_MORPH_TARGETS)) {
+            return null;
+          }
+          return createMorphFragment();
+        },
+        bind(ctx, entries, b) {
+          const mesh = ctx._mesh;
+          if (!(ctx._meshFeatures & MSH_HAS_MORPH_TARGETS) || !mesh?.morphTargets) {
+            return b;
+          }
+          entries.push({ binding: b++, resource: mesh.morphTargets.texture.createView() });
+          if (mesh.morphTargets.weightsBuffer) {
+            entries.push({ binding: b++, resource: { buffer: mesh.morphTargets.weightsBuffer } });
+          }
+          return b;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/uv-transform-fragment.ts
+  var uv_transform_fragment_exports = {};
+  __export(uv_transform_fragment_exports, {
+    pbrExt: () => pbrExt12
+  });
+  function writeOne(data, offsets, texName, tex) {
+    const mOff = offsets.get(`${texName}UVm`);
+    const tOff = offsets.get(`${texName}UVt`);
+    if (mOff === void 0 || tOff === void 0) {
+      return;
+    }
+    const mi = mOff / 4;
+    const ti = tOff / 4;
+    const sx = tex?.uScale ?? 1;
+    const sy = tex?.vScale ?? 1;
+    const ang = tex?.uAng ?? 0;
+    const ox = tex?.uOffset ?? 0;
+    const oy = tex?.vOffset ?? 0;
+    if (ang === 0) {
+      data[mi] = sx;
+      data[mi + 1] = 0;
+      data[mi + 2] = 0;
+      data[mi + 3] = sy;
+    } else {
+      const c = Math.cos(ang);
+      const s = Math.sin(ang);
+      data[mi] = c * sx;
+      data[mi + 1] = -s * sy;
+      data[mi + 2] = s * sx;
+      data[mi + 3] = c * sy;
+    }
+    data[ti] = ox;
+    data[ti + 1] = oy;
+    data[ti + 2] = 0;
+    data[ti + 3] = 0;
+  }
+  var pbrExt12;
+  var init_uv_transform_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/uv-transform-fragment.ts"() {
+      "use strict";
+      pbrExt12 = {
+        id: "uv-transform",
+        phase: "fragment",
+        writeUbo(data, material, offsets) {
+          const m = material;
+          writeOne(data, offsets, "baseColor", m.baseColorTexture);
+          writeOne(data, offsets, "normal", m.normalTexture);
+          writeOne(data, offsets, "orm", m.ormTexture);
+          writeOne(data, offsets, "emissive", m.emissiveTexture);
+          writeOne(data, offsets, "specGloss", m.specGlossTexture);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/anisotropy-fragment.ts
+  var anisotropy_fragment_exports = {};
+  __export(anisotropy_fragment_exports, {
+    ANISO_BENT_NORMAL: () => ANISO_BENT_NORMAL,
+    ANISO_BRDF_FUNCTIONS: () => ANISO_BRDF_FUNCTIONS,
+    ANISO_DIRECT_DG: () => ANISO_DIRECT_DG,
+    makeAnisotropyTBBlock: () => makeAnisotropyTBBlock,
+    pbrExt: () => pbrExt13
+  });
+  function makeAnisotropyTBBlock(hasNormal) {
+    if (hasNormal) {
+      return `var anisoT = normalize(input.worldTangent);
+var anisoB = normalize(input.worldBitangent);
+{
+let anisoDir = normalize(vec2<f32>(material.anisotropyParams.y, material.anisotropyParams.z));
+anisoT = normalize(anisoT * anisoDir.x + anisoB * anisoDir.y);
+anisoB = normalize(cross(N, anisoT));
+}`;
+    }
+    return `var anisoT: vec3<f32>;
+var anisoB: vec3<f32>;
+{
+let aniso_dp1 = dpdx(input.worldPos);
+let aniso_dp2 = -dpdy(input.worldPos);
+let aniso_duv1 = dpdx(input.uv);
+let aniso_duv2 = -dpdy(input.uv);
+let aniso_dp2perp = cross(aniso_dp2, N);
+let aniso_dp1perp = cross(N, aniso_dp1);
+var aniso_t = aniso_dp2perp * aniso_duv1.x + aniso_dp1perp * aniso_duv2.x;
+var aniso_b = aniso_dp2perp * aniso_duv1.y + aniso_dp1perp * aniso_duv2.y;
+let aniso_det = max(dot(aniso_t, aniso_t), dot(aniso_b, aniso_b));
+let aniso_inv = select(inverseSqrt(aniso_det), 0.0, aniso_det == 0.0);
+aniso_t *= aniso_inv;
+aniso_b *= aniso_inv;
+let aniso_tn = normalize(aniso_t);
+let aniso_bn = normalize(aniso_b);
+let anisoTBN = mat3x3<f32>(aniso_tn, aniso_bn, N);
+let anisoDir = vec3<f32>(material.anisotropyParams.y, material.anisotropyParams.z, 0.0);
+anisoT = normalize(anisoTBN * anisoDir);
+anisoB = normalize(cross(anisoTBN[2], anisoT));
+}`;
+  }
+  var ANISO_BRDF_FUNCTIONS, ANISO_DIRECT_DG, ANISO_BENT_NORMAL, pbrExt13;
+  var init_anisotropy_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/anisotropy-fragment.ts"() {
+      "use strict";
+      ANISO_BRDF_FUNCTIONS = `
+const RECIPROCAL_PI: f32 = 0.3183098861837907;
+fn getAnisotropicRoughness(alphaG: f32, anisotropy: f32) -> vec2<f32> {
+let aT = max(mix(alphaG, 1.0, anisotropy * anisotropy), 0.0005);
+let aB = max(alphaG, 0.0005);
+return vec2<f32>(aT, aB);
+}
+fn D_GGX_Anisotropic(NdotH: f32, TdotH: f32, BdotH: f32, alphaTB: vec2<f32>) -> f32 {
+let a2 = alphaTB.x * alphaTB.y;
+let v = vec3<f32>(alphaTB.y * TdotH, alphaTB.x * BdotH, a2 * NdotH);
+let v2 = dot(v, v);
+let w2 = a2 / v2;
+return a2 * w2 * w2 * RECIPROCAL_PI;
+}
+fn V_GGXCorrelated_Anisotropic(NdotL: f32, NdotV: f32, TdotV: f32, BdotV: f32, TdotL: f32, BdotL: f32, alphaTB: vec2<f32>) -> f32 {
+let lambdaV = NdotL * length(vec3<f32>(alphaTB.x * TdotV, alphaTB.y * BdotV, NdotV));
+let lambdaL = NdotV * length(vec3<f32>(alphaTB.x * TdotL, alphaTB.y * BdotL, NdotL));
+return 0.5 / (lambdaV + lambdaL);
+}
+`;
+      ANISO_DIRECT_DG = `let aniso_alphaTB = getAnisotropicRoughness(directAlphaG, material.anisotropyParams.x);
+let dl_TdotH = dot(anisoT, H); let dl_BdotH = dot(anisoB, H);
+let dl_TdotV = dot(anisoT, V); let dl_BdotV = dot(anisoB, V);
+let dl_TdotL = dot(anisoT, L); let dl_BdotL = dot(anisoB, L);
+let D = D_GGX_Anisotropic(NdotH, dl_TdotH, dl_BdotH, aniso_alphaTB);
+let G = V_GGXCorrelated_Anisotropic(NdotL, NdotV, dl_TdotV, dl_BdotV, dl_TdotL, dl_BdotL, aniso_alphaTB);`;
+      ANISO_BENT_NORMAL = `let anisoIntensity = material.anisotropyParams.x;
+var anisoBentNormal = cross(anisoB, V);
+anisoBentNormal = normalize(cross(anisoBentNormal, anisoB));
+let anisoSq = 1.0 - anisoIntensity * (1.0 - roughness);
+let anisoA = anisoSq * anisoSq * anisoSq * anisoSq;
+anisoBentNormal = normalize(mix(anisoBentNormal, N, anisoA));
+let R_raw = reflect(-V, anisoBentNormal);`;
+      pbrExt13 = {
+        id: "anisotropy",
+        phase: "fragment",
+        writeUbo(data, material, offsets) {
+          const aniso = material.anisotropy;
+          if (!aniso?.isEnabled || !offsets.has("anisotropyParams")) {
+            return;
+          }
+          const off = offsets.get("anisotropyParams") / 4;
+          const dir = aniso.direction ?? [1, 0];
+          data[off] = aniso.intensity ?? 1;
+          data[off + 1] = dir[0];
+          data[off + 2] = dir[1];
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-template-ext.ts
+  var pbr_template_ext_exports = {};
+  __export(pbr_template_ext_exports, {
+    createPbrTemplateExt: () => createPbrTemplateExt
+  });
+  function createPbrTemplateExt(flags) {
+    const { _hasUvTransform, _hasVertexColor, _hasUv2, _hasOcclusionUv2, _hasAnyNormal, _hasEmissiveTexture, _hasSpecGloss } = flags;
+    const uvTransformUboFields2 = (name) => [
+      { _name: `${name}UVm`, _type: "vec4<f32>" },
+      { _name: `${name}UVt`, _type: "vec4<f32>" }
+    ];
+    const uvVarName = (name) => _hasUvTransform ? `${name}UV` : "input.uv";
+    const uvTransformDecl = (name) => _hasUvTransform ? `let ${name}UV = txfUV(input.uv, material.${name}UVm, material.${name}UVt.xy);
+` : "";
+    const UV_TRANSFORM_HELPER_WGSL = _hasUvTransform ? `fn txfUV(uv: vec2<f32>, m: vec4<f32>, t: vec2<f32>) -> vec2<f32> {
+return vec2<f32>(dot(m.xy, uv), dot(m.zw, uv)) + t;
+}
+` : "";
+    const extraVertexAttributes = [];
+    if (_hasUv2) {
+      extraVertexAttributes.push({ _name: "uv2", _type: "vec2<f32>", _gpuFormat: "float32x2", _arrayStride: 8 });
+    }
+    if (_hasVertexColor) {
+      extraVertexAttributes.push({ _name: "color", _type: "vec3<f32>", _gpuFormat: "float32x3", _arrayStride: 12 });
+    }
+    const extraVaryings = [];
+    if (_hasUv2) {
+      extraVaryings.push({ _name: "uv2", _type: "vec2<f32>" });
+    }
+    if (_hasVertexColor) {
+      extraVaryings.push({ _name: "vColor", _type: "vec3<f32>" });
+    }
+    const extraMaterialUboFields = [];
+    if (_hasUvTransform) {
+      extraMaterialUboFields.push(...uvTransformUboFields2("baseColor"));
+      if (_hasAnyNormal) {
+        extraMaterialUboFields.push(...uvTransformUboFields2("normal"));
+      }
+      extraMaterialUboFields.push(...uvTransformUboFields2("orm"));
+      if (_hasEmissiveTexture) {
+        extraMaterialUboFields.push(...uvTransformUboFields2("emissive"));
+      }
+      if (_hasSpecGloss) {
+        extraMaterialUboFields.push(...uvTransformUboFields2("specGloss"));
+      }
+    }
+    const extraBindings = [];
+    if (_hasOcclusionUv2) {
+      extraBindings.push(
+        { _name: "occlusionTexture", _type: { _kind: "texture", _textureType: "texture_2d<f32>" }, _visibility: STAGE_FRAGMENT10 },
+        { _name: "occlusionSampler_", _type: { _kind: "sampler", _samplerType: "sampler" }, _visibility: STAGE_FRAGMENT10 }
+      );
+    }
+    let vertexBodyExtra = "";
+    if (_hasUv2) {
+      vertexBodyExtra += "out.uv2 = uv2;\n";
+    }
+    if (_hasVertexColor) {
+      vertexBodyExtra += "out.vColor = color;\n";
+    }
+    const fragmentHelpers = UV_TRANSFORM_HELPER_WGSL;
+    const fragmentPrelude = _hasUvTransform ? uvTransformDecl("baseColor") + (_hasAnyNormal ? uvTransformDecl("normal") : "") + uvTransformDecl("orm") + (_hasEmissiveTexture ? uvTransformDecl("emissive") : "") + (_hasSpecGloss ? uvTransformDecl("specGloss") : "") : "";
+    const uvForBaseColor = uvVarName("baseColor");
+    const uvForNormal = uvVarName("normal");
+    const uvForOrm = uvVarName("orm");
+    const uvForEmissive = uvVarName("emissive");
+    const uvForSpecGloss = uvVarName("specGloss");
+    const baseColorMod = _hasVertexColor ? `
+baseColor *= input.vColor;` : "";
+    const normalScaleMod = "let scaledNormal = vec3<f32>(normalMapRaw.xy * material.normalScale, normalMapRaw.z);\n";
+    const occlusionOverride = _hasOcclusionUv2 ? "let occlusion = textureSample(occlusionTexture, occlusionSampler_, input.uv2).r;" : null;
+    return {
+      extraVertexAttributes,
+      extraVaryings,
+      extraMaterialUboFields,
+      extraBindings,
+      vertexBodyExtra,
+      fragmentHelpers,
+      fragmentPrelude,
+      uvForBaseColor,
+      uvForNormal,
+      uvForOrm,
+      uvForEmissive,
+      uvForSpecGloss,
+      baseColorMod,
+      normalScaleMod,
+      occlusionOverride
+    };
+  }
+  var STAGE_FRAGMENT10;
+  var init_pbr_template_ext = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-template-ext.ts"() {
+      "use strict";
+      STAGE_FRAGMENT10 = 2;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/thin-instance-fragment.ts
+  var thin_instance_fragment_exports = {};
+  __export(thin_instance_fragment_exports, {
+    createThinInstanceFragment: () => createThinInstanceFragment
+  });
+  function createThinInstanceFragment(hasInstanceColor) {
+    const attrs = [
+      {
+        _name: "world0",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 0
+      },
+      {
+        _name: "world1",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 16
+      },
+      {
+        _name: "world2",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 32
+      },
+      {
+        _name: "world3",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 64,
+        _stepMode: "instance",
+        _bufferGroup: "ti-matrix",
+        _offset: 48
+      }
+    ];
+    if (hasInstanceColor) {
+      attrs.push({
+        _name: "instanceColor",
+        _type: "vec4<f32>",
+        _gpuFormat: "float32x4",
+        _arrayStride: 16,
+        _stepMode: "instance",
+        _bufferGroup: "ti-color",
+        _offset: 0
+      });
+    }
+    return {
+      _id: "thin-instance",
+      _vertexAttributes: attrs,
+      _varyings: hasInstanceColor ? [{ _name: "vInstanceColor", _type: "vec4<f32>" }] : [],
+      _vertexSlots: {
+        VW: `let instanceWorld = mat4x4<f32>(world0, world1, world2, world3);
+finalWorld = mesh.world * instanceWorld;`,
+        VB: hasInstanceColor ? `out.vInstanceColor = instanceColor;` : ""
+      },
+      _fragmentSlots: hasInstanceColor ? {
+        AT: `baseColor *= input.vInstanceColor.rgb;
+alpha *= input.vInstanceColor.a;`
+      } : {}
+    };
+  }
+  var init_thin_instance_fragment = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/fragments/thin-instance-fragment.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu.ts
+  var thin_instance_gpu_exports = {};
+  __export(thin_instance_gpu_exports, {
+    syncThinInstanceBuffers: () => syncThinInstanceBuffers,
+    syncThinInstanceGpuData: () => syncThinInstanceGpuData
+  });
+  function syncThinInstanceGpuData(engine, ti, hasColor) {
+    const device = engine._device;
+    const needsStorage = ti._gpuCullingEnabled;
+    if (ti._version !== ti._gpuVersion || ti._gpuBufferStorage !== needsStorage) {
+      const byteSize = ti.count * 64;
+      let bufferRecreated = false;
+      if (!ti._gpuBuffer || ti._gpuBuffer.size < byteSize || ti._gpuBufferStorage !== needsStorage) {
+        ti._gpuBuffer?.destroy();
+        ti._gpuBuffer = device.createBuffer({
+          size: Math.max(ti._capacity * 64, 4),
+          // STORAGE is always included: the GPU picker binds this matrix
+          // buffer as a read-only storage buffer for thin-instance picking,
+          // so it must be storage-capable even when compute culling is off
+          // (otherwise the whole pick pass is invalidated → nothing is pickable).
+          usage: BU.VERTEX | BU.COPY_DST | BU.STORAGE
+        });
+        ti._gpuBufferStorage = needsStorage;
+        bufferRecreated = true;
+      }
+      const dirtyMin = bufferRecreated ? 0 : ti._dirtyMin;
+      const dirtyMax = bufferRecreated ? ti.count : Math.min(ti._dirtyMax, ti.count);
+      if (dirtyMax > dirtyMin) {
+        const minByte = dirtyMin * 64;
+        const maxByte = dirtyMax * 64;
+        if (ti.matrices instanceof F32) {
+          device.queue.writeBuffer(ti._gpuBuffer, minByte, ti.matrices.buffer, ti.matrices.byteOffset + minByte, maxByte - minByte);
+        } else {
+          const neededFloats = ti._capacity * 16;
+          if (!ti._uploadF32 || ti._uploadF32.length < neededFloats) {
+            ti._uploadF32 = new F32(neededFloats);
+          }
+          const upload = ti._uploadF32;
+          for (let i = dirtyMin; i < dirtyMax; i++) {
+            packMat4IntoF32(upload, ti.matrices, i * 16, i * 16);
+          }
+          device.queue.writeBuffer(ti._gpuBuffer, minByte, upload.buffer, upload.byteOffset + minByte, maxByte - minByte);
+        }
+      }
+      ti._dirtyMin = ti.count;
+      ti._dirtyMax = 0;
+      ti._gpuVersion = ti._version;
+    }
+    if (hasColor && ti.colors) {
+      if (ti._colorVersion !== ti._colorGpuVersion || ti._colorGpuBufferStorage !== needsStorage) {
+        const colorByteSize = ti.count * 16;
+        let colorRecreated = false;
+        if (!ti._colorGpuBuffer || ti._colorGpuBuffer.size < colorByteSize || ti._colorGpuBufferStorage !== needsStorage) {
+          ti._colorGpuBuffer?.destroy();
+          ti._colorGpuBuffer = device.createBuffer({
+            size: Math.max(ti._capacity * 16, 4),
+            usage: BU.VERTEX | BU.COPY_DST | (needsStorage ? BU.STORAGE : 0)
+          });
+          ti._colorGpuBufferStorage = needsStorage;
+          colorRecreated = true;
+        }
+        const cMin = colorRecreated ? 0 : ti._colorDirtyMin;
+        const cMax = colorRecreated ? ti.count : Math.min(ti._colorDirtyMax, ti.count);
+        if (cMax > cMin) {
+          device.queue.writeBuffer(ti._colorGpuBuffer, cMin * 16, ti.colors.buffer, ti.colors.byteOffset + cMin * 16, (cMax - cMin) * 16);
+        }
+        ti._colorDirtyMin = ti.count;
+        ti._colorDirtyMax = 0;
+        ti._colorGpuVersion = ti._colorVersion;
+      }
+    }
+  }
+  function syncThinInstanceBuffers(engine, ti, pass, slot, hasColor, drawBuffers) {
+    syncThinInstanceGpuData(engine, ti, hasColor);
+    const matrixBuffer = drawBuffers?.matrixBuffer ?? ti._gpuBuffer;
+    if (matrixBuffer) {
+      pass.setVertexBuffer(slot++, matrixBuffer);
+    }
+    if (hasColor) {
+      const colorBuffer = drawBuffers?.colorBuffer ?? ti._colorGpuBuffer;
+      if (colorBuffer) {
+        pass.setVertexBuffer(slot++, colorBuffer);
+      }
+    }
+    return slot;
+  }
+  var init_thin_instance_gpu = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_pack_mat4_into_f32();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu-culling.ts
+  function createTiCullState() {
+    const paramsBytes = new ArrayBuffer(PARAM_BYTES);
+    return {
+      _capacity: 0,
+      _visibleMatrixBuffer: null,
+      _visibleColorBuffer: null,
+      _argsBuffer: null,
+      _paramsBuffer: null,
+      _bindGroup: null,
+      _srcMatrixBuffer: null,
+      _srcColorBuffer: null,
+      _hasColor: false,
+      _localSphereReady: false,
+      _localSphere: new F32(4),
+      _paramsBytes: paramsBytes,
+      _paramsF32: new F32(paramsBytes),
+      _paramsU32: new U32(paramsBytes),
+      _argsData: new U32(5),
+      _drawBuffers: null
+    };
+  }
+  function destroyTiCullState(state) {
+    state._visibleMatrixBuffer?.destroy();
+    state._visibleColorBuffer?.destroy();
+    state._argsBuffer?.destroy();
+    state._paramsBuffer?.destroy();
+    state._visibleMatrixBuffer = null;
+    state._visibleColorBuffer = null;
+    state._argsBuffer = null;
+    state._paramsBuffer = null;
+    state._bindGroup = null;
+    state._drawBuffers = null;
+  }
+  function prepareTiCull(engine, state, mesh, gpu, ti, hasColor, context) {
+    const camera = context._camera;
+    if (!ti._gpuCullingEnabled || !camera || mesh.visible === false || ti.count === 0) {
+      state._drawBuffers = null;
+      return null;
+    }
+    if (hasColor && !ti.colors) {
+      state._drawBuffers = null;
+      return null;
+    }
+    if (!state._localSphereReady && !computeLocalSphere(mesh, state._localSphere)) {
+      state._drawBuffers = null;
+      return null;
+    }
+    state._localSphereReady = true;
+    syncThinInstanceGpuData(engine, ti, hasColor);
+    const sourceMatrixBuffer = ti._gpuBuffer;
+    const sourceColorBuffer = hasColor ? ti._colorGpuBuffer : null;
+    if (!sourceMatrixBuffer || hasColor && !sourceColorBuffer) {
+      state._drawBuffers = null;
+      return null;
+    }
+    ensureCullBuffers(engine, state, ti._capacity, hasColor);
+    const visibleMatrixBuffer = state._visibleMatrixBuffer;
+    const visibleColorBuffer = hasColor ? state._visibleColorBuffer : null;
+    const argsBuffer = state._argsBuffer;
+    const paramsBuffer = state._paramsBuffer;
+    const pipeline = getCullPipeline(engine, hasColor);
+    if (state._bindGroup === null || state._srcMatrixBuffer !== sourceMatrixBuffer || state._srcColorBuffer !== sourceColorBuffer || state._hasColor !== hasColor) {
+      const entries = [
+        { binding: 0, resource: { buffer: sourceMatrixBuffer } },
+        { binding: 1, resource: { buffer: visibleMatrixBuffer } },
+        { binding: 2, resource: { buffer: argsBuffer } },
+        { binding: 3, resource: { buffer: paramsBuffer } }
+      ];
+      if (hasColor) {
+        entries.push({ binding: 4, resource: { buffer: sourceColorBuffer } }, { binding: 5, resource: { buffer: visibleColorBuffer } });
+      }
+      state._bindGroup = engine._device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
+      state._srcMatrixBuffer = sourceMatrixBuffer;
+      state._srcColorBuffer = sourceColorBuffer;
+      state._hasColor = hasColor;
+    }
+    const v = camera.viewport;
+    const aspect = context.targetWidth / context.targetHeight * (v ? v.width / v.height : 1);
+    writeCullParams(engine, state, mesh, gpu.indexCount, ti.count, camera, aspect);
+    const pass = engine._currentEncoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, state._bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(ti.count / WORKGROUP_SIZE));
+    pass.end();
+    state._drawBuffers = { matrixBuffer: visibleMatrixBuffer, colorBuffer: visibleColorBuffer };
+    return { drawBuffers: state._drawBuffers, argsBuffer };
+  }
+  function ensureCullBuffers(engine, state, capacity, hasColor) {
+    const device = engine._device;
+    if (state._capacity < capacity) {
+      state._visibleMatrixBuffer?.destroy();
+      state._visibleColorBuffer?.destroy();
+      state._visibleMatrixBuffer = device.createBuffer({
+        size: Math.max(capacity * 64, 4),
+        usage: BU.VERTEX | BU.STORAGE
+      });
+      state._visibleColorBuffer = hasColor ? device.createBuffer({
+        size: Math.max(capacity * 16, 4),
+        usage: BU.VERTEX | BU.STORAGE
+      }) : null;
+      state._capacity = capacity;
+      state._bindGroup = null;
+      state._drawBuffers = null;
+    } else if (hasColor && !state._visibleColorBuffer) {
+      state._visibleColorBuffer = device.createBuffer({
+        size: Math.max(state._capacity * 16, 4),
+        usage: BU.VERTEX | BU.STORAGE
+      });
+      state._bindGroup = null;
+      state._drawBuffers = null;
+    }
+    if (!state._argsBuffer) {
+      state._argsBuffer = device.createBuffer({
+        size: INDIRECT_ARGS_BYTES,
+        usage: BU.INDIRECT | BU.STORAGE | BU.COPY_DST
+      });
+    }
+    if (!state._paramsBuffer) {
+      state._paramsBuffer = device.createBuffer({
+        size: PARAM_BYTES,
+        usage: BU.UNIFORM | BU.COPY_DST
+      });
+    }
+  }
+  function getCullPipeline(engine, hasColor) {
+    const device = engine._device;
+    if (_cachedDevice3 !== device) {
+      _cachedDevice3 = device;
+      _pipelineNoColor = null;
+      _pipelineColor = null;
+    }
+    if (hasColor) {
+      _pipelineColor ?? (_pipelineColor = device.createComputePipeline({
+        layout: "auto",
+        compute: { module: device.createShaderModule({ code: CULL_WGSL_COLOR }), entryPoint: "mainColor" }
+      }));
+      return _pipelineColor;
+    }
+    _pipelineNoColor ?? (_pipelineNoColor = device.createComputePipeline({
+      layout: "auto",
+      compute: { module: device.createShaderModule({ code: CULL_WGSL_NO_COLOR }), entryPoint: "main" }
+    }));
+    return _pipelineNoColor;
+  }
+  function writeCullParams(engine, state, mesh, indexCount, instanceCount, camera, aspect) {
+    const params = state._paramsF32;
+    const viewProjection = getViewProjectionMatrix(camera, aspect);
+    writeFrustumPlanes(params, viewProjection);
+    params.set(mesh.worldMatrix, MESH_WORLD_FLOAT_OFFSET);
+    params.set(state._localSphere, LOCAL_SPHERE_FLOAT_OFFSET);
+    state._paramsU32[COUNT_U32_OFFSET] = instanceCount;
+    const args = state._argsData;
+    args[0] = indexCount;
+    args[1] = 0;
+    args[2] = 0;
+    args[3] = 0;
+    args[4] = 0;
+    engine._device.queue.writeBuffer(state._argsBuffer, 0, args.buffer, args.byteOffset, args.byteLength);
+    engine._device.queue.writeBuffer(state._paramsBuffer, 0, state._paramsBytes);
+  }
+  function writeFrustumPlanes(out, m) {
+    writePlane(out, 0, m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]);
+    writePlane(out, 4, m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]);
+    writePlane(out, 8, m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]);
+    writePlane(out, 12, m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]);
+    writePlane(out, 16, m[2], m[6], m[10], m[14]);
+    writePlane(out, 20, m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]);
+  }
+  function writePlane(out, offset, x, y, z, w) {
+    const invLen = 1 / Math.hypot(x, y, z);
+    out[offset] = x * invLen;
+    out[offset + 1] = y * invLen;
+    out[offset + 2] = z * invLen;
+    out[offset + 3] = w * invLen;
+  }
+  function computeLocalSphere(mesh, out) {
+    const positions = mesh._cpuPositions;
+    if (!positions || positions.length < 3) {
+      return false;
+    }
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i];
+      const y = positions[i + 1];
+      const z = positions[i + 2];
+      if (x < minX) {
+        minX = x;
+      }
+      if (x > maxX) {
+        maxX = x;
+      }
+      if (y < minY) {
+        minY = y;
+      }
+      if (y > maxY) {
+        maxY = y;
+      }
+      if (z < minZ) {
+        minZ = z;
+      }
+      if (z > maxZ) {
+        maxZ = z;
+      }
+    }
+    if (!isFinite(minX)) {
+      return false;
+    }
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const cz = (minZ + maxZ) * 0.5;
+    const dx = maxX - cx;
+    const dy = maxY - cy;
+    const dz = maxZ - cz;
+    out[0] = cx;
+    out[1] = cy;
+    out[2] = cz;
+    out[3] = Math.hypot(dx, dy, dz);
+    return true;
+  }
+  var WORKGROUP_SIZE, PARAM_BYTES, COUNT_U32_OFFSET, MESH_WORLD_FLOAT_OFFSET, LOCAL_SPHERE_FLOAT_OFFSET, INDIRECT_ARGS_BYTES, CULL_WGSL_NO_COLOR, CULL_WGSL_COLOR, _cachedDevice3, _pipelineNoColor, _pipelineColor;
+  var init_thin_instance_gpu_culling = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-gpu-culling.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_camera();
+      init_thin_instance_gpu();
+      WORKGROUP_SIZE = 64;
+      PARAM_BYTES = 192;
+      COUNT_U32_OFFSET = 44;
+      MESH_WORLD_FLOAT_OFFSET = 24;
+      LOCAL_SPHERE_FLOAT_OFFSET = 40;
+      INDIRECT_ARGS_BYTES = 20;
+      CULL_WGSL_NO_COLOR = /* wgsl */
+      `
+struct CullParams{planes:array<vec4<f32>,6>,meshWorld:mat4x4<f32>,localSphere:vec4<f32>,count:u32};
+@group(0)@binding(0)var<storage,read> srcMatrices:array<mat4x4<f32>>;
+@group(0)@binding(1)var<storage,read_write> dstMatrices:array<mat4x4<f32>>;
+@group(0)@binding(2)var<storage,read_write> args:array<atomic<u32>>;
+@group(0)@binding(3)var<uniform> params:CullParams;
+fn visible(world:mat4x4<f32>)->bool{
+let center=(world*vec4<f32>(params.localSphere.xyz,1.0)).xyz;
+let sx=length(world[0].xyz);
+let sy=length(world[1].xyz);
+let sz=length(world[2].xyz);
+let radius=params.localSphere.w*max(max(sx,sy),sz)+0.0001;
+for(var i=0u;i<6u;i++){
+let p=params.planes[i];
+if(dot(p.xyz,center)+p.w < -radius){return false;}
+}
+return true;
+}
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid:vec3<u32>){
+let i=gid.x;
+if(i>=params.count){return;}
+let world=params.meshWorld*srcMatrices[i];
+if(!visible(world)){return;}
+let outIndex=atomicAdd(&args[1],1u);
+dstMatrices[outIndex]=srcMatrices[i];
+}`;
+      CULL_WGSL_COLOR = `${CULL_WGSL_NO_COLOR}
+@group(0)@binding(4)var<storage,read> srcColors:array<vec4<f32>>;
+@group(0)@binding(5)var<storage,read_write> dstColors:array<vec4<f32>>;
+@compute @workgroup_size(64)
+fn mainColor(@builtin(global_invocation_id) gid:vec3<u32>){
+let i=gid.x;
+if(i>=params.count){return;}
+let world=params.meshWorld*srcMatrices[i];
+if(!visible(world)){return;}
+let outIndex=atomicAdd(&args[1],1u);
+dstMatrices[outIndex]=srcMatrices[i];
+dstColors[outIndex]=srcColors[i];
+}`;
+      _cachedDevice3 = null;
+      _pipelineNoColor = null;
+      _pipelineColor = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-cull-binding.ts
+  var thin_instance_cull_binding_exports = {};
+  __export(thin_instance_cull_binding_exports, {
+    tryBind: () => tryBind
+  });
+  function tryBind(renderable, scene, mesh, engine, hasColor, excluded, baseUpdate) {
+    const ti = mesh.thinInstances;
+    if (excluded || !ti?._gpuCullingEnabled) {
+      return void 0;
+    }
+    renderable._direct = true;
+    const state = createTiCullState();
+    scene._meshDisposables.get(mesh)?.push(() => {
+      destroyTiCullState(state);
+    });
+    const binding = {
+      cullDrawBufs: null,
+      _args: null,
+      update(context) {
+        baseUpdate?.(context);
+        const res = prepareTiCull(engine, state, mesh, mesh._gpu, ti, hasColor, context);
+        binding.cullDrawBufs = res?.drawBuffers ?? null;
+        binding._args = res?.argsBuffer ?? null;
+      },
+      draw(pass, indexCount, instanceCount) {
+        if (binding._args) {
+          pass.drawIndexedIndirect(binding._args, 0);
+        } else {
+          pass.drawIndexed(indexCount, instanceCount);
+        }
+      }
+    };
+    return binding;
+  }
+  var init_thin_instance_cull_binding = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance-cull-binding.ts"() {
+      "use strict";
+      init_thin_instance_gpu_culling();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-aces-wgsl.ts
+  var pbr_aces_wgsl_exports = {};
+  __export(pbr_aces_wgsl_exports, {
+    ACES_HELPERS_WGSL: () => ACES_HELPERS_WGSL,
+    ACES_TONEMAP_CALL_WGSL: () => ACES_TONEMAP_CALL_WGSL
+  });
+  var ACES_HELPERS_WGSL, ACES_TONEMAP_CALL_WGSL;
+  var init_pbr_aces_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-aces-wgsl.ts"() {
+      "use strict";
+      ACES_HELPERS_WGSL = `
+const ACESInputMat = mat3x3<f32>(vec3<f32>(0.59719,0.07600,0.02840),vec3<f32>(0.35458,0.90834,0.13383),vec3<f32>(0.04823,0.01566,0.83777));
+const ACESOutputMat = mat3x3<f32>(vec3<f32>(1.60475,-0.10208,-0.00327),vec3<f32>(-0.53108,1.10813,-0.07276),vec3<f32>(-0.07367,-0.00605,1.07602));
+fn RRTAndODTFit(v: vec3<f32>) -> vec3<f32> { let a = v*(v+0.0245786)-0.000090537; let b = v*(0.983729*v+0.4329510)+0.238081; return a/b; }
+fn ACESFitted(color: vec3<f32>) -> vec3<f32> { var c = ACESInputMat*color; c = RRTAndODTFit(c); c = ACESOutputMat*c; return saturate(c); }
+`;
+      ACES_TONEMAP_CALL_WGSL = `color *= scene.vImageInfos.x;
+color = ACESFitted(color);`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/wgsl-helpers.ts
+  var WGSL_FOG, WGSL_DITHER, WGSL_NO_DITHER;
+  var init_wgsl_helpers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/wgsl-helpers.ts"() {
+      "use strict";
+      WGSL_FOG = `
+const E_FOG: f32 = 2.71828;
+fn calcFogFactor(fogDistance: vec3<f32>) -> f32 {
+var fogCoeff: f32 = 1.0;
+let fogMode = scene.vFogInfos.x;
+let fogStart = scene.vFogInfos.y;
+let fogEnd = scene.vFogInfos.z;
+let fogDensity = scene.vFogInfos.w;
+let dist = length(fogDistance);
+if (fogMode == 3.0) { fogCoeff = (fogEnd - dist) / (fogEnd - fogStart); }
+else if (fogMode == 1.0) { fogCoeff = 1.0 / pow(E_FOG, dist * fogDensity); }
+else if (fogMode == 2.0) { fogCoeff = 1.0 / pow(E_FOG, dist * dist * fogDensity * fogDensity); }
+return clamp(fogCoeff, 0.0, 1.0);
+}
+`;
+      WGSL_DITHER = `
+fn dither(seed: vec2<f32>, varianceAmount: f32) -> f32 {
+let rand = fract(sin(dot(seed, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+let normVariance = varianceAmount / 255.0;
+return mix(-normVariance, normVariance, rand);
+}
+`;
+      WGSL_NO_DITHER = "fn dither(a:vec2<f32>,b:f32)->f32{return 0.0;}";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-fog-wgsl.ts
+  var pbr_fog_wgsl_exports = {};
+  __export(pbr_fog_wgsl_exports, {
+    PBR_FOG_BLOCK: () => PBR_FOG_BLOCK,
+    PBR_FOG_HELPER: () => PBR_FOG_HELPER
+  });
+  var PBR_FOG_HELPER, PBR_FOG_BLOCK;
+  var init_pbr_fog_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-fog-wgsl.ts"() {
+      "use strict";
+      init_wgsl_helpers();
+      PBR_FOG_HELPER = WGSL_FOG;
+      PBR_FOG_BLOCK = `if(scene.vFogInfos.x>0.0){var fogFactor=calcFogFactor((scene.view*vec4<f32>(input.worldPos,1.0)).xyz);fogFactor=pow(fogFactor,2.2);color=mix(pow(scene.vFogColor.rgb,vec3<f32>(2.2)),color,fogFactor);}`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-hemispheric-wgsl.ts
+  var singlelight_hemispheric_wgsl_exports = {};
+  __export(singlelight_hemispheric_wgsl_exports, {
+    SINGLE_LIGHT_STRUCTS: () => SINGLE_LIGHT_STRUCTS,
+    getSingleLightBlock: () => getSingleLightBlock
+  });
+  function specularBlock() {
+    return `let H = normalize(V + L);
+let NdotH = clamp(dot(N, H), 0.0000001, 1.0);
+let VdotH = saturate(dot(V, H));
+let directRoughness = max(roughness, AA_factor_x);
+let directAlphaG = directRoughness * directRoughness + 0.0005;
+let D = distributionGGX(NdotH, directAlphaG);
+let G = geometrySmithGGX(NdotL, NdotV, directAlphaG);
+let coloredFresnel = fresnelSchlick(VdotH, colorF0, colorF90);
+var directSpecular = coloredFresnel * D * G * NdotL * lightColor * lightAtten * material.directIntensity;`;
+  }
+  function getSingleLightBlock() {
+    return `let entry = lights.lights[mli(0u)];
+let L = normalize(entry.vLightData.xyz);
+let NdotL = dot(N, L) * 0.5 + 0.5;
+let lightAtten = 1.0;
+let lightColor = entry.vLightDiffuse.rgb;
+let hemiDiffuse = mix(entry.vLightDirection.xyz, lightColor, NdotL);
+var directDiffuse = hemiDiffuse * surfaceAlbedo * material.directIntensity;
+${specularBlock()}
+/*AD*/`;
+  }
+  var SINGLE_LIGHT_STRUCTS;
+  var init_singlelight_hemispheric_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-hemispheric-wgsl.ts"() {
+      "use strict";
+      init_types();
+      SINGLE_LIGHT_STRUCTS = `
+struct LightEntry {
+vLightData: vec4<f32>,
+vLightDiffuse: vec4<f32>,
+vLightSpecular: vec4<f32>,
+vLightDirection: vec4<f32>,
+};
+struct lightsUniforms {
+count: u32, _p0: u32, _p1: u32, _p2: u32,
+    lights: array<LightEntry, ${MAX_LIGHTS}>,
+};
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-directional-wgsl.ts
+  var singlelight_directional_wgsl_exports = {};
+  __export(singlelight_directional_wgsl_exports, {
+    SINGLE_LIGHT_STRUCTS: () => SINGLE_LIGHT_STRUCTS2,
+    getSingleLightBlock: () => getSingleLightBlock2
+  });
+  function specularBlock2() {
+    return `let H = normalize(V + L);
+let NdotH = clamp(dot(N, H), 0.0000001, 1.0);
+let VdotH = saturate(dot(V, H));
+let directRoughness = max(roughness, AA_factor_x);
+let directAlphaG = directRoughness * directRoughness + 0.0005;
+let D = distributionGGX(NdotH, directAlphaG);
+let G = geometrySmithGGX(NdotL, NdotV, directAlphaG);
+let coloredFresnel = fresnelSchlick(VdotH, colorF0, colorF90);
+var directSpecular = coloredFresnel * D * G * NdotL * lightColor * lightAtten * material.directIntensity;`;
+  }
+  function getSingleLightBlock2() {
+    return `let entry = lights.lights[mli(0u)];
+let L = normalize(-entry.vLightData.xyz);
+let NdotL = max(dot(N, L), 0.0);
+let lightAtten = 1.0;
+let lightColor = entry.vLightDiffuse.rgb;
+var directDiffuse = surfaceAlbedo * (1.0 / PI) * NdotL * lightColor * material.directIntensity;
+${specularBlock2()}
+/*AD*/`;
+  }
+  var SINGLE_LIGHT_STRUCTS2;
+  var init_singlelight_directional_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-directional-wgsl.ts"() {
+      "use strict";
+      init_types();
+      SINGLE_LIGHT_STRUCTS2 = `
+struct LightEntry {
+vLightData: vec4<f32>,
+vLightDiffuse: vec4<f32>,
+vLightSpecular: vec4<f32>,
+vLightDirection: vec4<f32>,
+};
+struct lightsUniforms {
+count: u32, _p0: u32, _p1: u32, _p2: u32,
+    lights: array<LightEntry, ${MAX_LIGHTS}>,
+};
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-spot-wgsl.ts
+  var singlelight_spot_wgsl_exports = {};
+  __export(singlelight_spot_wgsl_exports, {
+    SINGLE_LIGHT_STRUCTS: () => SINGLE_LIGHT_STRUCTS3,
+    getSingleLightBlock: () => getSingleLightBlock3
+  });
+  function specularBlock3() {
+    return `let H = normalize(V + L);
+let NdotH = clamp(dot(N, H), 0.0000001, 1.0);
+let VdotH = saturate(dot(V, H));
+let directRoughness = max(roughness, AA_factor_x);
+let directAlphaG = directRoughness * directRoughness + 0.0005;
+let D = distributionGGX(NdotH, directAlphaG);
+let G = geometrySmithGGX(NdotL, NdotV, directAlphaG);
+let coloredFresnel = fresnelSchlick(VdotH, colorF0, colorF90);
+var directSpecular = coloredFresnel * D * G * NdotL * lightColor * lightAtten * material.directIntensity;`;
+  }
+  function getSingleLightBlock3() {
+    return `let entry = lights.lights[mli(0u)];
+let lightToFrag = entry.vLightData.xyz - input.worldPos;
+let lightDist = length(lightToFrag);
+let L = lightToFrag / max(lightDist, 0.0001);
+let NdotL = max(dot(N, L), 0.0);
+let spotC = dot(entry.vLightDirection.xyz, -L);
+let physicalFalloff = material.lightFalloffMode >= 0.5;
+let rangeAtt = select(max(0.0, 1.0 - lightDist / entry.vLightDiffuse.a), 1.0 / max(dot(lightToFrag, lightToFrag), 0.0000001), physicalFalloff);
+let standardDirFalloff = select(0.0, max(0.0, pow(max(spotC, 0.0), entry.vLightSpecular.a)), spotC >= entry.vLightDirection.w);
+let kappa = 6.64385618977 / max(1.0 - entry.vLightDirection.w, 0.0001);
+let physicalDirFalloff = exp2(kappa * (spotC - 1.0));
+let lightAtten = rangeAtt * select(standardDirFalloff, physicalDirFalloff, physicalFalloff);
+let lightColor = entry.vLightDiffuse.rgb;
+var directDiffuse = surfaceAlbedo * (1.0 / PI) * NdotL * lightColor * lightAtten * material.directIntensity;
+${specularBlock3()}
+/*AD*/`;
+  }
+  var SINGLE_LIGHT_STRUCTS3;
+  var init_singlelight_spot_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-spot-wgsl.ts"() {
+      "use strict";
+      init_types();
+      SINGLE_LIGHT_STRUCTS3 = `
+struct LightEntry {
+vLightData: vec4<f32>,
+vLightDiffuse: vec4<f32>,
+vLightSpecular: vec4<f32>,
+vLightDirection: vec4<f32>,
+};
+struct lightsUniforms {
+count: u32, _p0: u32, _p1: u32, _p2: u32,
+    lights: array<LightEntry, ${MAX_LIGHTS}>,
+};
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-point-wgsl.ts
+  var singlelight_point_wgsl_exports = {};
+  __export(singlelight_point_wgsl_exports, {
+    SINGLE_LIGHT_STRUCTS: () => SINGLE_LIGHT_STRUCTS4,
+    getSingleLightBlock: () => getSingleLightBlock4
+  });
+  function specularBlock4() {
+    return `let H = normalize(V + L);
+let NdotH = clamp(dot(N, H), 0.0000001, 1.0);
+let VdotH = saturate(dot(V, H));
+let directRoughness = max(roughness, AA_factor_x);
+let directAlphaG = directRoughness * directRoughness + 0.0005;
+let D = distributionGGX(NdotH, directAlphaG);
+let G = geometrySmithGGX(NdotL, NdotV, directAlphaG);
+let coloredFresnel = fresnelSchlick(VdotH, colorF0, colorF90);
+var directSpecular = coloredFresnel * D * G * NdotL * lightColor * lightAtten * material.directIntensity;`;
+  }
+  function getSingleLightBlock4() {
+    return `let entry = lights.lights[mli(0u)];
+let lightToFrag = entry.vLightData.xyz - input.worldPos;
+let lightDist2 = dot(lightToFrag, lightToFrag);
+let L = normalize(lightToFrag);
+let NdotL = max(dot(N, L), 0.0);
+let range = entry.vLightDiffuse.a;
+let physicalFalloff = material.lightFalloffMode >= 0.5;
+let physicalAtten = 1.0 / max(lightDist2, 0.0001);
+let standardAtten = max(0.0, 1.0 - sqrt(lightDist2) / range);
+let lightAtten = select(standardAtten, physicalAtten, physicalFalloff);
+let lightColor = entry.vLightDiffuse.rgb;
+var directDiffuse = surfaceAlbedo * (1.0 / PI) * NdotL * lightColor * lightAtten * material.directIntensity;
+${specularBlock4()}
+/*AD*/`;
+  }
+  var SINGLE_LIGHT_STRUCTS4;
+  var init_singlelight_point_wgsl = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/fragments/singlelight-point-wgsl.ts"() {
+      "use strict";
+      init_types();
+      SINGLE_LIGHT_STRUCTS4 = `
+struct LightEntry {
+vLightData: vec4<f32>,
+vLightDiffuse: vec4<f32>,
+vLightSpecular: vec4<f32>,
+vLightDirection: vec4<f32>,
+};
+struct lightsUniforms {
+count: u32, _p0: u32, _p1: u32, _p2: u32,
+    lights: array<LightEntry, ${MAX_LIGHTS}>,
+};
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-renderable.ts
+  var pbr_renderable_exports = {};
+  __export(pbr_renderable_exports, {
+    _writeMaterialData: () => _writeMaterialData,
+    buildPbrRenderables: () => buildPbrRenderables
+  });
+  async function buildPbrRenderables(scene, meshes, envTextures) {
+    const engine = scene.surface.engine;
+    const device = engine._device;
+    const materialScratch = /* @__PURE__ */ new Map();
+    const hasEnv = !!envTextures;
+    const shadowLights = [];
+    for (let i = 0; i < scene.lights.length; i++) {
+      const sg = scene.lights[i].shadowGenerator;
+      if (sg) {
+        shadowLights.push({ lightIndex: i, shadowType: sg._shadowType, gen: sg });
+      }
+    }
+    const hasSomeShadows = shadowLights.length > 0;
+    let hasAnyAffectedLight = false;
+    let needsSingleLightPath = false;
+    let needsMultiLightPath = false;
+    const singleLightTypes = [];
+    for (const mesh of meshes) {
+      const lr = writeMeshLightSelection(mesh, scene.lights);
+      const affectedCount = lr > 0 ? 1 : -lr;
+      hasAnyAffectedLight || (hasAnyAffectedLight = affectedCount > 0);
+      if (affectedCount === 1 && !(mesh.receiveShadows && hasSomeShadows)) {
+        needsSingleLightPath = true;
+        const type = getPackedSingleLightType(scene.lights, lr - 1);
+        if (!singleLightTypes.includes(type)) {
+          singleLightTypes.push(type);
+        }
+      } else if (affectedCount > 0) {
+        needsMultiLightPath = true;
+      }
+    }
+    let hasSkybox = false;
+    let hasMetallicReflectance = false;
+    let hasClearcoat = false;
+    let hasSheen = false;
+    let hasIridescence = false;
+    let hasAnyAnisotropy = false;
+    let hasAnySubsurface = false;
+    let hasAlphaTest = false;
+    let hasTransmissionRefraction = false;
+    let needsEmissiveColor = false;
+    let hasSomeSkeletons = false;
+    let hasSomeMorphs = false;
+    let hasSomeThinInstances = false;
+    let hasCullingTI = false;
+    let hasAnyUnlit = false;
+    let hasAnyUvTransform = false;
+    let hasAnyUv2 = false;
+    let hasAnyVertexColor = false;
+    for (let i = 0; i < meshes.length; i++) {
+      const m = meshes[i];
+      const mat = m.material;
+      const refractionIntensity = mat.subsurface?.refraction?.intensity ?? 0;
+      hasSkybox || (hasSkybox = !!mat.skyboxMode);
+      hasMetallicReflectance || (hasMetallicReflectance = !!(mat.metallicReflectanceTexture || mat.reflectanceTexture || mat._hasReflExt));
+      hasClearcoat || (hasClearcoat = !!mat.clearCoat?.isEnabled);
+      hasSheen || (hasSheen = !!mat.sheen?.isEnabled);
+      hasIridescence || (hasIridescence = !!mat.iridescence?.isEnabled);
+      hasAnyAnisotropy || (hasAnyAnisotropy = !!mat.anisotropy?.isEnabled);
+      hasAnySubsurface || (hasAnySubsurface = !!mat.subsurface?.translucency);
+      hasAlphaTest || (hasAlphaTest = mat.alphaCutOff > 0);
+      hasTransmissionRefraction || (hasTransmissionRefraction = refractionIntensity > 0 && !!mat.transmissive);
+      needsEmissiveColor || (needsEmissiveColor = !!mat.emissiveColor);
+      hasSomeSkeletons || (hasSomeSkeletons = !!m.skeleton);
+      hasSomeMorphs || (hasSomeMorphs = !!m.morphTargets);
+      hasSomeThinInstances || (hasSomeThinInstances = !!m.thinInstances);
+      hasCullingTI || (hasCullingTI = !!m.thinInstances?._gpuCullingEnabled);
+      hasAnyUnlit || (hasAnyUnlit = !!mat.unlit);
+      hasAnyUvTransform || (hasAnyUvTransform = !!mat._hasUvTx);
+      hasAnyUv2 || (hasAnyUv2 = !!m._gpu.uv2Buffer && mat.occlusionTexCoord === 1);
+      hasAnyVertexColor || (hasAnyVertexColor = !!m._gpu.colorBuffer);
+    }
+    let _iblSkyboxCalc = "";
+    if (hasEnv) {
+      const mod = await Promise.resolve().then(() => (init_ibl_fragment(), ibl_fragment_exports));
+      _registerPbrExt(mod.pbrExt);
+      if (hasSkybox) {
+        const sky = await Promise.resolve().then(() => (init_ibl_skybox_wgsl(), ibl_skybox_wgsl_exports));
+        _iblSkyboxCalc = sky.IBL_SKYBOX_CALCULATION;
+      }
+    }
+    let _createPbrShadowFragment = null;
+    let _singleLightWGSL = "";
+    let _getSingleLightBlock = null;
+    const singleLightBlocks = {};
+    let _multiLightWGSL = "";
+    let _multiLightLoop = "";
+    if (needsSingleLightPath) {
+      for (const type of singleLightTypes) {
+        const single = await importSingleLightWgsl(type);
+        _singleLightWGSL = single.SINGLE_LIGHT_STRUCTS;
+        singleLightBlocks[type] = single.getSingleLightBlock;
+      }
+      _getSingleLightBlock = (type) => singleLightBlocks[toSingleLightType(type)]?.() ?? "";
+    }
+    if (needsMultiLightPath) {
+      const wgslMod = await Promise.resolve().then(() => (init_multilight_wgsl(), multilight_wgsl_exports));
+      _multiLightWGSL = wgslMod.MULTI_LIGHT_STRUCTS() + wgslMod.COMPUTE_PBR_LIGHT;
+      _multiLightLoop = wgslMod.getMultiLightLoop();
+    }
+    if (hasAnyAffectedLight && hasSomeShadows) {
+      const shadowMod = await Promise.resolve().then(() => (init_pbr_shadow_fragment(), pbr_shadow_fragment_exports));
+      _createPbrShadowFragment = shadowMod.createPbrShadowFragment;
+    }
+    const _drainPbrExts = async (loaders) => {
+      for (const [flag, load] of loaders) {
+        if (flag) {
+          _registerPbrExt((await load()).pbrExt);
+        }
+      }
+    };
+    await _drainPbrExts([
+      [hasAlphaTest, () => Promise.resolve().then(() => (init_alpha_test_fragment(), alpha_test_fragment_exports))],
+      [hasMetallicReflectance, () => Promise.resolve().then(() => (init_reflectance_fragment(), reflectance_fragment_exports))],
+      [hasClearcoat, () => Promise.resolve().then(() => (init_clearcoat_fragment(), clearcoat_fragment_exports))],
+      [hasSheen, () => Promise.resolve().then(() => (init_sheen_fragment(), sheen_fragment_exports))],
+      [hasIridescence, () => Promise.resolve().then(() => (init_iridescence_fragment(), iridescence_fragment_exports))],
+      [hasAnySubsurface, () => Promise.resolve().then(() => (init_subsurface_fragment(), subsurface_fragment_exports))]
+    ]);
+    if (hasTransmissionRefraction) {
+      const mod = await Promise.resolve().then(() => (init_pbr_refraction(), pbr_refraction_exports));
+      await mod.registerPbrRefraction(scene, engine, _registerPbrExt);
+    }
+    await _drainPbrExts([
+      [needsEmissiveColor, () => Promise.resolve().then(() => (init_emissive_fragment(), emissive_fragment_exports))],
+      [hasAnyUnlit, () => Promise.resolve().then(() => (init_unlit_fragment(), unlit_fragment_exports))],
+      [hasSomeSkeletons, () => Promise.resolve().then(() => (init_skeleton_fragment(), skeleton_fragment_exports))],
+      [hasSomeMorphs, () => Promise.resolve().then(() => (init_morph_fragment(), morph_fragment_exports))],
+      [hasAnyUvTransform, () => Promise.resolve().then(() => (init_uv_transform_fragment(), uv_transform_fragment_exports))]
+    ]);
+    let _anisoExt = null;
+    if (hasAnyAnisotropy) {
+      _anisoExt = await Promise.resolve().then(() => (init_anisotropy_fragment(), anisotropy_fragment_exports));
+      _registerPbrExt(_anisoExt.pbrExt);
+    }
+    let _createPbrTemplateExt = null;
+    if (hasAnyUvTransform || hasAnyVertexColor || hasAnyUv2) {
+      const extMod = await Promise.resolve().then(() => (init_pbr_template_ext(), pbr_template_ext_exports));
+      _createPbrTemplateExt = extMod.createPbrTemplateExt;
+    }
+    let _createThinInstanceFragment = null;
+    let _syncThinInstanceBuffers = null;
+    let _cull;
+    let _syncThinInstanceGpuData = null;
+    if (hasSomeThinInstances) {
+      const mod = await Promise.resolve().then(() => (init_thin_instance_fragment(), thin_instance_fragment_exports));
+      _createThinInstanceFragment = mod.createThinInstanceFragment;
+      const gpuMod = await Promise.resolve().then(() => (init_thin_instance_gpu(), thin_instance_gpu_exports));
+      _syncThinInstanceBuffers = gpuMod.syncThinInstanceBuffers;
+      if (hasCullingTI) {
+        _cull = await Promise.resolve().then(() => (init_thin_instance_cull_binding(), thin_instance_cull_binding_exports));
+      }
+      _syncThinInstanceGpuData = gpuMod.syncThinInstanceGpuData;
+    }
+    let _acesHelpers = "";
+    let _acesTonemapCall = "";
+    const hasTonemap = scene.imageProcessing.toneMappingEnabled;
+    if (hasTonemap && scene.imageProcessing.toneMappingType === "aces") {
+      const acesMod = await Promise.resolve().then(() => (init_pbr_aces_wgsl(), pbr_aces_wgsl_exports));
+      _acesHelpers = acesMod.ACES_HELPERS_WGSL;
+      _acesTonemapCall = acesMod.ACES_TONEMAP_CALL_WGSL;
+    }
+    let _fogHelper = "";
+    let _fogBlock = "";
+    if (scene.fog) {
+      const fogMod = await Promise.resolve().then(() => (init_pbr_fog_wgsl(), pbr_fog_wgsl_exports));
+      _fogHelper = fogMod.PBR_FOG_HELPER;
+      _fogBlock = fogMod.PBR_FOG_BLOCK;
+    }
+    const composePbr = createPbrComposer({
+      _singleLightWGSL,
+      _getSingleLightBlock,
+      _multiLightWGSL,
+      _multiLightLoop,
+      _acesHelpers,
+      _acesTonemapCall,
+      _fogHelper,
+      _fogBlock,
+      _createPbrTemplateExt,
+      _anisoExt,
+      _iblSkyboxCalc,
+      _createPbrShadowFragment,
+      _shadowLights: shadowLights,
+      _createThinInstanceFragment
+    });
+    const sceneFeatures = (hasEnv ? PBR_HAS_ENV : 0) | (hasTonemap ? PBR_HAS_TONEMAP : 0) | (scene.fog ? PBR_HAS_FOG : 0);
+    const shadowBGCache = /* @__PURE__ */ new Map();
+    const syncThinInstanceBuffers2 = _syncThinInstanceBuffers;
+    const syncThinInstanceGpuData2 = _syncThinInstanceGpuData;
+    const rebuildSingle = (s, mesh, materialOverride) => {
+      const materialInput = materialOverride ?? mesh.material;
+      const mat = materialInput;
+      const renderFeatures = mat._renderFeatures ?? (mat._renderFeatures = _computePbrMaterialFeatures(mat));
+      const isOverride = materialOverride != null;
+      const mi = mesh;
+      const lr = writeMeshLightSelection(mesh, s.lights);
+      const lightCount = lr > 0 ? 1 : -lr;
+      const features = renderFeatures.features;
+      const features2 = renderFeatures.features2 ?? 0;
+      const shadowOutput = (features2 & (PBR2_NO_COLOR_OUTPUT | PBR2_ESM_SHADOW_OUTPUT)) !== 0;
+      const receiveShadows = !shadowOutput && mesh.receiveShadows && hasSomeShadows;
+      const lightMode = lightCount === 0 ? 0 : lightCount === 1 && !receiveShadows ? 1 : 2;
+      const singleLightType = lightMode === 1 ? getPackedSingleLightType(s.lights, lr - 1) : "";
+      const meshFeatures = _computeMeshFeatures(mesh, receiveShadows);
+      const esmShadowDepthCode = (features2 & PBR2_ESM_SHADOW_OUTPUT) !== 0 ? mat._esmShadowDepthCode : "";
+      const vbLayout = mi._gpu._vbLayout;
+      const vbKey = mi._gpu._vbKey ?? "";
+      const composed = composePbr(features, features2, meshFeatures, sceneFeatures, lightMode, singleLightType, esmShadowDepthCode, vbLayout, vbKey);
+      const bindings = getOrCreatePbrBindings(engine, features, features2, meshFeatures, sceneFeatures, composed, `${lightMode}:${singleLightType}${vbKey}`, mat.stencil ?? null);
+      const meshUboData = new F32(composed._meshUboSpec._totalBytes / 4);
+      const _packMeshWorld = engine._makePackMeshWorld?.(s) ?? packMat4IntoF32;
+      _packMeshWorld(meshUboData, mesh.worldMatrix, 0, 0);
+      writeMeshLightSelection(mesh, s.lights, meshUboData);
+      const meshUBO = createUniformBuffer(engine, meshUboData);
+      const materialSpec = composed._materialUboSpec;
+      const matInitData = new F32(materialSpec._totalBytes / 4);
+      _writeMaterialData(matInitData, mat, materialSpec);
+      const materialUBO = createUniformBuffer(engine, matInitData);
+      const needsTaskRefraction = !!mat.transmissive && (features2 & PBR2_HAS_REFRACTION) !== 0;
+      const materialBindGroupStatic = needsTaskRefraction ? null : createPbrMeshBindGroup(engine, bindings, composed, meshUBO, materialUBO, mat, envTextures ?? null, mesh);
+      let shadowBindGroup = null;
+      const meshShadowLights = receiveShadows ? shadowLights : [];
+      if (meshShadowLights.length > 0 && bindings._shadowBGL) {
+        let cached = shadowBGCache.get(bindings._shadowBGL);
+        if (!cached) {
+          const entries = [];
+          let b = 0;
+          for (const sl of meshShadowLights) {
+            const sg = sl.gen;
+            entries.push({ binding: b++, resource: sg._depthTexture.createView() });
+            entries.push({ binding: b++, resource: sg._depthSampler });
+            entries.push({ binding: b++, resource: { buffer: sg._shadowUBO } });
+          }
+          cached = device.createBindGroup({ layout: bindings._shadowBGL, entries });
+          shadowBGCache.set(bindings._shadowBGL, cached);
+        }
+        shadowBindGroup = cached;
+      }
+      const boundTextures = collectPbrBoundTextures(mat);
+      for (const t of boundTextures) {
+        acquireTexture(t);
+      }
+      s._meshDisposables.set(mesh, [
+        () => {
+          meshUBO.destroy();
+          materialUBO.destroy();
+        },
+        () => {
+          for (const t of boundTextures) {
+            releaseTexture(t);
+          }
+        }
+      ]);
+      const isTransparent = (features2 & (PBR2_NO_COLOR_OUTPUT | PBR2_ESM_SHADOW_OUTPUT)) === 0 && (features & PBR_HAS_ALPHA_BLEND) !== 0;
+      const order = mesh.renderOrder ?? (isTransparent || needsTaskRefraction ? 150 : 100);
+      const hasNormalMap = (features & PBR_HAS_NORMAL_MAP) !== 0;
+      const hasUV2 = (features2 & PBR2_HAS_UV2) !== 0 && (meshFeatures & MSH_HAS_UV2) !== 0;
+      const hasVertexColor = (meshFeatures & MSH_HAS_VERTEX_COLOR) !== 0;
+      const hasTI = (meshFeatures & MSH_HAS_THIN_INSTANCES) !== 0;
+      const hasTIColor = (meshFeatures & MSH_HAS_INSTANCE_COLOR) !== 0;
+      let _lastWorldVersion = mesh.worldMatrixVersion;
+      let _lastLightsCount = s.lights.length;
+      const sortCenter = isTransparent || needsTaskRefraction ? [mesh.worldMatrix[12], mesh.worldMatrix[13], mesh.worldMatrix[14]] : null;
+      const _baseUpdate = () => {
+        const worldVersion = mesh.worldMatrixVersion;
+        if (worldVersion !== _lastWorldVersion || s.lights.length !== _lastLightsCount) {
+          if (sortCenter) {
+            sortCenter[0] = mesh.worldMatrix[12];
+            sortCenter[1] = mesh.worldMatrix[13];
+            sortCenter[2] = mesh.worldMatrix[14];
+          }
+          _packMeshWorld(meshUboData, mesh.worldMatrix, 0, 0);
+          writeMeshLightSelection(mesh, s.lights, meshUboData);
+          device.queue.writeBuffer(meshUBO, 0, meshUboData);
+          _lastWorldVersion = worldVersion;
+          _lastLightsCount = s.lights.length;
+        }
+        const uboVersion = mat._uboVersion;
+        if (uboVersion !== _lastUboVersion) {
+          _lastUboVersion = uboVersion;
+          let data = materialScratch.get(materialSpec._totalBytes);
+          if (!data) {
+            data = new F32(materialSpec._totalBytes / 4);
+            materialScratch.set(materialSpec._totalBytes, data);
+          } else {
+            data.fill(0);
+          }
+          _writeMaterialData(data, mat, materialSpec);
+          device.queue.writeBuffer(materialUBO, 0, data.buffer, 0, data.byteLength);
+        }
+        if (hasTI && syncThinInstanceGpuData2) {
+          const ti = mesh.thinInstances;
+          if (ti) {
+            syncThinInstanceGpuData2(engine, ti, hasTIColor);
+          }
+        }
+      };
+      const _invalidate = () => {
+        _lastWorldVersion = -1;
+      };
+      const update = engine._wrapRenderableForFO?.(_baseUpdate, s, _invalidate) ?? _baseUpdate;
+      const drawWith = (pass, materialBindGroup, cullBinding) => {
+        if (!isOverride && mesh.material !== materialInput) {
+          return 0;
+        }
+        const gpu = mi._gpu;
+        pass.setBindGroup(1, materialBindGroup);
+        if (shadowBindGroup) {
+          pass.setBindGroup(2, shadowBindGroup);
+        }
+        let slot = 0;
+        pass.setVertexBuffer(slot++, gpu.positionBuffer);
+        pass.setVertexBuffer(slot++, gpu.normalBuffer);
+        if (hasNormalMap && gpu.tangentBuffer) {
+          pass.setVertexBuffer(slot++, gpu.tangentBuffer);
+        }
+        pass.setVertexBuffer(slot++, gpu.uvBuffer);
+        if (hasUV2 && gpu.uv2Buffer) {
+          pass.setVertexBuffer(slot++, gpu.uv2Buffer);
+        }
+        if (hasVertexColor && gpu.colorBuffer) {
+          pass.setVertexBuffer(slot++, gpu.colorBuffer);
+        }
+        const skin = mesh.skeleton ?? mesh.vat;
+        if (skin) {
+          pass.setVertexBuffer(slot++, skin.jointsBuffer);
+          pass.setVertexBuffer(slot++, skin.weightsBuffer);
+          if (skin.joints1Buffer && skin.weights1Buffer) {
+            pass.setVertexBuffer(slot++, skin.joints1Buffer);
+            pass.setVertexBuffer(slot++, skin.weights1Buffer);
+          }
+        }
+        const ti = hasTI ? mesh.thinInstances : null;
+        if (ti && syncThinInstanceBuffers2) {
+          slot = syncThinInstanceBuffers2(engine, ti, pass, slot, hasTIColor, cullBinding?.cullDrawBufs);
+        }
+        pass.setIndexBuffer(gpu.indexBuffer, gpu.indexFormat);
+        if (cullBinding) {
+          cullBinding.draw(pass, gpu.indexCount, ti.count);
+        } else if (ti && ti.count > 0) {
+          pass.drawIndexed(gpu.indexCount, ti.count);
+        } else {
+          pass.drawIndexed(gpu.indexCount);
+        }
+        return 1;
+      };
+      const r = {
+        order,
+        isTransparent,
+        _transmissive: needsTaskRefraction,
+        mesh,
+        bind(eng, sig) {
+          const pipeline = getOrCreatePbrPipeline(eng, sig, bindings);
+          const materialBindGroup = needsTaskRefraction ? createPbrMeshBindGroup(engine, bindings, composed, meshUBO, materialUBO, mat, envTextures ?? null, mesh, sig._transmissionTexture) : materialBindGroupStatic;
+          const cb = _cull?.tryBind(r, s, mesh, engine, hasTIColor, isTransparent || needsTaskRefraction, update);
+          return {
+            renderable: r,
+            pipeline,
+            update: cb ? cb.update : update,
+            draw: (pass) => drawWith(pass, materialBindGroup, cb)
+          };
+        }
+      };
+      if (sortCenter) {
+        r._worldCenter = sortCenter;
+      }
+      let _lastUboVersion = mat._uboVersion;
+      return r;
+    };
+    const renderables = meshes.map((m) => rebuildSingle(scene, m));
+    scene._pbrGeomContext = {
+      _composePbr: composePbr,
+      _sceneFeatures: sceneFeatures,
+      _envTextures: envTextures ?? null,
+      _shadowLights: shadowLights,
+      _syncThinInstanceBuffers
+    };
+    scene._disposables.push(
+      () => clearPbrPipelineCache(),
+      () => clearSamplerCache(engine)
+    );
+    return { renderables, rebuildSingle };
+  }
+  function toSingleLightType(type) {
+    return type === "hemispheric" || type === "directional" || type === "spot" ? type : "point";
+  }
+  function getPackedSingleLightType(lights, packedIndex) {
+    let packed = 0;
+    for (const light of lights) {
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      if (packed === packedIndex) {
+        return toSingleLightType(light.lightType);
+      }
+      packed++;
+    }
+    return "point";
+  }
+  async function importSingleLightWgsl(type) {
+    if (type === "hemispheric") {
+      return Promise.resolve().then(() => (init_singlelight_hemispheric_wgsl(), singlelight_hemispheric_wgsl_exports));
+    }
+    if (type === "directional") {
+      return Promise.resolve().then(() => (init_singlelight_directional_wgsl(), singlelight_directional_wgsl_exports));
+    }
+    if (type === "spot") {
+      return Promise.resolve().then(() => (init_singlelight_spot_wgsl(), singlelight_spot_wgsl_exports));
+    }
+    return Promise.resolve().then(() => (init_singlelight_point_wgsl(), singlelight_point_wgsl_exports));
+  }
+  function _writeMaterialData(data, material, spec) {
+    data[0] = material.environmentIntensity ?? 1;
+    data[1] = material.directIntensity ?? 1;
+    data[2] = material.reflectance ?? 0.04;
+    data[3] = material.alpha ?? 1;
+    const baseColorFactorOffset = spec._offsets.get("baseColorFactor");
+    if (baseColorFactorOffset !== void 0) {
+      const off = baseColorFactorOffset / 4;
+      const factor = material.baseColorFactor;
+      data[off] = factor ? factor[0] : 1;
+      data[off + 1] = factor ? factor[1] : 1;
+      data[off + 2] = factor ? factor[2] : 1;
+      data[off + 3] = factor ? factor[3] : 1;
+    }
+    if (spec._offsets.has("metallicFactor")) {
+      const off = spec._offsets.get("metallicFactor") / 4;
+      data[off] = material.metallicFactor ?? 1;
+      data[off + 1] = material.roughnessFactor ?? 1;
+      data[off + 2] = material.normalTextureScale ?? 1;
+      data[off + 3] = material.usePhysicalLightFalloff === false ? 0 : 1;
+    }
+    for (const ext14 of _getPbrExts().values()) {
+      if (ext14.writeUbo) {
+        ext14.writeUbo(data, material, spec._offsets);
+      }
+    }
+  }
+  var init_pbr_renderable = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-renderable.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_pbr_material();
+      init_gpu_pool();
+      init_gpu_buffers();
+      init_pbr_pipeline();
+      init_pbr_flags();
+      init_pbr_compose();
+      init_pbr_material();
+      init_lights_ubo();
+      init_mesh_features();
+      init_pack_mat4_into_f32();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-material.ts
+  function _computePbrMaterialFeatures(mat) {
+    let features = (mat.emissiveTexture ? PBR_HAS_EMISSIVE : 0) | (mat.emissiveColor ? PBR_HAS_EMISSIVE_COLOR : 0) | (mat.normalTexture ? PBR_HAS_NORMAL_MAP : 0) | ((mat.alphaCutOff ?? 0) > 0 ? PBR_HAS_ALPHA_TEST : 0) | (mat.alphaBlend === true || (mat.alphaCutOff ?? 0) <= 0 && mat.alpha < 1 ? PBR_HAS_ALPHA_BLEND : 0) | (mat.specGlossTexture ? PBR_HAS_SPEC_GLOSS : 0) | (mat.doubleSided ? PBR_HAS_DOUBLE_SIDED : 0);
+    if ((mat.occlusionStrength ?? 1) > 0) {
+      features |= PBR_HAS_OCCLUSION;
+    }
+    if (mat.enableSpecularAA) {
+      features |= PBR_HAS_SPECULAR_AA;
+    }
+    if (mat.gammaAlbedo) {
+      features |= PBR_HAS_GAMMA_ALBEDO;
+    }
+    if (mat.anisotropy?.isEnabled) {
+      features |= PBR_HAS_ANISOTROPY;
+    }
+    if (mat.skyboxMode) {
+      features |= PBR_HAS_SKYBOX;
+    }
+    let features2 = 0;
+    for (const ext14 of _getPbrExts().values()) {
+      if (ext14.detect) {
+        const d = ext14.detect(mat);
+        features |= d.f;
+        features2 |= d.f2;
+      }
+    }
+    if (mat._hasUvTx) {
+      features2 |= PBR2_HAS_UV_TRANSFORM;
+    }
+    if (mat.occlusionTexCoord) {
+      features2 |= PBR2_HAS_UV2;
+    }
+    if (mat.baseColorFactor) {
+      features2 |= PBR2_HAS_BASE_COLOR_FACTOR;
+    }
+    return { features, features2 };
+  }
+  function collectPbrBoundTextures(mat) {
+    const t = [];
+    if (mat.baseColorTexture) {
+      t.push(mat.baseColorTexture);
+    }
+    if (mat.normalTexture) {
+      t.push(mat.normalTexture);
+    }
+    if (mat.ormTexture) {
+      t.push(mat.ormTexture);
+    }
+    if (mat.occlusionTexture) {
+      t.push(mat.occlusionTexture);
+    }
+    if (mat.emissiveTexture) {
+      t.push(mat.emissiveTexture);
+    }
+    if (mat.specGlossTexture) {
+      t.push(mat.specGlossTexture);
+    }
+    for (const ext14 of _getPbrExts().values()) {
+      ext14.textures?.(mat, t);
+    }
+    return t;
+  }
+  var pbrGroupBuilder;
+  var init_pbr_material = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/pbr-material.ts"() {
+      "use strict";
+      init_pbr_flags();
+      pbrGroupBuilder = async (scene, meshes) => {
+        const envTex = scene._envTextures;
+        const renderableMod = await Promise.resolve().then(() => (init_pbr_renderable(), pbr_renderable_exports));
+        const result = await renderableMod.buildPbrRenderables(scene, meshes, envTex);
+        pbrGroupBuilder._rebuildSingle = result.rebuildSingle;
+        return result;
+      };
+      pbrGroupBuilder._materialFamily = "pbr";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-parser.ts
+  function parseNodeMaterialSource(source) {
+    const raw = source;
+    if (!raw || !Array.isArray(raw.blocks)) {
+      throw new Error("NodeMaterial: invalid source \u2014 expected `.blocks` array");
+    }
+    const blocks = /* @__PURE__ */ new Map();
+    for (const rb of raw.blocks) {
+      if (typeof rb.id !== "number") {
+        throw new Error(`NodeMaterial: block missing numeric id (name=${rb.name})`);
+      }
+      const className = stripBabylonPrefix(rb.customType);
+      const inputs = /* @__PURE__ */ new Map();
+      for (const ri of rb.inputs ?? []) {
+        const inName = (ri.name ?? "").trim();
+        const outName = typeof ri.targetConnectionName === "string" ? ri.targetConnectionName.trim() : void 0;
+        const source2 = typeof ri.targetBlockId === "number" && typeof outName === "string" ? { blockId: ri.targetBlockId, outputName: outName } : null;
+        inputs.set(inName, {
+          name: inName,
+          source: source2
+        });
+      }
+      const outputs = /* @__PURE__ */ new Set();
+      for (const ro of rb.outputs ?? []) {
+        outputs.add((ro.name ?? "").trim());
+      }
+      blocks.set(rb.id, {
+        id: rb.id,
+        className,
+        name: rb.name,
+        inputs,
+        outputs,
+        serialized: rb
+      });
+    }
+    const namedInputs = /* @__PURE__ */ new Map();
+    for (const b of blocks.values()) {
+      if (b.className !== "InputBlock") {
+        continue;
+      }
+      const mode = b.serialized["mode"] ?? b.serialized["_mode"];
+      if (mode === 0 || mode === void 0) {
+        if (typeof b.serialized["systemValue"] === "number") {
+          continue;
+        }
+        if (b.name) {
+          namedInputs.set(b.name, b.id);
+        }
+      }
+    }
+    const rawAlpha = raw;
+    const alphaMode = typeof rawAlpha.alphaMode === "number" ? rawAlpha.alphaMode : 0;
+    let needsAlphaBlending;
+    if (rawAlpha.forceAlphaBlending === true) {
+      needsAlphaBlending = true;
+    } else if (typeof rawAlpha._needAlphaBlending === "boolean") {
+      needsAlphaBlending = rawAlpha._needAlphaBlending;
+    } else {
+      const fragOut = findBlockByClassName({ blocks, namedInputs, alphaMode, needsAlphaBlending: false, backFaceCulling: true }, "FragmentOutputBlock");
+      const aConn = fragOut?.inputs.get("a");
+      needsAlphaBlending = alphaMode > 0 && !!aConn?.source;
+    }
+    return { blocks, namedInputs, alphaMode, needsAlphaBlending, backFaceCulling: rawAlpha.backFaceCulling !== false };
+  }
+  function stripBabylonPrefix(customType) {
+    return customType.startsWith("BABYLON.") ? customType.slice("BABYLON.".length) : customType;
+  }
+  function findBlockByClassName(graph, className) {
+    for (const b of graph.blocks.values()) {
+      if (b.className === className) {
+        return b;
+      }
+    }
+    return null;
+  }
+  var init_node_parser = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-parser.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-types.ts
+  var WGSL;
+  var init_node_types = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-types.ts"() {
+      "use strict";
+      WGSL = {
+        f32: "f32",
+        vec2f: "vec2<f32>",
+        vec3f: "vec3<f32>",
+        vec4f: "vec4<f32>",
+        mat4f: "mat4x4<f32>",
+        texture2d: "texture_2d<f32>",
+        textureCube: "texture_cube<f32>"
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/input-block.ts
+  var input_block_exports = {};
+  __export(input_block_exports, {
+    emitter: () => emitter
+  });
+  function bjsTypeToNodeType(t) {
+    if (t === 1 || t === 2) {
+      return "f32";
+    }
+    if (t === 4) {
+      return "vec2f";
+    }
+    if (t === 8 || t === 32) {
+      return "vec3f";
+    }
+    if (t === 16 || t === 64) {
+      return "vec4f";
+    }
+    if (t === 128) {
+      return "mat4f";
+    }
+    throw new Error(`InputBlock: unsupported BJS connection point type 0x${t.toString(16)}`);
+  }
+  function wgslLiteral(value, type) {
+    if (type === "f32") {
+      const f = typeof value === "number" ? value : 0;
+      return formatFloat(f);
+    }
+    if (Array.isArray(value)) {
+      const parts = value.map((v) => formatFloat(typeof v === "number" ? v : 0)).join(", ");
+      return `${WGSL[type]}(${parts})`;
+    }
+    if (type === "vec2f") {
+      return "vec2<f32>(0.0, 0.0)";
+    }
+    if (type === "vec3f") {
+      return "vec3<f32>(0.0, 0.0, 0.0)";
+    }
+    if (type === "vec4f") {
+      return "vec4<f32>(0.0, 0.0, 0.0, 0.0)";
+    }
+    return "0.0";
+  }
+  function formatFloat(n) {
+    if (Number.isInteger(n)) {
+      return `${n}.0`;
+    }
+    return `${n}`;
+  }
+  function emitAttribute(block, stage, state) {
+    const attrName = block.name;
+    const type = ATTRIBUTE_TYPES[attrName];
+    if (!type) {
+      throw new Error(`InputBlock: unknown mesh attribute "${attrName}"`);
+    }
+    const wgslType = WGSL[type];
+    if (!state.vertexAttributes.find((a) => a._name === attrName)) {
+      state.vertexAttributes.push({
+        _name: attrName,
+        _type: wgslType,
+        _gpuFormat: type === "vec2f" ? "float32x2" : type === "vec3f" ? "float32x3" : "float32x4",
+        _arrayStride: (type === "vec2f" ? 2 : type === "vec3f" ? 3 : 4) * 4
+      });
+    }
+    if (stage === "vertex") {
+      return { expr: `in.${attrName}`, type };
+    }
+    const vname = `v_attr_${attrName}`;
+    if (!state.varyings.find((v) => v._name === vname)) {
+      state.varyings.push({ _name: vname, _type: wgslType });
+      state.vertex.body.push(`out.${vname} = in.${attrName};`);
+    }
+    return { expr: `in.${vname}`, type };
+  }
+  function emitSystemValue(block, stage, state) {
+    const sv = block.serialized["systemValue"];
+    switch (sv) {
+      case 1:
+        return { expr: "meshU.world", type: "mat4f" };
+      case 2:
+        return { expr: "sceneU.view", type: "mat4f" };
+      case 3:
+        return { expr: "sceneU.projection", type: "mat4f" };
+      case 4:
+        return { expr: "sceneU.viewProjection", type: "mat4f" };
+      case 5:
+        return { expr: "(sceneU.view * meshU.world)", type: "mat4f" };
+      case 6:
+        return { expr: "(sceneU.viewProjection * meshU.world)", type: "mat4f" };
+      case 7:
+        return { expr: "sceneU.vEyePosition.xyz", type: "vec3f" };
+      case 8:
+        return { expr: "sceneU.vFogColor.xyz", type: "vec3f" };
+      default:
+        throw new Error(`InputBlock: unsupported systemValue ${sv} on block "${block.name}"`);
+    }
+  }
+  function emitUniform(block, state) {
+    const portType = block.serialized["type"] ?? 16;
+    const type = bjsTypeToNodeType(portType);
+    const fieldName = sanitize(block.name || `input${block.id}`);
+    if (!state.nodeUboFields.find((f) => f._name === fieldName)) {
+      state.nodeUboFields.push({ _name: fieldName, _type: WGSL[type] });
+    }
+    return { expr: `nodeU.${fieldName}`, type };
+  }
+  function sanitize(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  var ATTRIBUTE_TYPES, emitter;
+  var init_input_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/input-block.ts"() {
+      init_node_types();
+      ATTRIBUTE_TYPES = {
+        position: "vec3f",
+        normal: "vec3f",
+        tangent: "vec4f",
+        uv: "vec2f",
+        uv2: "vec2f",
+        color: "vec4f",
+        matricesIndices: "vec4f",
+        matricesWeights: "vec4f",
+        matricesIndicesExtra: "vec4f",
+        matricesWeightsExtra: "vec4f"
+      };
+      emitter = {
+        className: "InputBlock",
+        emit(block, _outputName, stage, state, _ctx) {
+          const mode = block.serialized["mode"] ?? block.serialized["_mode"];
+          if (mode === 1) {
+            return emitAttribute(block, stage, state);
+          }
+          const sv = block.serialized["systemValue"];
+          if (typeof sv === "number") {
+            return emitSystemValue(block, stage, state);
+          }
+          return emitUniform(block, state);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/vector-merger.ts
+  var vector_merger_exports = {};
+  __export(vector_merger_exports, {
+    emitter: () => emitter2
+  });
+  function tryResolve(block, inputName, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (!input || !input.source) {
+      return null;
+    }
+    return ctx.resolve(block, inputName, stage, state);
+  }
+  function tryResolveAny(block, inputNames, stage, state, ctx) {
+    for (const inputName of inputNames) {
+      const resolved = tryResolve(block, inputName, stage, state, ctx);
+      if (resolved) {
+        return resolved;
+      }
+    }
+    return null;
+  }
+  var emitter2;
+  var init_vector_merger = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/vector-merger.ts"() {
+      "use strict";
+      emitter2 = {
+        className: "VectorMergerBlock",
+        emit(block, outputName, stage, state, ctx) {
+          const xyzIn = tryResolveAny(block, ["xyzIn", "xyz"], stage, state, ctx);
+          const xyIn = tryResolveAny(block, ["xyIn", "xy"], stage, state, ctx);
+          const zwIn = tryResolveAny(block, ["zwIn", "zw"], stage, state, ctx);
+          const x = tryResolve(block, "x", stage, state, ctx);
+          const y = tryResolve(block, "y", stage, state, ctx);
+          const z = tryResolve(block, "z", stage, state, ctx);
+          const w = tryResolve(block, "w", stage, state, ctx);
+          const sx = x ? ctx.cast(x, "f32").expr : xyIn ? `(${xyIn.expr}).x` : xyzIn ? `(${xyzIn.expr}).x` : "0.0";
+          const sy = y ? ctx.cast(y, "f32").expr : xyIn ? `(${xyIn.expr}).y` : xyzIn ? `(${xyzIn.expr}).y` : "0.0";
+          const sz = z ? ctx.cast(z, "f32").expr : zwIn ? `(${zwIn.expr}).x` : xyzIn ? `(${xyzIn.expr}).z` : "0.0";
+          const sw = w ? ctx.cast(w, "f32").expr : zwIn ? `(${zwIn.expr}).y` : "0.0";
+          if (outputName === "xy") {
+            return { expr: `vec2<f32>(${sx}, ${sy})`, type: "vec2f" };
+          }
+          if (outputName === "xyz") {
+            return { expr: `vec3<f32>(${sx}, ${sy}, ${sz})`, type: "vec3f" };
+          }
+          return { expr: `vec4<f32>(${sx}, ${sy}, ${sz}, ${sw})`, type: "vec4f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/fragment-output.ts
+  var fragment_output_exports = {};
+  __export(fragment_output_exports, {
+    emitter: () => emitter3
+  });
+  var emitter3;
+  var init_fragment_output = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/fragment-output.ts"() {
+      emitter3 = {
+        className: "FragmentOutputBlock",
+        stage: "fragment",
+        emit(block, _outputName, stage, state, ctx) {
+          const rgbaConn = block.inputs.get("rgba");
+          let finalVec4;
+          if (rgbaConn && rgbaConn.source) {
+            const v = ctx.resolve(block, "rgba", stage, state);
+            finalVec4 = ctx.cast(v, "vec4f");
+          } else {
+            const rgbConn = block.inputs.get("rgb");
+            const aConn = block.inputs.get("a");
+            const rgb = rgbConn && rgbConn.source ? ctx.cast(ctx.resolve(block, "rgb", stage, state), "vec3f") : { expr: "vec3<f32>(0.0, 0.0, 0.0)", type: "vec3f" };
+            const a = aConn && aConn.source ? ctx.cast(ctx.resolve(block, "a", stage, state), "f32") : { expr: "1.0", type: "f32" };
+            finalVec4 = { expr: `vec4<f32>(${rgb.expr}, ${a.expr})`, type: "vec4f" };
+          }
+          const t = ctx.temp(state, "frag");
+          state.fragment.body.push(`let ${t} = ${finalVec4.expr};`);
+          state.fragment.body.push(`_NME_FRAG_OUTPUT_ = ${t};`);
+          return { expr: t, type: "vec4f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/_math-factory.ts
+  function widerType(a, b) {
+    const ra = RANK[a] || 0;
+    const rb = RANK[b] || 0;
+    const r = Math.max(ra, rb);
+    if (!r) {
+      throw new Error(`NodeMaterial: cannot pick common numeric type from ${a} and ${b}`);
+    }
+    return RANK_TYPE[r];
+  }
+  function binaryEmitter(className, op, leftName = "left", rightName = "right") {
+    return {
+      className,
+      emit(block, _outputName, stage, state, ctx) {
+        const l = ctx.resolve(block, leftName, stage, state);
+        const r = ctx.resolve(block, rightName, stage, state);
+        const t = widerType(l.type, r.type);
+        const lc = ctx.cast(l, t).expr;
+        const rc = ctx.cast(r, t).expr;
+        return { expr: `(${op(lc, rc)})`, type: t };
+      }
+    };
+  }
+  function unaryEmitter(className, op, returnType, inputName = "input") {
+    return {
+      className,
+      emit(block, _outputName, stage, state, ctx) {
+        const v = ctx.resolve(block, inputName, stage, state);
+        return { expr: `(${op(v.expr)})`, type: returnType ?? v.type };
+      }
+    };
+  }
+  function formatFloat2(n) {
+    if (!Number.isFinite(n)) {
+      return "0.0";
+    }
+    const s = n.toString();
+    return s.includes(".") || s.includes("e") ? s : `${s}.0`;
+  }
+  var RANK, RANK_TYPE;
+  var init_math_factory = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/_math-factory.ts"() {
+      "use strict";
+      RANK = {
+        f32: 1,
+        vec2f: 2,
+        vec3f: 3,
+        vec4f: 4,
+        mat4f: 0,
+        texture2d: 0,
+        textureCube: 0
+      };
+      RANK_TYPE = { 1: "f32", 2: "vec2f", 3: "vec3f", 4: "vec4f" };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/add-block.ts
+  var add_block_exports = {};
+  __export(add_block_exports, {
+    emitter: () => emitter4
+  });
+  var emitter4;
+  var init_add_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/add-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter4 = binaryEmitter("AddBlock", (l, r) => `${l} + ${r}`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/subtract-block.ts
+  var subtract_block_exports = {};
+  __export(subtract_block_exports, {
+    emitter: () => emitter5
+  });
+  var emitter5;
+  var init_subtract_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/subtract-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter5 = binaryEmitter("SubtractBlock", (l, r) => `${l} - ${r}`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/multiply-block.ts
+  var multiply_block_exports = {};
+  __export(multiply_block_exports, {
+    emitter: () => emitter6
+  });
+  var emitter6;
+  var init_multiply_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/multiply-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter6 = binaryEmitter("MultiplyBlock", (l, r) => `${l} * ${r}`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/min-block.ts
+  var min_block_exports = {};
+  __export(min_block_exports, {
+    emitter: () => emitter7
+  });
+  var emitter7;
+  var init_min_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/min-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter7 = binaryEmitter("MinBlock", (l, r) => `min(${l}, ${r})`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/max-block.ts
+  var max_block_exports = {};
+  __export(max_block_exports, {
+    emitter: () => emitter8
+  });
+  var emitter8;
+  var init_max_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/max-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter8 = binaryEmitter("MaxBlock", (l, r) => `max(${l}, ${r})`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pow-block.ts
+  var pow_block_exports = {};
+  __export(pow_block_exports, {
+    emitter: () => emitter9
+  });
+  var emitter9;
+  var init_pow_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pow-block.ts"() {
+      "use strict";
+      emitter9 = {
+        className: "PowBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const v = ctx.resolve(block, "value", stage, state);
+          const p = ctx.resolve(block, "power", stage, state);
+          const pc = ctx.cast(p, v.type).expr;
+          return { expr: `pow(${v.expr}, ${pc})`, type: v.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/step-block.ts
+  var step_block_exports = {};
+  __export(step_block_exports, {
+    emitter: () => emitter10
+  });
+  var emitter10;
+  var init_step_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/step-block.ts"() {
+      "use strict";
+      emitter10 = {
+        className: "StepBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const value = ctx.resolve(block, "value", stage, state);
+          const edge = ctx.resolve(block, "edge", stage, state);
+          const ec = ctx.cast(edge, value.type).expr;
+          return { expr: `step(${ec}, ${value.expr})`, type: value.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/dot-block.ts
+  var dot_block_exports = {};
+  __export(dot_block_exports, {
+    emitter: () => emitter11
+  });
+  var emitter11;
+  var init_dot_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/dot-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter11 = {
+        className: "DotBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const l = ctx.resolve(block, "left", stage, state);
+          const r = ctx.resolve(block, "right", stage, state);
+          const t = widerType(l.type, r.type);
+          const lc = ctx.cast(l, t).expr;
+          const rc = ctx.cast(r, t).expr;
+          return { expr: `dot(${lc}, ${rc})`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/scale-block.ts
+  var scale_block_exports = {};
+  __export(scale_block_exports, {
+    emitter: () => emitter12
+  });
+  var emitter12;
+  var init_scale_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/scale-block.ts"() {
+      "use strict";
+      emitter12 = {
+        className: "ScaleBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = ctx.resolve(block, "input", stage, state);
+          const factor = ctx.resolve(block, "factor", stage, state);
+          const fc = ctx.cast(factor, "f32").expr;
+          return { expr: `(${input.expr} * ${fc})`, type: input.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/oneminus-block.ts
+  var oneminus_block_exports = {};
+  __export(oneminus_block_exports, {
+    emitter: () => emitter13
+  });
+  var emitter13;
+  var init_oneminus_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/oneminus-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter13 = unaryEmitter("OneMinusBlock", (v) => `1.0 - ${v}`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/negate-block.ts
+  var negate_block_exports = {};
+  __export(negate_block_exports, {
+    emitter: () => emitter14
+  });
+  var emitter14;
+  var init_negate_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/negate-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter14 = unaryEmitter("NegateBlock", (v) => `-${v}`, void 0, "value");
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/normalize-block.ts
+  var normalize_block_exports = {};
+  __export(normalize_block_exports, {
+    emitter: () => emitter15
+  });
+  var emitter15;
+  var init_normalize_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/normalize-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter15 = unaryEmitter("NormalizeBlock", (v) => `normalize(${v})`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/lerp-block.ts
+  var lerp_block_exports = {};
+  __export(lerp_block_exports, {
+    emitter: () => emitter16
+  });
+  var emitter16;
+  var init_lerp_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/lerp-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter16 = {
+        className: "LerpBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const left = ctx.resolve(block, "left", stage, state);
+          const right = ctx.resolve(block, "right", stage, state);
+          const gradient = ctx.resolve(block, "gradient", stage, state);
+          const t = widerType(left.type, right.type);
+          const lc = ctx.cast(left, t).expr;
+          const rc = ctx.cast(right, t).expr;
+          const gc = ctx.cast(gradient, t).expr;
+          return { expr: `mix(${lc}, ${rc}, ${gc})`, type: t };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/clamp-block.ts
+  var clamp_block_exports = {};
+  __export(clamp_block_exports, {
+    emitter: () => emitter17
+  });
+  var emitter17;
+  var init_clamp_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/clamp-block.ts"() {
+      "use strict";
+      init_math_factory();
+      init_node_types();
+      emitter17 = {
+        className: "ClampBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const value = ctx.resolve(block, "value", stage, state);
+          const minRaw = block.serialized.minimum;
+          const maxRaw = block.serialized.maximum;
+          const minScalar = typeof minRaw === "number" ? formatFloat2(minRaw) : "0.0";
+          const maxScalar = typeof maxRaw === "number" ? formatFloat2(maxRaw) : "1.0";
+          if (value.type === "f32") {
+            return { expr: `clamp(${value.expr}, ${minScalar}, ${maxScalar})`, type: value.type };
+          }
+          const t = WGSL[value.type];
+          return { expr: `clamp(${value.expr}, ${t}(${minScalar}), ${t}(${maxScalar}))`, type: value.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/smoothstep-block.ts
+  var smoothstep_block_exports = {};
+  __export(smoothstep_block_exports, {
+    emitter: () => emitter18
+  });
+  var emitter18;
+  var init_smoothstep_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/smoothstep-block.ts"() {
+      "use strict";
+      emitter18 = {
+        className: "SmoothStepBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const value = ctx.resolve(block, "value", stage, state);
+          const edge0 = ctx.resolve(block, "edge0", stage, state);
+          const edge1 = ctx.resolve(block, "edge1", stage, state);
+          const e0 = ctx.cast(edge0, value.type).expr;
+          const e1 = ctx.cast(edge1, value.type).expr;
+          return { expr: `smoothstep(${e0}, ${e1}, ${value.expr})`, type: value.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/remap-block.ts
+  var remap_block_exports = {};
+  __export(remap_block_exports, {
+    emitter: () => emitter19
+  });
+  function resolveOrSerialized(block, inputName, serializedKey, fallback2, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (input?.source) {
+      return ctx.cast(ctx.resolve(block, inputName, stage, state), "f32").expr;
+    }
+    const raw = block.serialized[serializedKey];
+    return formatFloat2(typeof raw === "number" ? raw : fallback2);
+  }
+  var emitter19;
+  var init_remap_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/remap-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter19 = {
+        className: "RemapBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = ctx.resolve(block, "input", stage, state);
+          const sMin = resolveOrSerialized(block, "sourceMin", "sourceRange.x", -1, stage, state, ctx);
+          const sMax = resolveOrSerialized(block, "sourceMax", "sourceRange.y", 1, stage, state, ctx);
+          const tMin = resolveOrSerialized(block, "targetMin", "targetRange.x", 0, stage, state, ctx);
+          const tMax = resolveOrSerialized(block, "targetMax", "targetRange.y", 1, stage, state, ctx);
+          return {
+            expr: `(${tMin} + (${input.expr} - ${sMin}) * (${tMax} - ${tMin}) / (${sMax} - ${sMin}))`,
+            type: input.type
+          };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/trigonometry-block.ts
+  var trigonometry_block_exports = {};
+  __export(trigonometry_block_exports, {
+    emitter: () => emitter20
+  });
+  var OP, emitter20;
+  var init_trigonometry_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/trigonometry-block.ts"() {
+      "use strict";
+      OP = {
+        0: "cos",
+        1: "sin",
+        2: "abs",
+        3: "exp",
+        4: "exp2",
+        5: "round",
+        6: "floor",
+        7: "ceil",
+        8: "sqrt",
+        9: "log",
+        10: "tan",
+        11: "atan",
+        12: "acos",
+        13: "asin",
+        14: "fract",
+        15: "sign",
+        16: "radians",
+        17: "degrees"
+      };
+      emitter20 = {
+        className: "TrigonometryBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = ctx.resolve(block, "input", stage, state);
+          const opIdx = block.serialized.operation;
+          const fn = typeof opIdx === "number" ? OP[opIdx] : void 0;
+          if (!fn) {
+            throw new Error(`NodeMaterial: unknown TrigonometryBlock operation ${String(opIdx)}`);
+          }
+          return { expr: `${fn}(${input.expr})`, type: input.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/vector-splitter.ts
+  var vector_splitter_exports = {};
+  __export(vector_splitter_exports, {
+    emitter: () => emitter21
+  });
+  var COMPONENT, emitter21;
+  var init_vector_splitter = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/vector-splitter.ts"() {
+      "use strict";
+      COMPONENT = {
+        xyzw: { swizzle: "", type: "vec4f" },
+        xyz: { swizzle: ".xyz", type: "vec3f" },
+        xy: { swizzle: ".xy", type: "vec2f" },
+        x: { swizzle: ".x", type: "f32" },
+        y: { swizzle: ".y", type: "f32" },
+        z: { swizzle: ".z", type: "f32" },
+        w: { swizzle: ".w", type: "f32" }
+      };
+      emitter21 = {
+        className: "VectorSplitterBlock",
+        emit(block, outputName, stage, state, ctx) {
+          let source = null;
+          for (const key of ["xyzw", "xyz", "xy"]) {
+            if (block.inputs.get(key)?.source) {
+              source = ctx.resolve(block, key, stage, state);
+              break;
+            }
+          }
+          if (!source) {
+            throw new Error(`NodeMaterial: VectorSplitterBlock (id=${block.id}) has no connected input`);
+          }
+          const c = COMPONENT[outputName];
+          if (!c) {
+            throw new Error(`NodeMaterial: VectorSplitterBlock has no output "${outputName}"`);
+          }
+          return { expr: `(${source.expr})${c.swizzle}`, type: c.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/color-splitter.ts
+  var color_splitter_exports = {};
+  __export(color_splitter_exports, {
+    emitter: () => emitter22
+  });
+  var COMPONENT2, emitter22;
+  var init_color_splitter = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/color-splitter.ts"() {
+      COMPONENT2 = {
+        rgba: { swizzle: "", type: "vec4f" },
+        rgb: { swizzle: ".xyz", type: "vec3f" },
+        r: { swizzle: ".x", type: "f32" },
+        g: { swizzle: ".y", type: "f32" },
+        b: { swizzle: ".z", type: "f32" },
+        a: { swizzle: ".w", type: "f32" }
+      };
+      emitter22 = {
+        className: "ColorSplitterBlock",
+        emit(block, outputName, stage, state, ctx) {
+          let source = null;
+          for (const key of ["rgba", "rgb"]) {
+            if (block.inputs.get(key)?.source) {
+              source = ctx.resolve(block, key, stage, state);
+              break;
+            }
+          }
+          if (!source) {
+            throw new Error(`NodeMaterial: ColorSplitterBlock (id=${block.id}) has no connected input`);
+          }
+          const c = COMPONENT2[outputName];
+          if (!c) {
+            throw new Error(`NodeMaterial: ColorSplitterBlock has no output "${outputName}"`);
+          }
+          return { expr: `(${source.expr})${c.swizzle}`, type: c.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/transform-block.ts
+  var transform_block_exports = {};
+  __export(transform_block_exports, {
+    emitter: () => emitter23
+  });
+  var emitter23;
+  var init_transform_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/transform-block.ts"() {
+      init_math_factory();
+      emitter23 = {
+        className: "TransformBlock",
+        stage: "vertex",
+        emit(block, _outputName, stage, state, ctx) {
+          const vector = ctx.resolve(block, "vector", stage, state);
+          const transform = ctx.resolve(block, "transform", stage, state);
+          const wRaw = block.serialized.complementW;
+          const zRaw = block.serialized.complementZ;
+          const cw = formatFloat2(typeof wRaw === "number" ? wRaw : 1);
+          const cz = formatFloat2(typeof zRaw === "number" ? zRaw : 0);
+          let vec4;
+          switch (vector.type) {
+            case "vec4f":
+              vec4 = vector.expr;
+              break;
+            case "vec3f":
+              vec4 = `vec4<f32>(${vector.expr}, ${cw})`;
+              break;
+            case "vec2f":
+              vec4 = `vec4<f32>(${vector.expr}, ${cz}, ${cw})`;
+              break;
+            default:
+              vec4 = `vec4<f32>(${ctx.cast(vector, "vec3f").expr}, ${cw})`;
+          }
+          return { expr: `(${transform.expr} * ${vec4})`, type: "vec4f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/vertex-output.ts
+  var vertex_output_exports = {};
+  __export(vertex_output_exports, {
+    emitter: () => emitter24
+  });
+  var emitter24;
+  var init_vertex_output = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/vertex-output.ts"() {
+      emitter24 = {
+        className: "VertexOutputBlock",
+        stage: "vertex",
+        emit(block, _outputName, _stage, state, ctx) {
+          const vector = ctx.resolve(block, "vector", "vertex", state);
+          const pos = ctx.cast(vector, "vec4f").expr;
+          state.vertex.body.push(`_NME_VTX_OUTPUT_ = ${pos};`);
+          return { expr: pos, type: "vec4f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/texture-block.ts
+  var texture_block_exports = {};
+  __export(texture_block_exports, {
+    emitter: () => emitter25
+  });
+  function applyColorSpace(expr, outputName, convertToLinear, convertToGamma) {
+    if (!convertToLinear && !convertToGamma) {
+      return expr;
+    }
+    const power = convertToLinear ? "2.2" : "0.45454545";
+    if (outputName === "rgba") {
+      return `vec4<f32>(pow(max(${expr}.xyz, vec3<f32>(0.0)), vec3<f32>(${power})), ${expr}.w)`;
+    }
+    if (outputName === "rgb") {
+      return `pow(max(${expr}.xyz, vec3<f32>(0.0)), vec3<f32>(${power}))`;
+    }
+    if (outputName === "r" || outputName === "g" || outputName === "b") {
+      return `pow(max(${expr}${OUTPUT[outputName].swizzle}, 0.0), ${power})`;
+    }
+    return expr;
+  }
+  function sanitize2(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  var OUTPUT, emitter25;
+  var init_texture_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/texture-block.ts"() {
+      OUTPUT = {
+        rgba: { swizzle: "", type: "vec4f" },
+        rgb: { swizzle: ".xyz", type: "vec3f" },
+        r: { swizzle: ".x", type: "f32" },
+        g: { swizzle: ".y", type: "f32" },
+        b: { swizzle: ".z", type: "f32" },
+        a: { swizzle: ".w", type: "f32" }
+      };
+      emitter25 = {
+        className: "TextureBlock",
+        emit(block, outputName, stage, state, ctx) {
+          let bindingName3;
+          const source = block.inputs.get("source");
+          if (source?.source) {
+            const producer = ctx.graph.blocks.get(source.source.blockId);
+            bindingName3 = sanitize2(producer?.name || `tex${block.id}`);
+          } else {
+            bindingName3 = sanitize2(block.name || `tex${block.id}`);
+          }
+          if (!state.textures.find((t) => t.name === bindingName3)) {
+            state.textures.push({ name: bindingName3, kind: "texture2d", texture: null });
+          }
+          const uvInput = block.inputs.get("uv");
+          let uv;
+          if (uvInput?.source) {
+            uv = ctx.cast(ctx.resolve(block, "uv", stage, state), "vec2f");
+          } else {
+            uv = { expr: "vec2<f32>(0.0, 0.0)", type: "vec2f" };
+          }
+          const memoKey2 = `_tex_${block.id}_sample`;
+          const stageState = stage === "vertex" ? state.vertex : state.fragment;
+          let sampleExpr = stageState.memo.get(memoKey2);
+          if (!sampleExpr) {
+            const sampleVar = `_s${ctx.temp(state, "tex")}`;
+            stageState.body.push(`let ${sampleVar} = textureSample(nodeTex_${bindingName3}, nodeSamp_${bindingName3}, ${uv.expr});`);
+            sampleExpr = { expr: sampleVar, type: "vec4f" };
+            stageState.memo.set(memoKey2, sampleExpr);
+          }
+          if (outputName === "level") {
+            return { expr: "0.0", type: "f32" };
+          }
+          const out = OUTPUT[outputName] ?? OUTPUT.rgba;
+          const serialized = block.serialized;
+          const expr = applyColorSpace(sampleExpr.expr, outputName, serialized.convertToLinearSpace === true, serialized.convertToGammaSpace === true);
+          return { expr: expr === sampleExpr.expr ? `${sampleExpr.expr}${out.swizzle}` : expr, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/image-source.ts
+  var image_source_exports = {};
+  __export(image_source_exports, {
+    emitter: () => emitter26
+  });
+  function sanitize3(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  var emitter26;
+  var init_image_source = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/image-source.ts"() {
+      "use strict";
+      emitter26 = {
+        className: "ImageSourceBlock",
+        emit(block, _outputName, _stage, state, _ctx) {
+          const bindingName3 = sanitize3(block.name || `img${block.id}`);
+          if (!state.textures.find((t) => t.name === bindingName3)) {
+            state.textures.push({ name: bindingName3, kind: "texture2d", texture: null });
+          }
+          return { expr: bindingName3, type: "texture2d" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/front-facing.ts
+  var front_facing_exports = {};
+  __export(front_facing_exports, {
+    emitter: () => emitter27
+  });
+  var emitter27;
+  var init_front_facing = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/front-facing.ts"() {
+      "use strict";
+      emitter27 = {
+        className: "FrontFacingBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, _state, _ctx) {
+          return { expr: "select(0.0, 1.0, _NME_FRONT_FACING_)", type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/view-direction.ts
+  var view_direction_exports = {};
+  __export(view_direction_exports, {
+    emitter: () => emitter28
+  });
+  var emitter28;
+  var init_view_direction = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/view-direction.ts"() {
+      "use strict";
+      emitter28 = {
+        className: "ViewDirectionBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const wp = ctx.cast(ctx.resolve(block, "worldPosition", stage, state), "vec3f").expr;
+          const cp = ctx.cast(ctx.resolve(block, "cameraPosition", stage, state), "vec3f").expr;
+          return { expr: `normalize(${cp} - ${wp})`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/_lighting-helper.ts
+  var NME_LIGHTING_HELPER_KEY, NME_LIGHTING_HELPER_WGSL;
+  var init_lighting_helper = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/_lighting-helper.ts"() {
+      "use strict";
+      init_types();
+      NME_LIGHTING_HELPER_KEY = "nme_lighting";
+      NME_LIGHTING_HELPER_WGSL = `struct NmeLightResult {
+    diffuse: vec3<f32>,
+    specular: vec3<f32>,
+    shadow: f32,
+};
+
+fn nme_computeLighting(
+    worldPos: vec3<f32>,
+    worldNormal: vec3<f32>,
+    cameraPos: vec3<f32>,
+    diffuseColor: vec3<f32>,
+    specularColor: vec3<f32>,
+    glossiness: f32,
+    shadowFactors: array<f32, ${MAX_LIGHTS}>
+) -> NmeLightResult {
+    var result: NmeLightResult;
+    result.diffuse = vec3<f32>(0.0);
+    result.specular = vec3<f32>(0.0);
+    var aggShadow: f32 = 0.0;
+    var numLights: f32 = 0.0;
+    let viewDir = normalize(cameraPos - worldPos);
+    let N = normalize(worldNormal);
+     let lc = min(meshU.lc, ${MAX_LIGHTS}u);
+     for (var i: u32 = 0u; i < lc; i = i + 1u) {
+        let lightIndex = nli(i);
+        let L = nmeLights.lights[lightIndex];
+        let t = u32(L.vLightData.w);
+        let sh = shadowFactors[lightIndex];
+        var lv: vec3<f32>;
+        var atten: f32 = 1.0;
+        if (t == 3u) {
+            // Hemispheric: ground/sky mix via half-lambert.
+            let nl = 0.5 + 0.5 * dot(N, normalize(L.vLightData.xyz));
+            let diff = mix(L.vLightDirection.xyz, L.vLightDiffuse.rgb, nl);
+            result.diffuse = result.diffuse + diff * diffuseColor * sh;
+            let H = normalize(viewDir + normalize(L.vLightData.xyz));
+            let sf = pow(max(0.0, dot(N, H)), max(1.0, glossiness));
+            result.specular = result.specular + sf * L.vLightSpecular.rgb * specularColor * sh;
+            aggShadow = aggShadow + sh;
+            numLights = numLights + 1.0;
+            continue;
+        }
+        if (t == 1u) {
+            // Directional: vLightData.xyz is the light's forward direction.
+            lv = normalize(-L.vLightData.xyz);
+        } else {
+            // Point / Spot: vLightData.xyz is world-space position; range in vLightDiffuse.a.
+            let d = L.vLightData.xyz - worldPos;
+            atten = max(0.0, 1.0 - length(d) / L.vLightDiffuse.a);
+            lv = normalize(d);
+            if (t == 2u) {
+                // Spot cone falloff (vLightDirection.xyz=dir, .w=cosHalfAngle; vLightSpecular.a=exp).
+                let c = max(0.0, dot(L.vLightDirection.xyz, -lv));
+                if (c >= L.vLightDirection.w) {
+                    atten = atten * max(0.0, pow(c, L.vLightSpecular.a));
+                } else {
+                    atten = 0.0;
+                }
+            }
+        }
+        let NdotL = max(0.0, dot(N, lv));
+        result.diffuse = result.diffuse + L.vLightDiffuse.rgb * diffuseColor * NdotL * atten * sh;
+        let H = normalize(lv + viewDir);
+        let NdotH = max(0.0, dot(N, H));
+        let specFactor = pow(NdotH, max(1.0, glossiness));
+        result.specular = result.specular + L.vLightSpecular.rgb * specularColor * specFactor * atten * sh;
+        aggShadow = aggShadow + sh;
+        numLights = numLights + 1.0;
+    }
+    if (numLights > 0.0) {
+        result.shadow = aggShadow / numLights;
+    } else {
+        result.shadow = 1.0;
+    }
+    return result;
+}
+`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/light-block.ts
+  var light_block_exports = {};
+  __export(light_block_exports, {
+    emitter: () => emitter29
+  });
+  function resolveOptional(block, inputName, fallback2, stage, state, ctx, target) {
+    const input = block.inputs.get(inputName);
+    if (input?.source) {
+      return ctx.cast(ctx.resolve(block, inputName, stage, state), target).expr;
+    }
+    return fallback2;
+  }
+  var SHADOW_FACTORS_ONE, emitter29;
+  var init_light_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/light-block.ts"() {
+      "use strict";
+      init_lighting_helper();
+      init_types();
+      SHADOW_FACTORS_ONE = `array<f32, ${MAX_LIGHTS}>(${new Array(MAX_LIGHTS).fill("1.0").join(", ")})`;
+      emitter29 = {
+        className: "LightBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          state.fragment.helpers.set(NME_LIGHTING_HELPER_KEY, NME_LIGHTING_HELPER_WGSL);
+          state.usesLightsUbo = true;
+          const memoKey2 = `_light_${block.id}_call`;
+          const callExpr = state.fragment.memo.get(memoKey2);
+          let callVar;
+          if (!callExpr) {
+            const wp = resolveOptional(block, "worldPosition", "vec3<f32>(0.0)", stage, state, ctx, "vec3f");
+            const wn = resolveOptional(block, "worldNormal", "vec3<f32>(0.0, 1.0, 0.0)", stage, state, ctx, "vec3f");
+            const cp = resolveOptional(block, "cameraPosition", "_NME_CAMERA_POS_", stage, state, ctx, "vec3f");
+            const dc = resolveOptional(block, "diffuseColor", "vec3<f32>(1.0)", stage, state, ctx, "vec3f");
+            const sc = resolveOptional(block, "specularColor", "vec3<f32>(1.0)", stage, state, ctx, "vec3f");
+            const gl = resolveOptional(block, "glossiness", "1.0", stage, state, ctx, "f32");
+            const gp = resolveOptional(block, "glossPower", "1024.0", stage, state, ctx, "f32");
+            const sf = state.shadowLights.length > 0 ? `nme_computeShadowFactors(in)` : SHADOW_FACTORS_ONE;
+            callVar = `_lt${ctx.temp(state, "light")}`;
+            state.fragment.body.push(`let ${callVar} = nme_computeLighting(${wp}, ${wn}, ${cp}, ${dc}, ${sc}, (${gl}) * (${gp}), ${sf});`);
+            state.fragment.memo.set(memoKey2, { expr: callVar, type: "vec4f" });
+          } else {
+            callVar = callExpr.expr;
+          }
+          const out = {
+            diffuseOutput: { expr: `${callVar}.diffuse`, type: "vec3f" },
+            specularOutput: { expr: `${callVar}.specular`, type: "vec3f" },
+            shadow: { expr: `${callVar}.shadow`, type: "f32" }
+          };
+          return out[outputName] ?? { expr: `${callVar}.diffuse`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/light-information.ts
+  var light_information_exports = {};
+  __export(light_information_exports, {
+    emitter: () => emitter30
+  });
+  var emitter30;
+  var init_light_information = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/light-information.ts"() {
+      "use strict";
+      emitter30 = {
+        className: "LightInformationBlock",
+        emit(block, outputName, _stage, state, _ctx) {
+          state.usesLightsUbo = true;
+          const idxRaw = block.serialized.lightId;
+          const idx = typeof idxRaw === "number" ? idxRaw : 0;
+          const base = `nmeLights.lights[nli(${idx}u)]`;
+          const out = {
+            direction: { expr: `${base}.vLightData.xyz`, type: "vec3f" },
+            color: { expr: `${base}.vLightDiffuse.rgb`, type: "vec3f" },
+            intensity: { expr: `${base}.vLightDiffuse.a`, type: "f32" }
+          };
+          return out[outputName] ?? out.direction;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/fog-block.ts
+  var fog_block_exports = {};
+  __export(fog_block_exports, {
+    emitter: () => emitter31
+  });
+  var FOG_HELPER_KEY, FOG_HELPER_WGSL, emitter31;
+  var init_fog_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/fog-block.ts"() {
+      "use strict";
+      FOG_HELPER_KEY = "nme_fog";
+      FOG_HELPER_WGSL = `
+fn nme_fogFactor(worldPos: vec3<f32>, cameraPos: vec3<f32>, fogParams: vec4<f32>) -> f32 {
+    let dist = distance(worldPos, cameraPos);
+    let mode = fogParams.x;
+    let density = fogParams.y;
+    let fstart = fogParams.z;
+    let fend = fogParams.w;
+    // mode: 1=EXP, 2=EXP2, 3=LINEAR
+    if (mode < 1.5) {
+        return clamp(exp(-dist * density), 0.0, 1.0);
+    }
+    if (mode < 2.5) {
+        let d = dist * density;
+        return clamp(exp(-d * d), 0.0, 1.0);
+    }
+    return clamp((fend - dist) / (fend - fstart), 0.0, 1.0);
+}
+`;
+      emitter31 = {
+        className: "FogBlock",
+        stage: "fragment",
+        emit(block, _outputName, stage, state, ctx) {
+          state.fragment.helpers.set(FOG_HELPER_KEY, FOG_HELPER_WGSL);
+          const wp = ctx.cast(ctx.resolve(block, "worldPosition", stage, state), "vec3f").expr;
+          const input = ctx.resolve(block, "input", stage, state);
+          const fogColor = ctx.cast(ctx.resolve(block, "fogColor", stage, state), "vec3f").expr;
+          const inType = input.type === "vec4f" ? "vec4f" : "vec3f";
+          const inVec3 = ctx.cast(input, "vec3f").expr;
+          const factor = `nme_fogFactor(${wp}, _NME_CAMERA_POS_, _NME_FOG_PARAMS_)`;
+          const mixed = `mix(${fogColor}, ${inVec3}, ${factor})`;
+          if (inType === "vec4f") {
+            return { expr: `vec4<f32>(${mixed}, (${input.expr}).w)`, type: "vec4f" };
+          }
+          return { expr: mixed, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/perturb-normal.ts
+  var perturb_normal_exports = {};
+  __export(perturb_normal_exports, {
+    emitter: () => emitter32
+  });
+  var HELPER_KEY, HELPER_WGSL, emitter32;
+  var init_perturb_normal = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/perturb-normal.ts"() {
+      HELPER_KEY = "nme_perturbNormal";
+      HELPER_WGSL = `
+fn nme_perturbNormal(worldPos: vec3<f32>, worldNormal: vec3<f32>, uv: vec2<f32>, sampled: vec3<f32>, strength: f32) -> vec3<f32> {
+    // Construct ad-hoc TBN from screen-space derivatives. WebGPU's UV.y goes top-down
+    // (BJS GLSL UV is bottom-up), so dpdy and duv2 both end up with opposite sign vs BJS.
+    // Negating BOTH dp2 AND duv2 cancels the framebuffer Y-flip without flipping the
+    // tangent orientation. This produces the same TBN as BJS does at the same fragment.
+    let dp1 = dpdx(worldPos);
+    let dp2 = -dpdy(worldPos);
+    let duv1 = dpdx(uv);
+    let duv2 = -dpdy(uv);
+    let dp2perp = cross(dp2, worldNormal);
+    let dp1perp = cross(worldNormal, dp1);
+    let T = dp2perp * duv1.x + dp1perp * duv2.x;
+    let B = dp2perp * duv1.y + dp1perp * duv2.y;
+    let invmax = inverseSqrt(max(dot(T, T), dot(B, B)));
+    let n = sampled * 2.0 - vec3<f32>(1.0);
+    let scaled = vec3<f32>(n.xy * strength, n.z);
+    return normalize(T * scaled.x * invmax + B * scaled.y * invmax + worldNormal * scaled.z);
+}
+`;
+      emitter32 = {
+        className: "PerturbNormalBlock",
+        stage: "fragment",
+        emit(block, _outputName, stage, state, ctx) {
+          state.fragment.helpers.set(HELPER_KEY, HELPER_WGSL);
+          const wp = ctx.cast(ctx.resolve(block, "worldPosition", stage, state), "vec3f").expr;
+          const wn = ctx.cast(ctx.resolve(block, "worldNormal", stage, state), "vec3f").expr;
+          const uv = ctx.cast(ctx.resolve(block, "uv", stage, state), "vec2f").expr;
+          const nm = ctx.cast(ctx.resolve(block, "normalMapColor", stage, state), "vec3f").expr;
+          const strInput = block.inputs.get("strength");
+          const strength = strInput?.source ? ctx.cast(ctx.resolve(block, "strength", stage, state), "f32").expr : "1.0";
+          return { expr: `nme_perturbNormal(${wp}, ${wn}, ${uv}, ${nm}, ${strength})`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/bones-block.ts
+  var bones_block_exports = {};
+  __export(bones_block_exports, {
+    emitter: () => emitter33
+  });
+  var HELPER_KEY2, HELPER_WGSL2, emitter33;
+  var init_bones_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/bones-block.ts"() {
+      "use strict";
+      HELPER_KEY2 = "nme_skinning";
+      HELPER_WGSL2 = `
+fn nme_skinningMatrix(indices: vec4<f32>, weights: vec4<f32>) -> mat4x4<f32> {
+    let i0 = u32(indices.x);
+    let i1 = u32(indices.y);
+    let i2 = u32(indices.z);
+    let i3 = u32(indices.w);
+    return nmeBones[i0] * weights.x
+         + nmeBones[i1] * weights.y
+         + nmeBones[i2] * weights.z
+         + nmeBones[i3] * weights.w;
+}
+`;
+      emitter33 = {
+        className: "BonesBlock",
+        stage: "vertex",
+        emit(block, _outputName, stage, state, ctx) {
+          const world = ctx.resolve(block, "world", stage, state);
+          if (!state.hasSkeleton) {
+            return world;
+          }
+          state.vertex.helpers.set(HELPER_KEY2, HELPER_WGSL2);
+          const indices = ctx.cast(ctx.resolve(block, "matricesIndices", stage, state), "vec4f").expr;
+          const weights = ctx.cast(ctx.resolve(block, "matricesWeights", stage, state), "vec4f").expr;
+          return { expr: `(${world.expr} * nme_skinningMatrix(${indices}, ${weights}))`, type: "mat4f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/instances-block.ts
+  var instances_block_exports = {};
+  __export(instances_block_exports, {
+    emitter: () => emitter34
+  });
+  var emitter34;
+  var init_instances_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/instances-block.ts"() {
+      "use strict";
+      emitter34 = {
+        className: "InstancesBlock",
+        stage: "vertex",
+        emit(_block, _outputName, _stage, state, _ctx) {
+          if (state.hasInstances) {
+          }
+          return { expr: "meshU.world", type: "mat4f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/morph-targets.ts
+  var morph_targets_exports = {};
+  __export(morph_targets_exports, {
+    emitter: () => emitter35
+  });
+  function fallback(kind) {
+    const type = kind === "uv" || kind === "uv2" ? "vec2f" : kind === "tangent" ? "vec4f" : "vec3f";
+    const zero = type === "vec2f" ? "vec2<f32>(0.0)" : type === "vec4f" ? "vec4<f32>(0.0)" : "vec3<f32>(0.0)";
+    return { expr: zero, type };
+  }
+  var PASSTHROUGH_KINDS, emitter35;
+  var init_morph_targets = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/morph-targets.ts"() {
+      "use strict";
+      PASSTHROUGH_KINDS = /* @__PURE__ */ new Set(["tangent", "uv", "uv2"]);
+      emitter35 = {
+        className: "MorphTargetsBlock",
+        stage: "vertex",
+        emit(block, outputName, stage, state, ctx) {
+          state.usesMorphTargets = true;
+          const kind = outputName.replace(/Output$/, "");
+          const input = block.inputs.get(kind);
+          if (!input?.source) {
+            return fallback(kind);
+          }
+          const v = ctx.resolve(block, kind, stage, state);
+          if (kind === "position") {
+            const base = ctx.cast(v, "vec3f").expr;
+            return { expr: `nme_morphPosition(${base}, vertexIndex)`, type: "vec3f" };
+          }
+          if (kind === "normal") {
+            const base = ctx.cast(v, "vec3f").expr;
+            return { expr: `nme_morphNormal(${base}, vertexIndex)`, type: "vec3f" };
+          }
+          if (PASSTHROUGH_KINDS.has(kind)) {
+            return v;
+          }
+          return v;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/shadow-map.ts
+  var shadow_map_exports = {};
+  __export(shadow_map_exports, {
+    emitter: () => emitter36
+  });
+  var emitter36;
+  var init_shadow_map = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/shadow-map.ts"() {
+      "use strict";
+      emitter36 = {
+        className: "ShadowMapBlock",
+        stage: "fragment",
+        emit(block, _outputName, _stage, _state, _ctx) {
+          const idxRaw = block.serialized.lightId;
+          const idx = typeof idxRaw === "number" ? idxRaw : 0;
+          return { expr: `_NME_SHADOW_${idx}_`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/discard-block.ts
+  var discard_block_exports = {};
+  __export(discard_block_exports, {
+    emitter: () => emitter37
+  });
+  var emitter37;
+  var init_discard_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/discard-block.ts"() {
+      "use strict";
+      emitter37 = {
+        className: "DiscardBlock",
+        stage: "fragment",
+        sideEffect: true,
+        emit(block, _outputName, stage, state, ctx) {
+          const memoKey2 = `_discard_${block.id}_emit`;
+          if (!state.fragment.memo.has(memoKey2)) {
+            const valueIn = block.inputs.get("value");
+            const cutoffIn = block.inputs.get("cutoff");
+            const value = valueIn?.source ? ctx.cast(ctx.resolve(block, "value", stage, state), "f32") : { expr: "0.0", type: "f32" };
+            const cutoff = cutoffIn?.source ? ctx.cast(ctx.resolve(block, "cutoff", stage, state), "f32") : { expr: "0.0", type: "f32" };
+            state.fragment.body.push(`if (${value.expr} < ${cutoff.expr}) { discard; }`);
+            state.fragment.memo.set(memoKey2, { expr: "0.0", type: "f32" });
+          }
+          return { expr: "0.0", type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflection-texture-block.ts
+  var reflection_texture_block_exports = {};
+  __export(reflection_texture_block_exports, {
+    emitter: () => emitter38
+  });
+  function sanitize4(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  var EQUIRECTANGULAR_MODE, RECIPROCAL_PI2, RECIPROCAL_PI, OUTPUTS, emitter38;
+  var init_reflection_texture_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflection-texture-block.ts"() {
+      "use strict";
+      EQUIRECTANGULAR_MODE = 7;
+      RECIPROCAL_PI2 = "0.15915494309189535";
+      RECIPROCAL_PI = "0.3183098861837907";
+      OUTPUTS = {
+        rgb: { swizzle: "", type: "vec3f" },
+        r: { swizzle: ".x", type: "f32" },
+        g: { swizzle: ".y", type: "f32" },
+        b: { swizzle: ".z", type: "f32" }
+      };
+      emitter38 = {
+        className: "ReflectionTextureBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          const mode = block.serialized["coordinatesMode"] ?? EQUIRECTANGULAR_MODE;
+          if (mode !== EQUIRECTANGULAR_MODE) {
+            throw new Error(`ReflectionTextureBlock: coordinatesMode ${mode} not supported (only EQUIRECTANGULAR_MODE=7)`);
+          }
+          const bindingName3 = sanitize4(block.name || `reflection${block.id}`);
+          if (!state.textures.find((t) => t.name === bindingName3)) {
+            state.textures.push({ name: bindingName3, kind: "texture2d", texture: null });
+          }
+          const memoKey2 = `_refl_${block.id}_rgb`;
+          let sample = state.fragment.memo.get(memoKey2);
+          if (!sample) {
+            const wp = block.inputs.get("worldPosition")?.source ? ctx.cast(ctx.resolve(block, "worldPosition", stage, state), "vec3f").expr : `vec3<f32>(0.0)`;
+            const wn = block.inputs.get("worldNormal")?.source ? ctx.cast(ctx.resolve(block, "worldNormal", stage, state), "vec3f").expr : `vec3<f32>(0.0, 1.0, 0.0)`;
+            const cp = block.inputs.get("cameraPosition")?.source ? ctx.cast(ctx.resolve(block, "cameraPosition", stage, state), "vec3f").expr : `_NME_CAMERA_POS_`;
+            const t = ctx.temp(state, "refl");
+            const body = [
+              `let _v${t} = normalize(${cp} - ${wp});`,
+              `let _r${t} = reflect(-_v${t}, normalize(${wn}));`,
+              // BJS flips the V coordinate after computing equirectangular UVs.
+              `let _uv${t} = vec2<f32>(atan2(_r${t}.z, _r${t}.x) * ${RECIPROCAL_PI2} + 0.5, 1.0 - acos(clamp(_r${t}.y, -1.0, 1.0)) * ${RECIPROCAL_PI});`,
+              `let _s${t} = textureSample(nodeTex_${bindingName3}, nodeSamp_${bindingName3}, _uv${t});`
+            ];
+            state.fragment.body.push(body.join("\n"));
+            sample = { expr: `_s${t}.xyz`, type: "vec3f" };
+            state.fragment.memo.set(memoKey2, sample);
+          }
+          if (outputName === "a") {
+            return { expr: "1.0", type: "f32" };
+          }
+          if (outputName === "reflectionCoords") {
+            return { expr: sample.expr, type: "vec3f" };
+          }
+          const out = OUTPUTS[outputName] ?? OUTPUTS.rgb;
+          if (out.swizzle === "") {
+            return sample;
+          }
+          return { expr: `${sample.expr}${out.swizzle}`, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-metallic-roughness-block.ts
+  var pbr_metallic_roughness_block_exports = {};
+  __export(pbr_metallic_roughness_block_exports, {
+    emitter: () => emitter39
+  });
+  function resolveOptional2(block, inputName, fallback2, target, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (input?.source) {
+      return ctx.cast(ctx.resolve(block, inputName, stage, state), target).expr;
+    }
+    return fallback2;
+  }
+  var HELPER_KEY_PREFIX, SHADOW_FACTORS_ONE2, emitter39;
+  var init_pbr_metallic_roughness_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-metallic-roughness-block.ts"() {
+      "use strict";
+      init_types();
+      HELPER_KEY_PREFIX = "nme_pbr_mr";
+      SHADOW_FACTORS_ONE2 = `array<f32, ${MAX_LIGHTS}>(${new Array(MAX_LIGHTS).fill("1.0").join(", ")})`;
+      emitter39 = {
+        className: "PBRMetallicRoughnessBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          if (block.serialized.enableSpecularAntiAliasing === true || block.inputs.get("clearcoat")?.source || block.inputs.get("sheen")?.source || block.inputs.get("subsurface")?.source || block.inputs.get("anisotropy")?.source || block.inputs.get("iridescence")?.source) {
+            throw new Error("NodeMaterial: PBR-MR core emitter cannot emit optional PBR feature code");
+          }
+          const reflectionConnected = !!block.inputs.get("reflection")?.source;
+          if (reflectionConnected) {
+            state.usesEnv = true;
+            ctx.resolve(block, "reflection", stage, state);
+          }
+          const helperKey = `${HELPER_KEY_PREFIX}_${reflectionConnected ? "env" : "noenv"}_nocc_ccF0_nosh_norefr_noss_noani_noShAS___noaa`;
+          if (!state.pbrMrHelperRequests.some((request) => request.key === helperKey)) {
+            state.pbrMrHelperRequests.push({
+              key: helperKey,
+              useEnv: reflectionConnected,
+              useClearcoat: false,
+              useSheen: false,
+              useRefraction: false,
+              useSubsurface: false,
+              useAnisotropy: false,
+              useIridescence: false,
+              useShAlbedoScaling: false,
+              useCcBump: false,
+              useCcTint: false,
+              useSpecularAA: false,
+              remapClearcoatF0: false
+            });
+          }
+          state.usesLightsUbo = true;
+          const memoKey2 = `_pbrmr_${block.id}_call`;
+          let callVar;
+          const existing = state.fragment.memo.get(memoKey2);
+          if (existing) {
+            callVar = existing.expr;
+          } else {
+            const wp = resolveOptional2(block, "worldPosition", "v3(0.0)", "vec3f", stage, state, ctx);
+            const gn = resolveOptional2(block, "worldNormal", "v3(0.0, 1.0, 0.0)", "vec3f", stage, state, ctx);
+            const perturbed = block.inputs.get("perturbedNormal");
+            const wn = perturbed?.source ? ctx.cast(ctx.resolve(block, "perturbedNormal", stage, state), "vec3f").expr : gn;
+            const cp = resolveOptional2(block, "cameraPosition", "_NME_CAMERA_POS_", "vec3f", stage, state, ctx);
+            const bc = resolveOptional2(block, "baseColor", "v3(1.0)", "vec3f", stage, state, ctx);
+            const me = resolveOptional2(block, "metallic", "0.0", "f32", stage, state, ctx);
+            const ro = resolveOptional2(block, "roughness", "0.5", "f32", stage, state, ctx);
+            const ao = resolveOptional2(block, "ambientOcc", "1.0", "f32", stage, state, ctx);
+            const baseIorExpr = resolveOptional2(block, "indexOfRefraction", "1.5", "f32", stage, state, ctx);
+            const sf = state.shadowLights.length > 0 ? `nme_computeShadowFactors(in)` : SHADOW_FACTORS_ONE2;
+            callVar = `_pbrR${ctx.temp(state, "pbr")}`;
+            state.fragment.body.push(
+              `let ${callVar} = nme_pbr_mr_compute(${wp}, ${gn}, ${wn}, ${cp}, ${bc}, ${me}, ${ro}, ${ao}, 0.0, 0.0, 1.5, v3(0.5, 0.5, 1.0), v2(0.0), v3(1.0), 1.0, 0.0, 0.0, v3(1.0), 0.0, ${baseIorExpr}, 0.0, 1.5, 1.0, v3(1.0), 0.0, 0.0, v3(1.0), 0.0, v2(1.0, 0.0), v2(0.0), ${sf});`
+            );
+            state.fragment.memo.set(memoKey2, { expr: callVar, type: "vec4f" });
+          }
+          switch (outputName) {
+            case "lighting":
+              return { expr: `${callVar}.lighting`, type: "vec3f" };
+            case "diffuseDir":
+              return { expr: `${callVar}.diffuseDir`, type: "vec3f" };
+            case "specularDir":
+              return { expr: `${callVar}.specularDir`, type: "vec3f" };
+            case "diffuseInd":
+              return { expr: `${callVar}.diffuseInd`, type: "vec3f" };
+            case "specularInd":
+              return { expr: `${callVar}.specularInd`, type: "vec3f" };
+            case "shadow":
+              return { expr: `${callVar}.shadow`, type: "f32" };
+            case "alpha": {
+              const cfg = block.serialized;
+              const useOverAlpha = cfg.useSpecularOverAlpha === true || cfg.useRadianceOverAlpha === true;
+              const op = block.inputs.get("opacity");
+              const baseAlpha = op?.source ? ctx.cast(ctx.resolve(block, "opacity", stage, state), "f32").expr : "1.0";
+              if (useOverAlpha) {
+                return { expr: `clamp(${baseAlpha} + ${callVar}.lumOverAlpha * ${callVar}.lumOverAlpha, 0.0, 1.0)`, type: "f32" };
+              }
+              return { expr: baseAlpha, type: "f32" };
+            }
+            case "ambientClr":
+            case "clearcoatDir":
+            case "clearcoatInd":
+            case "sheenDir":
+            case "sheenInd":
+            case "refraction":
+              return { expr: `v3(0.0)`, type: "vec3f" };
+            default:
+              return { expr: `${callVar}.lighting`, type: "vec3f" };
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-mr-helper-full.ts
+  function ccDirectBlock(useClearcoat, useCcTint) {
+    if (!useClearcoat) {
+      return "";
+    }
+    const Ncc = "ccNormalW";
+    const NdotLcc = "ccNdotL";
+    const declCcNdotL = `let ccNdotL = clamp(dot(ccNormalW, L), 0.0000001, 1.0);`;
+    return `
+${declCcNdotL}
+if (${NdotLcc} > 0.0 && atten > 0.0) {
+let ccH = normalize(V + L);
+let ccNdotH = clamp(dot(${Ncc}, ccH), 0.0000001, 1.0);
+let ccVdotH = saturate(dot(V, ccH));
+let ccD = nme_pbr_distGGX(ccNdotH, ccAlphaG);
+let ccVis = 0.25 / (ccVdotH * ccVdotH + 0.0000001);
+let ccF_d = nme_pbr_ccSchlick(ccF0, ccVdotH);
+let ccTerm = ccF_d * ccD * ccVis * ${NdotLcc};
+ccDirectSpecAcc = ccDirectSpecAcc + v3(ccTerm) * color * atten * ccIntensity * sh;
+baseLayerAtten = 1.0 - ccF_d * ccIntensity;
+${useCcTint ? `let ccLRefract = -refract(L, ${Ncc}, ccIorInv);
+let ccNdotLRefract = clamp(dot(${Ncc}, ccLRefract), 0.0000001, 1.0);
+let ccDirectAbsorption = nme_pbr_cocaLambert(ccAbsorptionColor, ccTintThickness * ((ccNdotLRefract + ccNdotVRefract) / (ccNdotLRefract * ccNdotVRefract)));
+baseLayerAbsorption = mix(v3(1.0), ccDirectAbsorption, v3(ccIntensity));` : ``}
+}`;
+  }
+  function ccHemiBlock(useClearcoat, useCcTint) {
+    if (!useClearcoat) {
+      return "";
+    }
+    const Ncc = "ccNormalW";
+    return `
+let ccNdotL_h = clamp(dot(${Ncc}, Ldir), 0.0000001, 1.0);
+if (nl > 0.0) {
+let ccH_h = normalize(V + Ldir);
+let ccNdotH_h = clamp(dot(${Ncc}, ccH_h), 0.0000001, 1.0);
+let ccVdotH_h = saturate(dot(V, ccH_h));
+let ccD_h = nme_pbr_distGGX(ccNdotH_h, ccAlphaG);
+let ccVis_h = 0.25 / (ccVdotH_h * ccVdotH_h + 0.0000001);
+let ccF_h = nme_pbr_ccSchlick(ccF0, ccVdotH_h);
+let ccTerm_h = ccF_h * ccD_h * ccVis_h * ccNdotL_h;
+ccDirectSpecAcc = ccDirectSpecAcc + v3(ccTerm_h) * entry.vLightDiffuse.rgb * ccIntensity * sh;
+baseLayerAtten = 1.0 - ccF_h * ccIntensity;
+${useCcTint ? `let ccLRefract_h = -refract(Ldir, ${Ncc}, ccIorInv);
+let ccNdotLRefract_h = clamp(dot(${Ncc}, ccLRefract_h), 0.0000001, 1.0);
+let ccDirectAbsorption_h = nme_pbr_cocaLambert(ccAbsorptionColor, ccTintThickness * ((ccNdotLRefract_h + ccNdotVRefract) / (ccNdotLRefract_h * ccNdotVRefract)));
+baseLayerAbsorption = mix(v3(1.0), ccDirectAbsorption_h, v3(ccIntensity));` : ``}
+}`;
+  }
+  function shDirectBlock(useSheen) {
+    if (!useSheen) {
+      return "";
+    }
+    return `
+if (NdotL > 0.0 && atten > 0.0) {
+let shH = normalize(V + L);
+let shNdotH = clamp(dot(N, shH), 0.0000001, 1.0);
+let shD = nme_pbr_charlieD(shNdotH, shAlphaG);
+let shV = 1.0 / (4.0 * (NdotL + NdotV - NdotL * NdotV) + 0.0000001);
+shDirectAcc = shDirectAcc + shColorScaled * shD * shV * NdotL * color * atten * sh * baseLayerAtten;
+}`;
+  }
+  function shHemiBlock(useSheen) {
+    if (!useSheen) {
+      return "";
+    }
+    return `
+if (nl > 0.0) {
+let shH_h = normalize(V + Ldir);
+let shNdotH_h = clamp(dot(N, shH_h), 0.0000001, 1.0);
+let shD_h = nme_pbr_charlieD(shNdotH_h, shAlphaG);
+let shV_h = 1.0 / (4.0 * (nl + NdotV - nl * NdotV) + 0.0000001);
+shDirectAcc = shDirectAcc + shColorScaled * shD_h * shV_h * nl * entry.vLightSpecular.rgb * sh * baseLayerAtten;
+}`;
+  }
+  function ssBlock(useSubsurface, useRefraction, useAnisotropy) {
+    if (!useSubsurface && !useRefraction) {
+      return `let finalRefraction = v3(0.0);
+let refractionOpacity = 1.0;
+let ssRefractionIrradiance = v3(0.0);`;
+    }
+    const refrPart = useRefraction ? `// Refraction: refract V through N at IOR, sample env at refraction LOD.
+    let refrIntensity = clamp(refrIntensityIn, 0.0, 1.0);
+    let invIor = 1.0 / max(refrIor, 1.0001);
+    let refrV_raw = refract(-V, ${useAnisotropy ? "aniN" : "N"}, invIor);
+    let refrV = v3(refrV_raw.x * cosA + refrV_raw.z * sinA, refrV_raw.y, -refrV_raw.x * sinA + refrV_raw.z * cosA);
+    let refrAlphaG = mix(alphaG, 0.0, clamp(invIor * 3.0 - 2.0, 0.0, 1.0));
+    let refrLod = log2(cubemapDim * refrAlphaG) * sceneU.vImageInfos.z;
+    let envRefr = textureSampleLevel(nmeIblTexture, nmeIblSampler, refrV, clamp(refrLod, 0.0, maxLod)).rgb;
+    let volumeAlbedo = nme_pbr_colorAtDistance(ssTintColor, refrTintAtDistance);
+    let refrTransmittance = v3(refrIntensity) * nme_pbr_cocaLambert(volumeAlbedo, ssThickness);
+    let finalRefractionRaw = envRefr * refrTransmittance * (v3(1.0) - refractionSpecEnvReflectance);
+    let refractionOpacity = 1.0 - refrIntensity;` : `let finalRefractionRaw = v3(0.0);
+let refractionOpacity = 1.0;`;
+    const ssPart = useSubsurface ? `// Translucency: back-scattered SH irradiance with Burley transmittance.
+    let nN_raw = -N;
+    let nN_env = v3(nN_raw.x * cosA + nN_raw.z * sinA, nN_raw.y, -nN_raw.x * sinA + nN_raw.z * cosA);
+    let backIrradiance = (sceneU.vSphericalL00.xyz
+        + sceneU.vSphericalL1_1.xyz * nN_env.y + sceneU.vSphericalL10.xyz * nN_env.z + sceneU.vSphericalL11.xyz * nN_env.x
+        + sceneU.vSphericalL2_2.xyz * (nN_env.y * nN_env.x) + sceneU.vSphericalL2_1.xyz * (nN_env.y * nN_env.z)
+        + sceneU.vSphericalL20.xyz * (3.0 * nN_env.z * nN_env.z - 1.0) + sceneU.vSphericalL21.xyz * (nN_env.z * nN_env.x)
+        + sceneU.vSphericalL22.xyz * (nN_env.x * nN_env.x - nN_env.y * nN_env.y));
+    let ssRefractionIrradiance = backIrradiance * ssTransmittance;
+    finalIrradiance = finalIrradiance * refractionOpacity;
+    finalIrradiance = finalIrradiance * (1.0 - translucencyIntensity);` : `let ssRefractionIrradiance = v3(0.0);
+finalIrradiance = finalIrradiance * refractionOpacity;`;
+    return `${refrPart}
+${ssPart}
+let finalRefraction = finalRefractionRaw;`;
+  }
+  function buildPbrMrHelperFull(request) {
+    return HELPER_WGSL3(
+      request.useEnv,
+      request.useClearcoat,
+      request.useSheen,
+      request.useRefraction,
+      request.useSubsurface,
+      request.useAnisotropy,
+      request.useIridescence,
+      request.useShAlbedoScaling,
+      request.useCcBump,
+      request.useCcTint,
+      request.useSpecularAA,
+      request.remapClearcoatF0
+    );
+  }
+  function HELPER_WGSL3(useEnv, useClearcoat, useSheen, useRefraction, useSubsurface, useAnisotropy, useIridescence, useShAlbedoScaling, useCcBump, useCcTint, useSpecularAA, remapClearcoatF0) {
+    const ccDecls = useClearcoat ? `let ccIntensity = clamp(ccIntensityIn, 0.0, 1.0);
+let ccRough = clamp(ccRoughnessIn, 0.0, 1.0);
+let ccF0_raw = (ccIor - 1.0) / (ccIor + 1.0);
+let ccF0 = ccF0_raw * ccF0_raw;
+var ccDirectSpecAcc = v3(0.0);` : `let ccDirectSpecAcc = v3(0.0);`;
+    const ccAlphaSetup = useClearcoat ? `var ccAA_factor_y = 0.0;
+${useSpecularAA ? `{ let ccNdfdx_AA = dpdx(ccNormalW);
+let ccNdfdy_AA = dpdy(ccNormalW);
+let ccSlopeSquare_AA = max(dot(ccNdfdx_AA, ccNdfdx_AA), dot(ccNdfdy_AA, ccNdfdy_AA));
+ccAA_factor_y = sqrt(ccSlopeSquare_AA) * 0.75; }` : ``}
+let ccAlphaG = ccRough * ccRough + 0.0005 + ccAA_factor_y;` : ``;
+    const ccNormalSetup = useClearcoat ? useCcBump ? `let ccNormalW = nme_perturbNormal(worldPos, Ng, ccBumpUv, ccBumpColor, 1.0);
+let ccNdotV = abs(dot(ccNormalW, V)) + 0.0000001;${useCcTint ? `
+let ccIorInv = 1.0 / max(ccIor, 1.0001);
+let ccAbsorptionColor = nme_pbr_colorAtDistance(max(ccTintColor, v3(0.0000001)), max(ccTintAtDistance, 0.0000001));
+let ccVRefract = refract(-V, ccNormalW, ccIorInv);
+let ccNdotVRefract = abs(dot(ccNormalW, ccVRefract)) + 0.0000001;` : ``}` : `let ccNormalW = Ng;
+let ccNdotV = abs(dot(ccNormalW, V)) + 0.0000001;${useCcTint ? `
+let ccIorInv = 1.0 / max(ccIor, 1.0001);
+let ccAbsorptionColor = nme_pbr_colorAtDistance(max(ccTintColor, v3(0.0000001)), max(ccTintAtDistance, 0.0000001));
+let ccVRefract = refract(-V, ccNormalW, ccIorInv);
+let ccNdotVRefract = abs(dot(ccNormalW, ccVRefract)) + 0.0000001;` : ``}` : `let ccNormalW = N;
+let ccNdotV: f32 = 0.0;`;
+    const shDecls = useSheen ? `let shIntensityRaw = clamp(shIntensityIn, 0.0, 1.0);
+${useShAlbedoScaling ? `let shIntensity = shIntensityRaw;` : `let reflectanceF0 = max(colorF0.r, max(colorF0.g, colorF0.b));
+let shIntensity = shIntensityRaw * (1.0 - reflectanceF0);`}
+let shRough = clamp(shRoughnessIn, 0.0, 1.0);
+let shAlphaG = shRough * shRough + 0.0005;
+let shColorScaled = shColorIn * shIntensity;
+var shDirectAcc = v3(0.0);` : `let shDirectAcc = v3(0.0);`;
+    const shIblTerm = useEnv && useSheen ? `let shSpecLod = log2(cubemapDim * shAlphaG) * sceneU.vImageInfos.z;
+    let shEnvRadiance = textureSampleLevel(nmeIblTexture, nmeIblSampler, R, clamp(shSpecLod, 0.0, maxLod)).rgb;
+    let shBrdfBlue = textureSample(nmeBrdfLUT, nmeBrdfSampler, v2(NdotV, shRough)).b;
+    let shFinalIbl = shEnvRadiance * shColorScaled * shBrdfBlue * seo * eho;
+    ${useShAlbedoScaling ? `// SHEEN_ALBEDOSCALING: surface albedo and base specular scale by (1 - shInt \xD7 max(shColor) \xD7 envSheenBrdf.b).
+    let shAlbedoScaling = 1.0 - shIntensity * max(max(shColorIn.r, shColorIn.g), shColorIn.b) * shBrdfBlue;` : `let shAlbedoScaling: f32 = 1.0;`}` : `let shFinalIbl = v3(0.0);
+let shAlbedoScaling: f32 = 1.0;`;
+    const directSpecR0Decl = useClearcoat && remapClearcoatF0 ? `let _directF0S = sqrt(max(colorF0, v3(0.0)));
+let _directF0T = ((1.0 - ccIor) + (1.0 + ccIor) * _directF0S) / ((1.0 + ccIor) + (1.0 - ccIor) * _directF0S);
+let directSpecR0 = mix(colorF0, clamp(_directF0T * _directF0T, v3(0.0), v3(1.0)), ccIntensity);` : `let directSpecR0 = colorF0;`;
+    const shIblScale = useClearcoat ? ` * ccConsIBL${useCcTint ? " * ccAbsorption" : ""}` : "";
+    const refrCcScale = useClearcoat ? " * ccConsIBL" : "";
+    const ccIblPre = useClearcoat ? `let ccFresnelIBL = nme_pbr_ccSchlick(ccF0, ccNdotV);
+    let ccConsIBL = 1.0 - ccFresnelIBL * ccIntensity;
+    let ccBrdfSample = textureSample(nmeBrdfLUT, nmeBrdfSampler, v2(ccNdotV, ccRough)).rgb;
+    let ccSpecEnvReflRaw = (v3(ccF0) * ccBrdfSample.y + (v3(1.0) - v3(ccF0)) * ccBrdfSample.x) * ccIntensity;
+    let ccEnergyConservation = 1.0 + _coloredR0 * (1.0 / max(ccBrdfSample.y, 0.001) - 1.0);
+    let ccEhoT = clamp(1.0 + 1.1 * dot(reflect(-V, ccNormalW), Ng), 0.0, 1.0);
+    let ccSpecEnvRefl = ccSpecEnvReflRaw * (ccEhoT * ccEhoT);
+    let ccSpecLod = log2(cubemapDim * ccAlphaG) * sceneU.vImageInfos.z;
+    let ccR_raw = reflect(-V, ccNormalW);
+    let ccR = v3(ccR_raw.x * cosA + ccR_raw.z * sinA, ccR_raw.y, -ccR_raw.x * sinA + ccR_raw.z * cosA);
+    let ccEnvRadiance = textureSampleLevel(nmeIblTexture, nmeIblSampler, ccR, clamp(ccSpecLod, 0.0, maxLod)).rgb;
+    ${useCcTint ? `// Clearcoat absorption: BJS Beer-Lambert path length through the coat.
+    let ccAbsorption = mix(v3(1.0), nme_pbr_cocaLambert(ccAbsorptionColor, ccTintThickness * ((ccNdotVRefract + ccNdotVRefract) / (ccNdotVRefract * ccNdotVRefract))), v3(ccIntensity));` : `let ccAbsorption = v3(1.0);`}
+    let ccFinalRadiance = ccEnvRadiance * ccSpecEnvRefl;` : ``;
+    const ccTintScale = useCcTint ? " * ccAbsorption" : "";
+    const ccIblFinal = useClearcoat ? `${ccIblPre}
+${shIblTerm}
+r.lighting = finalIrradiance * shAlbedoScaling * ccConsIBL${ccTintScale}
++ finalRadianceScaled * shAlbedoScaling * ccConsIBL${ccTintScale}
++ ssRefractionIrradiance * ao_c
++ finalSpecularScaledDirect * shAlbedoScaling
++ diffuseAcc * shAlbedoScaling
++ diffuseTransmissionAcc
++ ccDirectSpecAcc * ccEnergyConservation
++ ccFinalRadiance
++ shDirectAcc
++ shFinalIbl${shIblScale}
++ finalRefraction${refrCcScale}${ccTintScale};` : `${shIblTerm}
+r.lighting = finalIrradiance * shAlbedoScaling + ssRefractionIrradiance * ao_c + (finalRadianceScaled + finalSpecularScaledDirect + diffuseAcc) * shAlbedoScaling + diffuseTransmissionAcc + shDirectAcc + shFinalIbl + finalRefraction;`;
+    const ccDirectFinal = useClearcoat ? `r.lighting = diffuseAcc + specAcc + diffuseTransmissionAcc + ccDirectSpecAcc + shDirectAcc;` : `r.lighting = diffuseAcc + diffuseTransmissionAcc + specAcc + shDirectAcc;`;
+    const refractionSpecEnvReflectanceDecl = useRefraction ? `let refractionSpecEnvReflectance = baseSpecEnvReflectance;` : ``;
+    const iblBlock = useEnv ? `
+    let envRot = sceneU.envRotationY;
+    let cosA = cos(envRot); let sinA = sin(envRot);
+    let N_specSrc = ${useAnisotropy ? "aniN" : "N"};
+    let R_raw = reflect(-V, N_specSrc);
+    let R = v3(R_raw.x * cosA + R_raw.z * sinA, R_raw.y, -R_raw.x * sinA + R_raw.z * cosA);
+    let N_env = v3(Ng.x * cosA + Ng.z * sinA, Ng.y, -Ng.x * sinA + Ng.z * cosA);
+    let environmentIrradiance = (sceneU.vSphericalL00.xyz
+        + sceneU.vSphericalL1_1.xyz * N_env.y + sceneU.vSphericalL10.xyz * N_env.z + sceneU.vSphericalL11.xyz * N_env.x
+        + sceneU.vSphericalL2_2.xyz * (N_env.y * N_env.x) + sceneU.vSphericalL2_1.xyz * (N_env.y * N_env.z)
+        + sceneU.vSphericalL20.xyz * (3.0 * N_env.z * N_env.z - 1.0) + sceneU.vSphericalL21.xyz * (N_env.z * N_env.x)
+        + sceneU.vSphericalL22.xyz * (N_env.x * N_env.x - N_env.y * N_env.y));
+    let brdfSample = textureSample(nmeBrdfLUT, nmeBrdfSampler, v2(NdotV, rough_c));
+    let envBrdf = brdfSample.rgb;
+    let reflectanceF0Scalar = max(colorF0.r, max(colorF0.g, colorF0.b));
+    let baseSpecEnvReflectance = (colorF90 - v3(reflectanceF0Scalar)) * envBrdf.x + v3(reflectanceF0Scalar) * envBrdf.y;
+    let seo = clamp((NdotVUnclamped + ao_c) * (NdotVUnclamped + ao_c) - 1.0 + ao_c, 0.0, 1.0);
+    let _geoNF = select(-Ng, Ng, dot(Ng, V) > 0.0);
+    let _ehoRefl = reflect(-V, N);
+    let _ehoT = clamp(1.0 + 1.1 * dot(_ehoRefl, _geoNF), 0.0, 1.0);
+    let eho = _ehoT * _ehoT;
+    ${useClearcoat && remapClearcoatF0 ? `let _f0S = sqrt(max(colorF0, v3(0.0)));
+    let _f0T = ((1.0 - ccIor) + (1.0 + ccIor) * _f0S) / ((1.0 + ccIor) + (1.0 - ccIor) * _f0S);
+    let _coloredR0 = mix(colorF0, clamp(_f0T * _f0T, v3(0.0), v3(1.0)), ccIntensity);` : `let _coloredR0 = colorF0;`}
+    let colorSpecEnvReflectance = ((colorF90 - _coloredR0) * envBrdf.x + _coloredR0 * envBrdf.y) * seo * eho;
+    let energyConservation = 1.0 + _coloredR0 * (1.0 / max(envBrdf.y, 0.001) - 1.0);
+    let maxLod = f32(textureNumLevels(nmeIblTexture) - 1);
+    let cubemapDim = f32(textureDimensions(nmeIblTexture).x);
+    let specLod = log2(cubemapDim * alphaG) * sceneU.vImageInfos.z;
+    var environmentRadiance = textureSampleLevel(nmeIblTexture, nmeIblSampler, R, clamp(specLod, 0.0, maxLod)).rgb;
+    ${refractionSpecEnvReflectanceDecl}
+    var finalIrradiance = environmentIrradiance * surfaceAlbedo;
+    let finalRadianceScaled = environmentRadiance * colorSpecEnvReflectance * energyConservation;
+    let finalSpecularScaledDirect = specAcc * energyConservation;
+    ${ssBlock(useSubsurface, useRefraction, useAnisotropy)}
+    finalIrradiance = finalIrradiance * ao_c;
+    r.diffuseInd = finalIrradiance;
+    r.specularInd = finalRadianceScaled;
+    ${ccIblFinal}` : `
+r.diffuseInd = v3(0.0);
+r.specularInd = v3(0.0);
+${ccDirectFinal}`;
+    const ccSchlickFn = useClearcoat ? `fn nme_pbr_ccSchlick(f0: f32, cosTheta: f32) -> f32 {
+let t = 1.0 - cosTheta;
+let t2 = t * t;
+return f0 + (1.0 - f0) * (t2 * t2 * t);
+}
+` : ``;
+    const charlieFn = useSheen ? `fn nme_pbr_charlieD(NdotH: f32, alphaG: f32) -> f32 {
+let invR = 1.0 / max(alphaG, 0.0005);
+let cos2h = NdotH * NdotH;
+let sin2h = 1.0 - cos2h;
+return (2.0 + invR) * pow(sin2h, invR * 0.5) / (2.0 * NME_PBR_PI);
+}
+` : ``;
+    const anisoFns = useAnisotropy ? `fn nme_pbr_anisoRoughness(alphaG: f32, anisotropy: f32) -> v2 {
+let alphaT = max(alphaG * (1.0 + anisotropy), 0.0005);
+let alphaB = max(alphaG * (1.0 - anisotropy), 0.0005);
+return v2(alphaT, alphaB);
+}
+fn nme_pbr_anisoBentNormal(T: v3, B: v3, N: v3, V: v3, anisotropy: f32) -> v3 {
+var anisotropicFrameDirection = B;
+if (anisotropy < 0.0) {
+anisotropicFrameDirection = T;
+}
+let anisoTan = cross(normalize(anisotropicFrameDirection), V);
+let anisoNormal = cross(anisoTan, anisotropicFrameDirection);
+return normalize(mix(N, anisoNormal, abs(anisotropy)));
+}
+fn nme_pbr_burleyAnisoD(NdotH: f32, TdotH: f32, BdotH: f32, alphaTB: v2) -> f32 {
+let a2 = alphaTB.x * alphaTB.y;
+let v = v3(alphaTB.y * TdotH, alphaTB.x * BdotH, a2 * NdotH);
+let v2 = dot(v, v);
+let w2 = a2 / max(v2, 0.0000001);
+return a2 * w2 * w2 * (1.0 / NME_PBR_PI);
+}
+fn nme_pbr_visAnisoSmith(NdotL: f32, NdotV: f32, TdotV: f32, BdotV: f32, TdotL: f32, BdotL: f32, alphaTB: v2) -> f32 {
+let lambdaV = NdotL * length(v3(alphaTB.x * TdotV, alphaTB.y * BdotV, NdotV));
+let lambdaL = NdotV * length(v3(alphaTB.x * TdotL, alphaTB.y * BdotL, NdotL));
+return 0.5 / max(lambdaV + lambdaL, 0.0000001);
+}
+` : ``;
+    const ssFns = useSubsurface || useRefraction || useCcTint ? `fn nme_pbr_transmittanceBurley(tintColor: v3, diffusionDist: v3, thickness: f32) -> v3 {
+let S = v3(1.0) / max(diffusionDist, v3(0.0000001));
+let temp = exp(-0.333333333 * thickness * S);
+return tintColor * 0.25 * (temp * temp * temp + 3.0 * temp);
+}
+fn nme_pbr_cocaLambert(volumeAlbedo: v3, distance: f32) -> v3 {
+return exp(-volumeAlbedo * distance);
+}
+fn nme_pbr_colorAtDistance(color: v3, distance: f32) -> v3 {
+return -log(color) / distance;
+}
+` : ``;
+    const anisoSetup = useAnisotropy ? `let _adp1 = dpdx(worldPos);
+let _adp2 = -dpdy(worldPos);
+let _aduv1 = dpdx(anisoUv);
+let _aduv2 = -dpdy(anisoUv);
+let _adp2perp = cross(_adp2, Ng);
+let _adp1perp = cross(Ng, _adp1);
+let _atan = _adp2perp * _aduv1.x + _adp1perp * _aduv2.x;
+let _abit = _adp2perp * _aduv1.y + _adp1perp * _aduv2.y;
+let _adet = max(dot(_atan, _atan), dot(_abit, _abit));
+let _ainvmax = select(0.0, inverseSqrt(_adet), _adet > 0.0);
+let _aTBN0 = normalize(_atan * _ainvmax);
+let _aTBN1 = normalize(_abit * _ainvmax);
+let anisoIntensity = clamp(anisoIntensityIn, -1.0, 1.0);
+let anisoDir = v3(anisoDirection, 0.0);
+let anisoT_raw = _aTBN0 * anisoDir.x + _aTBN1 * anisoDir.y;
+let anisoT = normalize(anisoT_raw);
+let anisoB = normalize(cross(Ng, anisoT));
+let aniAlphaTB = nme_pbr_anisoRoughness(alphaG, anisoIntensity);
+let aniN = nme_pbr_anisoBentNormal(anisoT, anisoB, N, V, anisoIntensity);` : `let anisoT = v3(1.0, 0.0, 0.0);
+let anisoB = v3(0.0, 0.0, 1.0);
+let aniAlphaTB = v2(alphaG, alphaG);
+let aniN = N;`;
+    const specularAABlock = useSpecularAA ? `var AA_factor_x = 0.0;
+var AA_factor_y = 0.0;
+{ let nDfdx_AA = dpdx(N);
+let nDfdy_AA = dpdy(N);
+let slopeSquare_AA = max(dot(nDfdx_AA, nDfdx_AA), dot(nDfdy_AA, nDfdy_AA));
+AA_factor_x = pow(saturate(slopeSquare_AA), 0.333);
+AA_factor_y = sqrt(slopeSquare_AA) * 0.75;
+alphaG = alphaG + AA_factor_y; }` : `let AA_factor_x = 0.0;
+let AA_factor_y = 0.0;`;
+    return `alias v2 = vec2<f32>;
+alias v3 = vec3<f32>;
+alias v4 = vec4<f32>;
+struct NmePbrMrResult {
+lighting: v3,
+diffuseDir: v3,
+specularDir: v3,
+diffuseInd: v3,
+specularInd: v3,
+shadow: f32,
+lumOverAlpha: f32,
+};
+const NME_PBR_PI: f32 = 3.14159265358979323846;
+fn nme_pbr_distGGX(NdotH: f32, alphaG: f32) -> f32 {
+let a2 = alphaG * alphaG;
+let d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+return a2 / (NME_PBR_PI * d * d);
+}
+fn nme_pbr_geomGGX(NdotL: f32, NdotV: f32, alphaG: f32) -> f32 {
+let a2 = alphaG * alphaG;
+let gl = NdotL * sqrt(NdotV * (NdotV - a2 * NdotV) + a2);
+let gv = NdotV * sqrt(NdotL * (NdotL - a2 * NdotL) + a2);
+return 0.5 / max(gl + gv, 0.00001);
+}
+fn nme_pbr_fresSchlick(c: f32, F0: v3, F90: v3) -> v3 {
+let t = 1.0 - c;
+let t2 = t * t;
+return F0 + (F90 - F0) * (t2 * t2 * t);
+}
+fn nme_pbr_diffuseEON(albedo: v3, sigma: f32, NdotL: f32, NdotV: f32, LdotV: f32) -> v3 {
+return albedo * (1.0 / NME_PBR_PI);
+}
+${ccSchlickFn}${charlieFn}${anisoFns}${ssFns}fn nme_pbr_mr_compute(
+    worldPos: v3, geometricNormal: v3, worldNormal: v3, cameraPos: v3,
+    baseColor: v3, metallic: f32, roughness: f32, ao: f32,
+    ccIntensityIn: f32, ccRoughnessIn: f32, ccIor: f32,
+    ccBumpColor: v3, ccBumpUv: v2,
+    ccTintColor: v3, ccTintAtDistance: f32, ccTintThickness: f32,
+    shIntensityIn: f32, shColorIn: v3, shRoughnessIn: f32,
+    baseIor: f32,
+    refrIntensityIn: f32, refrIor: f32, refrTintAtDistance: f32,
+    ssTintColor: v3, ssThickness: f32,
+    ssTranslucencyIntensityIn: f32, ssDiffusionDist: v3,
+    anisoIntensityIn: f32, anisoDirection: v2, anisoUv: v2,
+    iridescenceIntensityIn: f32, iridescenceIorIn: f32, iridescenceThicknessIn: f32,
+    shadowFactors: array<f32, ${MAX_LIGHTS}>
+) -> NmePbrMrResult {
+    var r: NmePbrMrResult;
+    let Ng = normalize(geometricNormal);
+    let N = normalize(worldNormal);
+    let V = normalize(cameraPos - worldPos);
+    let NdotVUnclamped = dot(N, V);
+    let NdotV = abs(NdotVUnclamped) + 0.0000001;
+    let metallic_c = clamp(metallic, 0.0, 1.0);
+    let rough_c = clamp(roughness, 0.0, 1.0);
+    var alphaG = rough_c * rough_c + 0.0005;
+    ${specularAABlock}
+    let dielectricF0Raw = (baseIor - 1.0) / (baseIor + 1.0);
+    let dielectricF0Scalar = dielectricF0Raw * dielectricF0Raw;
+    let dielectricF0 = v3(dielectricF0Scalar);
+    var surfaceAlbedo = baseColor * (1.0 - metallic_c) * (1.0 - dielectricF0Scalar);
+    let colorF0Base = mix(dielectricF0, baseColor, metallic_c);
+    let colorF0 = ${useIridescence ? `mix(colorF0Base, nme_pbr_evalIridescence(1.0, max(iridescenceIorIn, 1.0001), NdotV, max(iridescenceThicknessIn, 0.0), colorF0Base), clamp(iridescenceIntensityIn, 0.0, 1.0))` : `colorF0Base`};
+    let colorF90 = v3(1.0);
+    let ao_c = clamp(ao, 0.0, 1.0);
+    let directRoughness = max(rough_c, AA_factor_x);
+    let directAlphaG = directRoughness * directRoughness + 0.0005;
+    ${anisoSetup}
+    ${ccDecls}
+    ${directSpecR0Decl}
+    ${ccNormalSetup}
+    ${ccAlphaSetup}
+    ${shDecls}
+    let translucencyIntensity = ${useSubsurface ? "clamp(ssTranslucencyIntensityIn, 0.0, 1.0)" : "0.0"};
+    let ssTransmittance = ${useSubsurface ? "nme_pbr_transmittanceBurley(ssTintColor, ssDiffusionDist, max(ssThickness, 0.0000001)) * translucencyIntensity" : "v3(0.0)"};
+    let directDiffuseTranslucencyScale = 1.0 - translucencyIntensity;
+    ${useRefraction ? `// LEGACY_SPECULAR_ENERGY_CONSERVATION is on for BJS NME PBR-MR. When refraction
+    let _refractionOpacityPre = 1.0 - clamp(refrIntensityIn, 0.0, 1.0);
+    surfaceAlbedo = surfaceAlbedo * _refractionOpacityPre;` : ``}
+    var diffuseAcc = v3(0.0);
+    var diffuseTransmissionAcc = v3(0.0);
+    var specAcc = v3(0.0);
+    var aggShadow: f32 = 0.0;
+    var nLights: f32 = 0.0;
+    let lc = min(meshU.lc, ${MAX_LIGHTS}u);
+    for (var i: u32 = 0u; i < lc; i = i + 1u) {
+        let lightIndex = nli(i);
+        let entry = nmeLights.lights[lightIndex];
+        let t = u32(entry.vLightData.w);
+        let sh = shadowFactors[lightIndex];
+        if (t == 3u) {
+            let Ldir = normalize(entry.vLightData.xyz);
+            let nl = clamp(0.5 + 0.5 * dot(N, Ldir), 0.0000001, 1.0);
+            let groundSky = mix(entry.vLightDirection.xyz, entry.vLightDiffuse.rgb, nl);
+            var baseLayerAtten: f32 = 1.0;
+            var baseLayerAbsorption = v3(1.0);${ccHemiBlock(useClearcoat, useCcTint)}
+            let H_h = normalize(V + Ldir);
+            let NdotH_h = clamp(dot(N, H_h), 0.0000001, 1.0);
+            let VdotH_h = saturate(dot(V, H_h));
+            let cF_h = nme_pbr_fresSchlick(VdotH_h, directSpecR0, colorF90);
+            ${useAnisotropy ? `let TdotH_h = dot(anisoT, H_h);
+            let BdotH_h = dot(anisoB, H_h);
+            let TdotV_h = dot(anisoT, V);
+            let BdotV_h = dot(anisoB, V);
+            let TdotL_h = dot(anisoT, Ldir);
+            let BdotL_h = dot(anisoB, Ldir);
+            let D_h = nme_pbr_burleyAnisoD(NdotH_h, TdotH_h, BdotH_h, aniAlphaTB);
+            let Vis_h = nme_pbr_visAnisoSmith(nl, NdotV, TdotV_h, BdotV_h, TdotL_h, BdotL_h, aniAlphaTB);
+            specAcc = specAcc + cF_h * D_h * Vis_h * nl * entry.vLightDiffuse.rgb * sh * baseLayerAtten * baseLayerAbsorption;` : `let D_h = nme_pbr_distGGX(NdotH_h, directAlphaG);
+            let G_h = nme_pbr_geomGGX(nl, NdotV, directAlphaG);
+            specAcc = specAcc + cF_h * D_h * G_h * nl * entry.vLightDiffuse.rgb * sh * baseLayerAtten * baseLayerAbsorption;`}
+            diffuseAcc = diffuseAcc + groundSky * surfaceAlbedo * sh * baseLayerAtten * baseLayerAbsorption;${shHemiBlock(useSheen)}
+            aggShadow = aggShadow + sh;
+            nLights = nLights + 1.0;
+            continue;
+        }
+        var L: v3;
+        var atten: f32 = 1.0;
+        let color = entry.vLightDiffuse.rgb;
+        if (t == 1u) {
+            L = normalize(-entry.vLightData.xyz);
+        } else {
+            let toL = entry.vLightData.xyz - worldPos;
+            let d2 = dot(toL, toL);
+            let dist = sqrt(d2);
+            L = toL / max(dist, 0.0001);
+            let range = entry.vLightDiffuse.a;
+            if (t == 2u) {
+                let invD2 = 1.0 / max(d2, 0.0000001);
+                let cosHalfAngle = entry.vLightDirection.w;
+                let kappa = 6.64385618977 / max(1.0 - cosHalfAngle, 0.0001);
+                let cd = dot(-entry.vLightDirection.xyz, L);
+                let dirFall = exp2(kappa * (cd - 1.0));
+                atten = invD2 * dirFall;
+            } else {
+                atten = 1.0 / max(d2, 0.0000001);
+            }
+        }
+        let NdotLUnclamped = dot(N, L);
+        let NdotL = clamp(NdotLUnclamped, 0.0000001, 1.0);
+        var baseLayerAtten: f32 = 1.0;
+        var baseLayerAbsorption = v3(1.0);${ccDirectBlock(useClearcoat, useCcTint)}
+        let _LdotV = select(0.0, dot(L, V), t == 1u);
+        let _eonDiffuse = nme_pbr_diffuseEON(surfaceAlbedo, 0.0, NdotL, NdotV, _LdotV);
+        diffuseAcc = diffuseAcc + _eonDiffuse * directDiffuseTranslucencyScale * NdotL * color * atten * sh * baseLayerAtten * baseLayerAbsorption;
+        if (NdotLUnclamped < 0.0 && translucencyIntensity > 0.0) {
+            let _trNdotL = abs(NdotLUnclamped) + 0.0000001;
+            let _wrapW = 0.02;
+            let _wrapT = 1.0 + _wrapW;
+            let _wrapNdotL = clamp((_trNdotL + _wrapW) / (_wrapT * _wrapT), 0.0, 1.0);
+            let _clampedAlbT = clamp(surfaceAlbedo, v3(0.1), v3(1.0));
+            let _eonTransmit = nme_pbr_diffuseEON(_clampedAlbT, 0.0, max(NdotL, 0.0000001), NdotV, _LdotV) / _clampedAlbT;
+            diffuseTransmissionAcc = diffuseTransmissionAcc + _eonTransmit * (ssTransmittance * _wrapNdotL) * color * atten * sh * baseLayerAtten * baseLayerAbsorption;
+        }
+        if (NdotL > 0.0 && atten > 0.0) {
+            let H = normalize(V + L);
+            let NdotH = clamp(dot(N, H), 0.0000001, 1.0);
+            let VdotH = saturate(dot(V, H));
+            let cF = nme_pbr_fresSchlick(VdotH, directSpecR0, colorF90);
+            ${useAnisotropy ? `let TdotH = dot(anisoT, H);
+            let BdotH = dot(anisoB, H);
+            let TdotV = dot(anisoT, V);
+            let BdotV = dot(anisoB, V);
+            let TdotL = dot(anisoT, L);
+            let BdotL = dot(anisoB, L);
+            let D = nme_pbr_burleyAnisoD(NdotH, TdotH, BdotH, aniAlphaTB);
+            let Vis = nme_pbr_visAnisoSmith(NdotL, NdotV, TdotV, BdotV, TdotL, BdotL, aniAlphaTB);
+            specAcc = specAcc + cF * D * Vis * NdotL * color * atten * sh * baseLayerAtten * baseLayerAbsorption;` : `let D = nme_pbr_distGGX(NdotH, directAlphaG);
+            let G = nme_pbr_geomGGX(NdotL, NdotV, directAlphaG);
+            specAcc = specAcc + cF * D * G * NdotL * color * atten * sh * baseLayerAtten * baseLayerAbsorption;`}
+        }${shDirectBlock(useSheen)}
+        aggShadow = aggShadow + sh;
+        nLights = nLights + 1.0;
+    }
+    r.diffuseDir = diffuseAcc;
+    r.specularDir = specAcc;
+${iblBlock}
+    ${useEnv ? `let _radLum = clamp(dot(finalRadianceScaled * shAlbedoScaling${useClearcoat ? ` * ccConsIBL${ccTintScale}` : ``}, v3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    let _specLum = clamp(dot(finalSpecularScaledDirect * shAlbedoScaling, v3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);${useClearcoat ? `
+    let _ccLum = clamp(dot(ccFinalRadiance, v3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    r.lumOverAlpha = _radLum + _specLum + _ccLum;` : `
+    r.lumOverAlpha = _radLum + _specLum;`}` : `let _specLum = clamp(dot(specAcc, v3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    r.lumOverAlpha = _specLum;`}
+    var colorOut = max(r.lighting, v3(0.0)) * sceneU.vImageInfos.x;
+    if (sceneU.vImageInfos.w > 0.5) {
+        colorOut = 1.0 - exp2(-1.590579 * colorOut);
+    }
+    colorOut = pow(max(colorOut, v3(0.0)), v3(0.45454545));
+    colorOut = clamp(colorOut, v3(0.0), v3(1.0));
+    let highContrast = colorOut * colorOut * (v3(3.0) - colorOut * 2.0);
+    if (sceneU.vImageInfos.y < 1.0) {
+        colorOut = mix(v3(0.5), colorOut, sceneU.vImageInfos.y);
+    } else {
+        colorOut = mix(colorOut, highContrast, sceneU.vImageInfos.y - 1.0);
+    }
+    r.lighting = max(colorOut, v3(0.0));
+    if (nLights > 0.0) { r.shadow = aggShadow / nLights; } else { r.shadow = 1.0; }
+    return r;
+}
+`;
+  }
+  var init_pbr_mr_helper_full = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-mr-helper-full.ts"() {
+      "use strict";
+      init_types();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-metallic-roughness-block-full.ts
+  var pbr_metallic_roughness_block_full_exports = {};
+  __export(pbr_metallic_roughness_block_full_exports, {
+    emitter: () => emitter40
+  });
+  function resolveOptional3(block, inputName, fallback2, target, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (input?.source) {
+      return ctx.cast(ctx.resolve(block, inputName, stage, state), target).expr;
+    }
+    return fallback2;
+  }
+  var HELPER_KEY_PREFIX2, SHADOW_FACTORS_ONE3, emitter40;
+  var init_pbr_metallic_roughness_block_full = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-metallic-roughness-block-full.ts"() {
+      init_types();
+      init_pbr_mr_helper_full();
+      HELPER_KEY_PREFIX2 = "nme_pbr_mr";
+      SHADOW_FACTORS_ONE3 = `array<f32, ${MAX_LIGHTS}>(${new Array(MAX_LIGHTS).fill("1.0").join(", ")})`;
+      emitter40 = {
+        className: "PBRMetallicRoughnessBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          const reflectionConnected = !!block.inputs.get("reflection")?.source;
+          if (reflectionConnected) {
+            state.usesEnv = true;
+            ctx.resolve(block, "reflection", stage, state);
+          }
+          const ccInputRef = block.inputs.get("clearcoat")?.source;
+          let ccIntensityExpr = "0.0";
+          let ccRoughnessExpr = "0.0";
+          let ccIorExpr = "1.5";
+          let ccBumpExpr = "v3(0.5, 0.5, 1.0)";
+          let ccBumpUvExpr = "v2(0.0)";
+          let useCcBump = false;
+          let ccTintColorExpr = "v3(1.0)";
+          let ccTintAtDistanceExpr = "1.0";
+          let ccTintThicknessExpr = "0.0";
+          let useCcTint = false;
+          let useClearcoat = false;
+          let remapClearcoatF0 = false;
+          if (ccInputRef) {
+            const ccBlock = ctx.graph.blocks.get(ccInputRef.blockId);
+            if (ccBlock && ccBlock.className === "ClearCoatBlock") {
+              useClearcoat = true;
+              remapClearcoatF0 = ccBlock.serialized.remapF0OnInterfaceChange === true;
+              state.usesClearcoat = true;
+              ctx.resolveOutput(ccBlock, ccInputRef.outputName, stage, state);
+              ccIntensityExpr = resolveOptional3(ccBlock, "intensity", "1.0", "f32", stage, state, ctx);
+              ccRoughnessExpr = resolveOptional3(ccBlock, "roughness", "0.0", "f32", stage, state, ctx);
+              ccIorExpr = resolveOptional3(ccBlock, "indexOfRefraction", "1.5", "f32", stage, state, ctx);
+              if (ccBlock.inputs.get("normalMapColor")?.source) {
+                useCcBump = true;
+                ccBumpExpr = resolveOptional3(ccBlock, "normalMapColor", "v3(0.5, 0.5, 1.0)", "vec3f", stage, state, ctx);
+                const uvIn = ccBlock.inputs.get("uv");
+                if (uvIn?.source) {
+                  const e = ctx.resolve(ccBlock, "uv", stage, state);
+                  ccBumpUvExpr = e.type === "vec2f" ? e.expr : `(${e.expr}).xy`;
+                }
+              }
+              if (ccBlock.inputs.get("tintColor")?.source) {
+                useCcTint = true;
+                ccTintColorExpr = resolveOptional3(ccBlock, "tintColor", "v3(1.0)", "vec3f", stage, state, ctx);
+                ccTintAtDistanceExpr = resolveOptional3(ccBlock, "tintAtDistance", "1.0", "f32", stage, state, ctx);
+                ccTintThicknessExpr = resolveOptional3(ccBlock, "tintThickness", "0.0", "f32", stage, state, ctx);
+              }
+            }
+          }
+          const shInputRef = block.inputs.get("sheen")?.source;
+          let shIntensityExpr = "0.0";
+          let shColorExpr = "v3(1.0)";
+          let shRoughnessExpr = "0.0";
+          let useSheen = false;
+          let useShAlbedoScaling = false;
+          if (shInputRef) {
+            const shBlock = ctx.graph.blocks.get(shInputRef.blockId);
+            if (shBlock && shBlock.className === "SheenBlock") {
+              useSheen = true;
+              state.usesSheen = true;
+              useShAlbedoScaling = shBlock.serialized.albedoScaling === true;
+              ctx.resolveOutput(shBlock, shInputRef.outputName, stage, state);
+              shIntensityExpr = resolveOptional3(shBlock, "intensity", "1.0", "f32", stage, state, ctx);
+              shColorExpr = resolveOptional3(shBlock, "color", "v3(1.0)", "vec3f", stage, state, ctx);
+              const shrIn = shBlock.inputs.get("roughness");
+              shRoughnessExpr = shrIn?.source ? resolveOptional3(shBlock, "roughness", "0.0", "f32", stage, state, ctx) : `clamp(${resolveOptional3(block, "roughness", "0.5", "f32", stage, state, ctx)}, 0.0, 1.0)`;
+            }
+          }
+          const ssInputRef = block.inputs.get("subsurface")?.source;
+          let useSubsurface = false;
+          let useRefraction = false;
+          let ssTintColorExpr = "v3(1.0)";
+          let ssThicknessExpr = "0.0";
+          let ssTranslucencyIntensityExpr = "0.0";
+          let ssDiffusionDistExpr = "v3(1.0)";
+          let refrIntensityExpr = "0.0";
+          let refrIorExpr = resolveOptional3(block, "indexOfRefraction", "1.5", "f32", stage, state, ctx);
+          let refrTintAtDistanceExpr = "1.0";
+          if (ssInputRef) {
+            const ssBlk = ctx.graph.blocks.get(ssInputRef.blockId);
+            if (ssBlk && ssBlk.className === "SubSurfaceBlock") {
+              useSubsurface = true;
+              state.usesSubsurface = true;
+              ctx.resolveOutput(ssBlk, ssInputRef.outputName, stage, state);
+              ssTintColorExpr = resolveOptional3(ssBlk, "tintColor", "v3(1.0)", "vec3f", stage, state, ctx);
+              ssThicknessExpr = resolveOptional3(ssBlk, "thickness", "0.0", "f32", stage, state, ctx);
+              ssTranslucencyIntensityExpr = resolveOptional3(ssBlk, "translucencyIntensity", "0.0", "f32", stage, state, ctx);
+              ssDiffusionDistExpr = resolveOptional3(ssBlk, "translucencyDiffusionDist", "v3(1.0)", "vec3f", stage, state, ctx);
+              const refrInputRef = ssBlk.inputs.get("refraction")?.source;
+              if (refrInputRef) {
+                const refrBlk = ctx.graph.blocks.get(refrInputRef.blockId);
+                if (refrBlk && refrBlk.className === "RefractionBlock") {
+                  useRefraction = true;
+                  ctx.resolveOutput(refrBlk, refrInputRef.outputName, stage, state);
+                  refrIntensityExpr = resolveOptional3(refrBlk, "intensity", "1.0", "f32", stage, state, ctx);
+                  refrTintAtDistanceExpr = resolveOptional3(refrBlk, "tintAtDistance", "1.0", "f32", stage, state, ctx);
+                  const volIor = refrBlk.inputs.get("volumeIndexOfRefraction");
+                  if (volIor?.source) {
+                    refrIorExpr = resolveOptional3(refrBlk, "volumeIndexOfRefraction", "1.5", "f32", stage, state, ctx);
+                  }
+                }
+              }
+            }
+          }
+          const aniInputRef = block.inputs.get("anisotropy")?.source;
+          let useAnisotropy = false;
+          let anisoIntensityExpr = "0.0";
+          let anisoDirectionExpr = "v2(1.0, 0.0)";
+          let anisoUvExpr = "v2(0.0)";
+          if (aniInputRef) {
+            const aniBlk = ctx.graph.blocks.get(aniInputRef.blockId);
+            if (aniBlk && aniBlk.className === "AnisotropyBlock") {
+              useAnisotropy = true;
+              state.usesAnisotropy = true;
+              ctx.resolveOutput(aniBlk, aniInputRef.outputName, stage, state);
+              anisoIntensityExpr = resolveOptional3(aniBlk, "intensity", "0.0", "f32", stage, state, ctx);
+              anisoDirectionExpr = resolveOptional3(aniBlk, "direction", "v2(1.0, 0.0)", "vec3f", stage, state, ctx);
+              const dirIn = aniBlk.inputs.get("direction");
+              if (dirIn?.source) {
+                const e = ctx.resolve(aniBlk, "direction", stage, state);
+                anisoDirectionExpr = e.type === "vec2f" ? e.expr : `(${e.expr}).xy`;
+              }
+              const uvIn = aniBlk.inputs.get("uv");
+              if (uvIn?.source) {
+                const e = ctx.resolve(aniBlk, "uv", stage, state);
+                anisoUvExpr = e.type === "vec2f" ? e.expr : `(${e.expr}).xy`;
+              }
+            }
+          }
+          const iriInputRef = block.inputs.get("iridescence")?.source;
+          let useIridescence = false;
+          let iriIntensityExpr = "1.0";
+          let iriIorExpr = "1.3";
+          let iriThicknessExpr = "400.0";
+          if (iriInputRef) {
+            const iriBlk = ctx.graph.blocks.get(iriInputRef.blockId);
+            if (iriBlk && iriBlk.className === "IridescenceBlock") {
+              useIridescence = true;
+              state.usesIridescence = true;
+              ctx.resolveOutput(iriBlk, iriInputRef.outputName, stage, state);
+              iriIntensityExpr = resolveOptional3(iriBlk, "intensity", "1.0", "f32", stage, state, ctx);
+              iriIorExpr = resolveOptional3(iriBlk, "indexOfRefraction", "1.3", "f32", stage, state, ctx);
+              iriThicknessExpr = resolveOptional3(iriBlk, "thickness", "400.0", "f32", stage, state, ctx);
+            }
+          }
+          const useSpecularAA = block.serialized.enableSpecularAntiAliasing === true;
+          const helperKey = `${HELPER_KEY_PREFIX2}_${reflectionConnected ? "env" : "noenv"}_${useClearcoat ? "cc" : "nocc"}_${remapClearcoatF0 ? "ccF0R" : "ccF0"}_${useSheen ? "sh" : "nosh"}_${useRefraction ? "refr" : "norefr"}_${useSubsurface ? "ss" : "noss"}_${useAnisotropy ? "ani" : "noani"}_${useIridescence ? "iri" : "noiri"}_${useShAlbedoScaling ? "shAS" : "noShAS"}_${useCcBump ? "ccB" : ""}_${useCcTint ? "ccT" : ""}_${useSpecularAA ? "aa" : "noaa"}`;
+          state.fragment.helpers.set(
+            helperKey,
+            buildPbrMrHelperFull({
+              key: helperKey,
+              useEnv: reflectionConnected,
+              useClearcoat,
+              useSheen,
+              useRefraction,
+              useSubsurface,
+              useAnisotropy,
+              useIridescence,
+              useShAlbedoScaling,
+              useCcBump,
+              useCcTint,
+              useSpecularAA,
+              remapClearcoatF0
+            })
+          );
+          state.usesLightsUbo = true;
+          const memoKey2 = `_pbrmr_${block.id}_call`;
+          let callVar;
+          const existing = state.fragment.memo.get(memoKey2);
+          if (existing) {
+            callVar = existing.expr;
+          } else {
+            const wp = resolveOptional3(block, "worldPosition", "v3(0.0)", "vec3f", stage, state, ctx);
+            const gn = resolveOptional3(block, "worldNormal", "v3(0.0, 1.0, 0.0)", "vec3f", stage, state, ctx);
+            const perturbed = block.inputs.get("perturbedNormal");
+            const wn = perturbed?.source ? ctx.cast(ctx.resolve(block, "perturbedNormal", stage, state), "vec3f").expr : gn;
+            const cp = resolveOptional3(block, "cameraPosition", "_NME_CAMERA_POS_", "vec3f", stage, state, ctx);
+            const bc = resolveOptional3(block, "baseColor", "v3(1.0)", "vec3f", stage, state, ctx);
+            const me = resolveOptional3(block, "metallic", "0.0", "f32", stage, state, ctx);
+            const ro = resolveOptional3(block, "roughness", "0.5", "f32", stage, state, ctx);
+            const ao = resolveOptional3(block, "ambientOcc", "1.0", "f32", stage, state, ctx);
+            const baseIorExpr = resolveOptional3(block, "indexOfRefraction", "1.5", "f32", stage, state, ctx);
+            const sf = state.shadowLights.length > 0 ? `nme_computeShadowFactors(in)` : SHADOW_FACTORS_ONE3;
+            callVar = `_pbrR${ctx.temp(state, "pbr")}`;
+            state.fragment.body.push(
+              `let ${callVar} = nme_pbr_mr_compute(${wp}, ${gn}, ${wn}, ${cp}, ${bc}, ${me}, ${ro}, ${ao}, ${ccIntensityExpr}, ${ccRoughnessExpr}, ${ccIorExpr}, ${ccBumpExpr}, ${ccBumpUvExpr}, ${ccTintColorExpr}, ${ccTintAtDistanceExpr}, ${ccTintThicknessExpr}, ${shIntensityExpr}, ${shColorExpr}, ${shRoughnessExpr}, ${baseIorExpr}, ${refrIntensityExpr}, ${refrIorExpr}, ${refrTintAtDistanceExpr}, ${ssTintColorExpr}, ${ssThicknessExpr}, ${ssTranslucencyIntensityExpr}, ${ssDiffusionDistExpr}, ${anisoIntensityExpr}, ${anisoDirectionExpr}, ${anisoUvExpr}, ${iriIntensityExpr}, ${iriIorExpr}, ${iriThicknessExpr}, ${sf});`
+            );
+            state.fragment.memo.set(memoKey2, { expr: callVar, type: "vec4f" });
+          }
+          switch (outputName) {
+            case "lighting":
+              return { expr: `${callVar}.lighting`, type: "vec3f" };
+            case "diffuseDir":
+              return { expr: `${callVar}.diffuseDir`, type: "vec3f" };
+            case "specularDir":
+              return { expr: `${callVar}.specularDir`, type: "vec3f" };
+            case "diffuseInd":
+              return { expr: `${callVar}.diffuseInd`, type: "vec3f" };
+            case "specularInd":
+              return { expr: `${callVar}.specularInd`, type: "vec3f" };
+            case "shadow":
+              return { expr: `${callVar}.shadow`, type: "f32" };
+            case "alpha": {
+              const cfg = block.serialized;
+              const useOverAlpha = cfg.useSpecularOverAlpha === true || cfg.useRadianceOverAlpha === true;
+              const op = block.inputs.get("opacity");
+              const baseAlpha = op?.source ? ctx.cast(ctx.resolve(block, "opacity", stage, state), "f32").expr : "1.0";
+              if (useOverAlpha) {
+                return { expr: `clamp(${baseAlpha} + ${callVar}.lumOverAlpha * ${callVar}.lumOverAlpha, 0.0, 1.0)`, type: "f32" };
+              }
+              return { expr: baseAlpha, type: "f32" };
+            }
+            case "ambientClr":
+            case "clearcoatDir":
+            case "clearcoatInd":
+            case "sheenDir":
+            case "sheenInd":
+            case "refraction":
+              return { expr: `v3(0.0)`, type: "vec3f" };
+            default:
+              return { expr: `${callVar}.lighting`, type: "vec3f" };
+          }
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflection-block.ts
+  var reflection_block_exports = {};
+  __export(reflection_block_exports, {
+    emitter: () => emitter41
+  });
+  var emitter41;
+  var init_reflection_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflection-block.ts"() {
+      emitter41 = {
+        className: "ReflectionBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, state, _ctx) {
+          state.usesEnv = true;
+          return { expr: `vec3<f32>(0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/clearcoat-block.ts
+  var clearcoat_block_exports = {};
+  __export(clearcoat_block_exports, {
+    emitter: () => emitter42
+  });
+  var emitter42;
+  var init_clearcoat_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/clearcoat-block.ts"() {
+      emitter42 = {
+        className: "ClearCoatBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, state, _ctx) {
+          state.usesClearcoat = true;
+          return { expr: `vec3<f32>(0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/sheen-block.ts
+  var sheen_block_exports = {};
+  __export(sheen_block_exports, {
+    emitter: () => emitter43
+  });
+  var emitter43;
+  var init_sheen_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/sheen-block.ts"() {
+      "use strict";
+      emitter43 = {
+        className: "SheenBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, state, _ctx) {
+          state.usesSheen = true;
+          return { expr: `vec3<f32>(0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/anisotropy-block.ts
+  var anisotropy_block_exports = {};
+  __export(anisotropy_block_exports, {
+    emitter: () => emitter44
+  });
+  var emitter44;
+  var init_anisotropy_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/anisotropy-block.ts"() {
+      "use strict";
+      emitter44 = {
+        className: "AnisotropyBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, state, _ctx) {
+          state.usesAnisotropy = true;
+          return { expr: `vec3<f32>(0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/subsurface-block.ts
+  var subsurface_block_exports = {};
+  __export(subsurface_block_exports, {
+    emitter: () => emitter45
+  });
+  var emitter45;
+  var init_subsurface_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/subsurface-block.ts"() {
+      "use strict";
+      emitter45 = {
+        className: "SubSurfaceBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, state, _ctx) {
+          state.usesSubsurface = true;
+          return { expr: `vec3<f32>(0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/refraction-block.ts
+  var refraction_block_exports = {};
+  __export(refraction_block_exports, {
+    emitter: () => emitter46
+  });
+  var emitter46;
+  var init_refraction_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/refraction-block.ts"() {
+      "use strict";
+      emitter46 = {
+        className: "RefractionBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, _state, _ctx) {
+          return { expr: `vec3<f32>(0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/divide-block.ts
+  var divide_block_exports = {};
+  __export(divide_block_exports, {
+    emitter: () => emitter47
+  });
+  var emitter47;
+  var init_divide_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/divide-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter47 = binaryEmitter("DivideBlock", (l, r) => `${l} / ${r}`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/mod-block.ts
+  var mod_block_exports = {};
+  __export(mod_block_exports, {
+    emitter: () => emitter48
+  });
+  var emitter48;
+  var init_mod_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/mod-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter48 = binaryEmitter("ModBlock", (l, r) => `${l} % ${r}`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reciprocal-block.ts
+  var reciprocal_block_exports = {};
+  __export(reciprocal_block_exports, {
+    emitter: () => emitter49
+  });
+  var emitter49;
+  var init_reciprocal_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reciprocal-block.ts"() {
+      "use strict";
+      emitter49 = {
+        className: "ReciprocalBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = ctx.resolve(block, "input", stage, state);
+          if (input.type === "mat4f") {
+            return { expr: `inverse(${input.expr})`, type: "mat4f" };
+          }
+          return { expr: `(1.0 / ${input.expr})`, type: input.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/length-block.ts
+  var length_block_exports = {};
+  __export(length_block_exports, {
+    emitter: () => emitter50
+  });
+  var emitter50;
+  var init_length_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/length-block.ts"() {
+      "use strict";
+      emitter50 = {
+        className: "LengthBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const value = ctx.resolve(block, "value", stage, state);
+          return { expr: `length(${value.expr})`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/distance-block.ts
+  var distance_block_exports = {};
+  __export(distance_block_exports, {
+    emitter: () => emitter51
+  });
+  var emitter51;
+  var init_distance_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/distance-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter51 = {
+        className: "DistanceBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const left = ctx.resolve(block, "left", stage, state);
+          const right = ctx.resolve(block, "right", stage, state);
+          const type = widerType(left.type, right.type);
+          const lc = ctx.cast(left, type).expr;
+          const rc = ctx.cast(right, type).expr;
+          return { expr: `length(${lc} - ${rc})`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/cross-block.ts
+  var cross_block_exports = {};
+  __export(cross_block_exports, {
+    emitter: () => emitter52
+  });
+  var emitter52;
+  var init_cross_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/cross-block.ts"() {
+      "use strict";
+      emitter52 = {
+        className: "CrossBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const left = ctx.cast(ctx.resolve(block, "left", stage, state), "vec3f").expr;
+          const right = ctx.cast(ctx.resolve(block, "right", stage, state), "vec3f").expr;
+          return { expr: `cross(${left}, ${right})`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflect-block.ts
+  var reflect_block_exports = {};
+  __export(reflect_block_exports, {
+    emitter: () => emitter53
+  });
+  var emitter53;
+  var init_reflect_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflect-block.ts"() {
+      "use strict";
+      emitter53 = {
+        className: "ReflectBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const incident = ctx.cast(ctx.resolve(block, "incident", stage, state), "vec3f").expr;
+          const normal = ctx.cast(ctx.resolve(block, "normal", stage, state), "vec3f").expr;
+          return { expr: `reflect(${incident}, ${normal})`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/refract-block.ts
+  var refract_block_exports = {};
+  __export(refract_block_exports, {
+    emitter: () => emitter54
+  });
+  var emitter54;
+  var init_refract_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/refract-block.ts"() {
+      "use strict";
+      emitter54 = {
+        className: "RefractBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const incident = ctx.cast(ctx.resolve(block, "incident", stage, state), "vec3f").expr;
+          const normal = ctx.cast(ctx.resolve(block, "normal", stage, state), "vec3f").expr;
+          const ior = ctx.cast(ctx.resolve(block, "ior", stage, state), "f32").expr;
+          return { expr: `refract(${incident}, ${normal}, ${ior})`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/arc-tan2-block.ts
+  var arc_tan2_block_exports = {};
+  __export(arc_tan2_block_exports, {
+    emitter: () => emitter55
+  });
+  var emitter55;
+  var init_arc_tan2_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/arc-tan2-block.ts"() {
+      "use strict";
+      emitter55 = {
+        className: "ArcTan2Block",
+        emit(block, _outputName, stage, state, ctx) {
+          const x = ctx.cast(ctx.resolve(block, "x", stage, state), "f32").expr;
+          const y = ctx.cast(ctx.resolve(block, "y", stage, state), "f32").expr;
+          return { expr: `atan2(${x}, ${y})`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/fresnel-block.ts
+  var fresnel_block_exports = {};
+  __export(fresnel_block_exports, {
+    emitter: () => emitter56
+  });
+  var HELPER, emitter56;
+  var init_fresnel_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/fresnel-block.ts"() {
+      "use strict";
+      HELPER = `fn nme_computeFresnelTerm(viewDirection: vec3<f32>, worldNormal: vec3<f32>, bias: f32, power: f32) -> f32 {
+    let fresnelTerm = pow(bias + abs(dot(viewDirection, worldNormal)), power);
+    return clamp(fresnelTerm, 0.0, 1.0);
+}`;
+      emitter56 = {
+        className: "FresnelBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const worldNormal = ctx.cast(ctx.resolve(block, "worldNormal", stage, state), "vec3f").expr;
+          const viewDirection = ctx.cast(ctx.resolve(block, "viewDirection", stage, state), "vec3f").expr;
+          const bias = ctx.cast(ctx.resolve(block, "bias", stage, state), "f32").expr;
+          const power = ctx.cast(ctx.resolve(block, "power", stage, state), "f32").expr;
+          const stageState = stage === "vertex" ? state.vertex : state.fragment;
+          stageState.helpers.set("nme_computeFresnelTerm", HELPER);
+          return { expr: `nme_computeFresnelTerm(${viewDirection}, ${worldNormal}, ${bias}, ${power})`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/opposite-block.ts
+  var opposite_block_exports = {};
+  __export(opposite_block_exports, {
+    emitter: () => emitter57
+  });
+  var emitter57;
+  var init_opposite_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/opposite-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter57 = unaryEmitter("OppositeBlock", (v) => `1.0 - ${v}`);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/nlerp-block.ts
+  var nlerp_block_exports = {};
+  __export(nlerp_block_exports, {
+    emitter: () => emitter58
+  });
+  var emitter58;
+  var init_nlerp_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/nlerp-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter58 = {
+        className: "NLerpBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const left = ctx.resolve(block, "left", stage, state);
+          const right = ctx.resolve(block, "right", stage, state);
+          const gradient = ctx.resolve(block, "gradient", stage, state);
+          const t = widerType(left.type, right.type);
+          if (t === "f32") {
+            throw new Error("NodeMaterial: NLerpBlock requires a vector left/right input; Babylon.js emits normalize(mix(...)) for this block");
+          }
+          const lc = ctx.cast(left, t).expr;
+          const rc = ctx.cast(right, t).expr;
+          const gc = ctx.cast(gradient, t).expr;
+          return { expr: `normalize(mix(${lc}, ${rc}, ${gc}))`, type: t };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/conditional-block.ts
+  var conditional_block_exports = {};
+  __export(conditional_block_exports, {
+    emitter: () => emitter59
+  });
+  function connectedOrDefault(block, inputName, fallback2, type, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (input?.source) {
+      return ctx.resolve(block, inputName, stage, state);
+    }
+    return { expr: fallback2, type };
+  }
+  function conditionExpr(condition, a, b) {
+    switch (condition) {
+      case 0:
+        return `${a} == ${b}`;
+      case 1:
+        return `${a} != ${b}`;
+      case 2:
+        return `${a} < ${b}`;
+      case 3:
+        return `${a} > ${b}`;
+      case 4:
+        return `${a} <= ${b}`;
+      case 5:
+        return `${a} >= ${b}`;
+      case 6:
+        return `(((${a} + ${b}) - 2.0 * floor((${a} + ${b}) / 2.0)) > 0.0)`;
+      case 7:
+        return `(min(${a} + ${b}, 1.0) > 0.0)`;
+      case 8:
+        return `(${a} * ${b} > 0.0)`;
+      default:
+        throw new Error(`NodeMaterial: unknown ConditionalBlock condition ${condition}`);
+    }
+  }
+  var emitter59;
+  var init_conditional_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/conditional-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter59 = {
+        className: "ConditionalBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const a = ctx.cast(ctx.resolve(block, "a", stage, state), "f32").expr;
+          const b = ctx.cast(ctx.resolve(block, "b", stage, state), "f32").expr;
+          const trueValue = connectedOrDefault(block, "true", "1.0", "f32", stage, state, ctx);
+          const falseValue = connectedOrDefault(block, "false", "0.0", "f32", stage, state, ctx);
+          const outputType = widerType(trueValue.type, falseValue.type);
+          const t = ctx.cast(trueValue, outputType).expr;
+          const f = ctx.cast(falseValue, outputType).expr;
+          const rawCondition = block.serialized.condition;
+          const condition = typeof rawCondition === "number" ? rawCondition : 2;
+          return { expr: `select(${f}, ${t}, ${conditionExpr(condition, a, b)})`, type: outputType };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/curve-block.ts
+  var curve_block_exports = {};
+  __export(curve_block_exports, {
+    emitter: () => emitter60
+  });
+  function curveScalar(type, v) {
+    switch (type) {
+      case 0:
+        return `(1.0 - cos((${v} * 3.1415) / 2.0))`;
+      case 1:
+        return `sin((${v} * 3.1415) / 2.0)`;
+      case 2:
+        return `(-((cos(${v} * 3.1415) - 1.0)) / 2.0)`;
+      case 3:
+        return `(${v} * ${v})`;
+      case 4:
+        return `((1.0 - ${v}) * (1.0 - ${v}))`;
+      case 5:
+        return `select(1.0 - pow(-2.0 * ${v} + 2.0, 2.0) / 2.0, 2.0 * ${v} * ${v}, ${v} < 0.5)`;
+      case 6:
+        return `(${v} * ${v} * ${v})`;
+      case 7:
+        return `(1.0 - pow(1.0 - ${v}, 3.0))`;
+      case 8:
+        return `select(1.0 - pow(-2.0 * ${v} + 2.0, 3.0) / 2.0, 4.0 * ${v} * ${v} * ${v}, ${v} < 0.5)`;
+      case 9:
+        return `(${v} * ${v} * ${v} * ${v})`;
+      case 10:
+        return `(1.0 - pow(1.0 - ${v}, 4.0))`;
+      case 11:
+        return `select(1.0 - pow(-2.0 * ${v} + 2.0, 4.0) / 2.0, 8.0 * ${v} * ${v} * ${v} * ${v}, ${v} < 0.5)`;
+      case 12:
+        return `(${v} * ${v} * ${v} * ${v} * ${v})`;
+      case 13:
+        return `(1.0 - pow(1.0 - ${v}, 5.0))`;
+      case 14:
+        return `select(1.0 - pow(-2.0 * ${v} + 2.0, 5.0) / 2.0, 16.0 * ${v} * ${v} * ${v} * ${v} * ${v}, ${v} < 0.5)`;
+      case 15:
+        return `select(pow(2.0, 10.0 * ${v} - 10.0), 0.0, ${v} == 0.0)`;
+      case 16:
+        return `select(1.0 - pow(2.0, -10.0 * ${v}), 1.0, ${v} == 1.0)`;
+      case 17:
+        return `select(select(select((2.0 - pow(2.0, -20.0 * ${v} + 10.0)) / 2.0, pow(2.0, 20.0 * ${v} - 10.0) / 2.0, ${v} < 0.5), 1.0, ${v} == 1.0), 0.0, ${v} == 0.0)`;
+      case 18:
+        return `(1.0 - sqrt(1.0 - pow(${v}, 2.0)))`;
+      case 19:
+        return `sqrt(1.0 - pow(${v} - 1.0, 2.0))`;
+      case 20:
+        return `select((sqrt(1.0 - pow(-2.0 * ${v} + 2.0, 2.0)) + 1.0) / 2.0, (1.0 - sqrt(1.0 - pow(2.0 * ${v}, 2.0))) / 2.0, ${v} < 0.5)`;
+      case 21:
+        return `(2.70158 * ${v} * ${v} * ${v} - 1.70158 * ${v} * ${v})`;
+      case 22:
+        return `(2.70158 * pow(${v} - 1.0, 3.0) + 1.70158 * pow(${v} - 1.0, 2.0))`;
+      case 23:
+        return `select((pow(2.0 * ${v} - 2.0, 2.0) * (3.5949095 * (${v} * 2.0 - 2.0) + 3.5949095) + 2.0) / 2.0, (pow(2.0 * ${v}, 2.0) * (3.5949095 * 2.0 * ${v} - 2.5949095)) / 2.0, ${v} < 0.5)`;
+      case 24:
+        return `select(select(-pow(2.0, 10.0 * ${v} - 10.0) * sin((${v} * 10.0 - 10.75) * ((2.0 * 3.1415) / 3.0)), 1.0, ${v} == 1.0), 0.0, ${v} == 0.0)`;
+      case 25:
+        return `select(select(pow(2.0, -10.0 * ${v}) * sin((${v} * 10.0 - 0.75) * ((2.0 * 3.1415) / 3.0)) + 1.0, 1.0, ${v} == 1.0), 0.0, ${v} == 0.0)`;
+      case 26:
+        return `select(select(select((pow(2.0, -20.0 * ${v} + 10.0) * sin((20.0 * ${v} - 11.125) * ((2.0 * 3.1415) / 4.5))) / 2.0 + 1.0, -(pow(2.0, 20.0 * ${v} - 10.0) * sin((20.0 * ${v} - 11.125) * ((2.0 * 3.1415) / 4.5))) / 2.0, ${v} < 0.5), 1.0, ${v} == 1.0), 0.0, ${v} == 0.0)`;
+      default:
+        throw new Error(`NodeMaterial: unknown CurveBlock curveType ${type}`);
+    }
+  }
+  function curveExpr(type, input, inputType) {
+    if (inputType === "f32") {
+      return curveScalar(type, input);
+    }
+    if (inputType === "vec2f") {
+      return `${WGSL[inputType]}(${curveScalar(type, `(${input}).x`)}, ${curveScalar(type, `(${input}).y`)})`;
+    }
+    if (inputType === "vec3f") {
+      return `${WGSL[inputType]}(${curveScalar(type, `(${input}).x`)}, ${curveScalar(type, `(${input}).y`)}, ${curveScalar(type, `(${input}).z`)})`;
+    }
+    if (inputType === "vec4f") {
+      return `${WGSL[inputType]}(${curveScalar(type, `(${input}).x`)}, ${curveScalar(type, `(${input}).y`)}, ${curveScalar(type, `(${input}).z`)}, ${curveScalar(type, `(${input}).w`)})`;
+    }
+    throw new Error(`NodeMaterial: CurveBlock does not support ${inputType}`);
+  }
+  var emitter60;
+  var init_curve_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/curve-block.ts"() {
+      "use strict";
+      init_node_types();
+      emitter60 = {
+        className: "CurveBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = ctx.resolve(block, "input", stage, state);
+          const rawCurveType = block.serialized.curveType;
+          const curveType = typeof rawCurveType === "number" ? rawCurveType : 2;
+          return { expr: curveExpr(curveType, input.expr, input.type), type: input.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/wave-block.ts
+  var wave_block_exports = {};
+  __export(wave_block_exports, {
+    emitter: () => emitter61
+  });
+  function scalar(type, value) {
+    if (type === "f32") {
+      return value;
+    }
+    if (type === "vec2f") {
+      return `vec2<f32>(${value})`;
+    }
+    if (type === "vec3f") {
+      return `vec3<f32>(${value})`;
+    }
+    if (type === "vec4f") {
+      return `vec4<f32>(${value})`;
+    }
+    throw new Error(`NodeMaterial: WaveBlock does not support ${type}`);
+  }
+  var emitter61;
+  var init_wave_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/wave-block.ts"() {
+      "use strict";
+      emitter61 = {
+        className: "WaveBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = ctx.resolve(block, "input", stage, state);
+          const v = input.expr;
+          const half = scalar(input.type, "0.5");
+          const one2 = scalar(input.type, "1.0");
+          const two = scalar(input.type, "2.0");
+          const rawKind = block.serialized.kind;
+          const kind = typeof rawKind === "number" ? rawKind : 0;
+          if (kind === 0) {
+            return { expr: `(${v} - floor(${half} + ${v}))`, type: input.type };
+          }
+          if (kind === 1) {
+            return { expr: `(${one2} - ${two} * round(fract(${v})))`, type: input.type };
+          }
+          if (kind === 2) {
+            return { expr: `(${two} * abs(${two} * (${v} - floor(${half} + ${v}))) - ${one2})`, type: input.type };
+          }
+          throw new Error(`NodeMaterial: unknown WaveBlock kind ${kind}`);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/random-number-block.ts
+  var random_number_block_exports = {};
+  __export(random_number_block_exports, {
+    emitter: () => emitter62
+  });
+  var emitter62;
+  var init_random_number_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/random-number-block.ts"() {
+      "use strict";
+      emitter62 = {
+        className: "RandomNumberBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const seed = ctx.resolve(block, "seed", stage, state);
+          if (seed.type === "f32" || seed.type === "mat4f" || seed.type === "texture2d" || seed.type === "textureCube") {
+            throw new Error(`NodeMaterial: RandomNumberBlock requires a vector seed so Babylon.js getRand(seed.xy) can be emitted; got ${seed.type}`);
+          }
+          state[stage].helpers.set("nme_getRand", "fn nme_getRand(seed: vec2<f32>) -> f32 { return fract(sin(dot(seed.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453); }");
+          return { expr: `nme_getRand((${seed.expr}).xy)`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-math.ts
+  var node_registry_extra_math_exports = {};
+  __export(node_registry_extra_math_exports, {
+    loadExtraEmitter: () => loadExtraEmitter
+  });
+  function blockLoader(key) {
+    switch (key) {
+      case "DivideBlock":
+        return () => Promise.resolve().then(() => (init_divide_block(), divide_block_exports));
+      case "ModBlock":
+        return () => Promise.resolve().then(() => (init_mod_block(), mod_block_exports));
+      case "ReciprocalBlock":
+        return () => Promise.resolve().then(() => (init_reciprocal_block(), reciprocal_block_exports));
+      case "LengthBlock":
+        return () => Promise.resolve().then(() => (init_length_block(), length_block_exports));
+      case "DistanceBlock":
+        return () => Promise.resolve().then(() => (init_distance_block(), distance_block_exports));
+      case "CrossBlock":
+        return () => Promise.resolve().then(() => (init_cross_block(), cross_block_exports));
+      case "ReflectBlock":
+        return () => Promise.resolve().then(() => (init_reflect_block(), reflect_block_exports));
+      case "RefractBlock":
+        return () => Promise.resolve().then(() => (init_refract_block(), refract_block_exports));
+      case "ArcTan2Block":
+        return () => Promise.resolve().then(() => (init_arc_tan2_block(), arc_tan2_block_exports));
+      case "FresnelBlock":
+        return () => Promise.resolve().then(() => (init_fresnel_block(), fresnel_block_exports));
+      case "OppositeBlock":
+        return () => Promise.resolve().then(() => (init_opposite_block(), opposite_block_exports));
+      case "NLerpBlock":
+        return () => Promise.resolve().then(() => (init_nlerp_block(), nlerp_block_exports));
+      case "ConditionalBlock":
+        return () => Promise.resolve().then(() => (init_conditional_block(), conditional_block_exports));
+      case "CurveBlock":
+        return () => Promise.resolve().then(() => (init_curve_block(), curve_block_exports));
+      case "WaveBlock":
+        return () => Promise.resolve().then(() => (init_wave_block(), wave_block_exports));
+      case "RandomNumberBlock":
+        return () => Promise.resolve().then(() => (init_random_number_block(), random_number_block_exports));
+      default:
+        return null;
+    }
+  }
+  async function loadExtraEmitter(key) {
+    const loader = blockLoader(key);
+    if (!loader) {
+      throw new Error(`NodeMaterial: no math extension emitter registered for block "${key}"`);
+    }
+    return (await loader()).emitter;
+  }
+  var init_node_registry_extra_math = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-math.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/color-merger.ts
+  var color_merger_exports = {};
+  __export(color_merger_exports, {
+    emitter: () => emitter63
+  });
+  function tryResolve2(block, inputName, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (!input?.source) {
+      return null;
+    }
+    return ctx.resolve(block, inputName, stage, state);
+  }
+  function swizzleChar(raw, fallback2) {
+    const s = typeof raw === "string" && raw.length > 0 ? raw[0] : fallback2;
+    if (s === "r" || s === "x") {
+      return "x";
+    }
+    if (s === "g" || s === "y") {
+      return "y";
+    }
+    if (s === "b" || s === "z") {
+      return "z";
+    }
+    if (s === "a" || s === "w") {
+      return "w";
+    }
+    return fallback2;
+  }
+  function swizzle(block, len) {
+    const s = swizzleChar(block.serialized.rSwizzle, "x") + swizzleChar(block.serialized.gSwizzle, "y") + swizzleChar(block.serialized.bSwizzle, "z") + swizzleChar(block.serialized.aSwizzle, "w");
+    return `.${s.slice(0, len)}`;
+  }
+  var emitter63;
+  var init_color_merger = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/color-merger.ts"() {
+      "use strict";
+      emitter63 = {
+        className: "ColorMergerBlock",
+        emit(block, outputName, stage, state, ctx) {
+          const rgb = tryResolve2(block, "rgb", stage, state, ctx);
+          const a = tryResolve2(block, "a", stage, state, ctx);
+          if (rgb) {
+            const rgbExpr = ctx.cast(rgb, "vec3f").expr;
+            const aExpr2 = a ? ctx.cast(a, "f32").expr : "0.0";
+            if (outputName === "rgba") {
+              return { expr: `(vec4<f32>(${rgbExpr}, ${aExpr2})${swizzle(block, 4)})`, type: "vec4f" };
+            }
+            return { expr: `((${rgbExpr})${swizzle(block, 3)})`, type: "vec3f" };
+          }
+          const r = tryResolve2(block, "r", stage, state, ctx);
+          const g = tryResolve2(block, "g", stage, state, ctx);
+          const b = tryResolve2(block, "b", stage, state, ctx);
+          const rExpr = r ? ctx.cast(r, "f32").expr : "0.0";
+          const gExpr = g ? ctx.cast(g, "f32").expr : "0.0";
+          const bExpr = b ? ctx.cast(b, "f32").expr : "0.0";
+          const aExpr = a ? ctx.cast(a, "f32").expr : "0.0";
+          if (outputName === "rgba") {
+            return { expr: `(vec4<f32>(${rExpr}, ${gExpr}, ${bExpr}, ${aExpr})${swizzle(block, 4)})`, type: "vec4f" };
+          }
+          return { expr: `(vec3<f32>(${rExpr}, ${gExpr}, ${bExpr})${swizzle(block, 3)})`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/color-converter-block.ts
+  var color_converter_block_exports = {};
+  __export(color_converter_block_exports, {
+    emitter: () => emitter64
+  });
+  function tryResolve3(block, inputName, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (!input?.source) {
+      return null;
+    }
+    return ctx.resolve(block, inputName, stage, state);
+  }
+  function ensureRgb2HslHelper(state, stage) {
+    state[stage].helpers.set(
+      "nme_rgb2hsl",
+      `fn nme_rgb2hsl(color: vec3<f32>) -> vec3<f32> {
+    let r = color.x;
+    let g = color.y;
+    let b = color.z;
+    let maxc = max(r, max(g, b));
+    let minc = min(r, min(g, b));
+    var h = 0.0;
+    var s = 0.0;
+    let l = (maxc + minc) / 2.0;
+    if (maxc != minc) {
+        let d = maxc - minc;
+        if (l > 0.5) {
+            s = d / (2.0 - maxc - minc);
+        } else {
+            s = d / (maxc + minc);
+        }
+        if (maxc == r) {
+            var add = 0.0;
+            if (g < b) {
+                add = 6.0;
+            }
+            h = (g - b) / d + add;
+        } else if (maxc == g) {
+            h = (b - r) / d + 2.0;
+        } else if (maxc == b) {
+            h = (r - g) / d + 4.0;
+        }
+        h = h / 6.0;
+    }
+    return vec3<f32>(h, s, l);
+}`
+    );
+  }
+  function ensureHsl2RgbHelper(state, stage) {
+    state[stage].helpers.set(
+      "nme_hue2rgb",
+      `fn nme_hue2rgb(p: f32, q: f32, tt: f32) -> f32 {
+    var t = tt;
+    if (t < 0.0) {
+        t = t + 1.0;
+    }
+    if (t > 1.0) {
+        t = t - 1.0;
+    }
+    if (t < 1.0 / 6.0) {
+        return p + (q - p) * 6.0 * t;
+    }
+    if (t < 1.0 / 2.0) {
+        return q;
+    }
+    if (t < 2.0 / 3.0) {
+        return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    }
+    return p;
+}`
+    );
+    state[stage].helpers.set(
+      "nme_hsl2rgb",
+      `fn nme_hsl2rgb(hsl: vec3<f32>) -> vec3<f32> {
+    let h = hsl.x;
+    let s = hsl.y;
+    let l = hsl.z;
+    var r: f32;
+    var g: f32;
+    var b: f32;
+    if (s == 0.0) {
+        r = l;
+        g = l;
+        b = l;
+    } else {
+        var q: f32;
+        if (l < 0.5) {
+            q = l * (1.0 + s);
+        } else {
+            q = l + s - l * s;
+        }
+        let p = 2.0 * l - q;
+        r = nme_hue2rgb(p, q, h + 1.0 / 3.0);
+        g = nme_hue2rgb(p, q, h);
+        b = nme_hue2rgb(p, q, h - 1.0 / 3.0);
+    }
+    return vec3<f32>(r, g, b);
+}`
+    );
+  }
+  var emitter64;
+  var init_color_converter_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/color-converter-block.ts"() {
+      "use strict";
+      emitter64 = {
+        className: "ColorConverterBlock",
+        emit(block, outputName, stage, state, ctx) {
+          const rgb = tryResolve3(block, "rgb", stage, state, ctx);
+          if (rgb) {
+            const rgbExpr = ctx.cast(rgb, "vec3f").expr;
+            if (outputName === "hsl") {
+              ensureRgb2HslHelper(state, stage);
+              return { expr: `nme_rgb2hsl(${rgbExpr})`, type: "vec3f" };
+            }
+            return { expr: rgbExpr, type: "vec3f" };
+          }
+          const hsl = tryResolve3(block, "hsl", stage, state, ctx);
+          if (hsl) {
+            const hslExpr = ctx.cast(hsl, "vec3f").expr;
+            if (outputName === "rgb") {
+              ensureHsl2RgbHelper(state, stage);
+              return { expr: `nme_hsl2rgb(${hslExpr})`, type: "vec3f" };
+            }
+            return { expr: hslExpr, type: "vec3f" };
+          }
+          return { expr: "vec3<f32>(0.0, 0.0, 0.0)", type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/desaturate-block.ts
+  var desaturate_block_exports = {};
+  __export(desaturate_block_exports, {
+    emitter: () => emitter65
+  });
+  var emitter65;
+  var init_desaturate_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/desaturate-block.ts"() {
+      "use strict";
+      emitter65 = {
+        className: "DesaturateBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const color = ctx.cast(ctx.resolve(block, "color", stage, state), "vec3f").expr;
+          const level = ctx.cast(ctx.resolve(block, "level", stage, state), "f32").expr;
+          const minColor = `min(min((${color}).x, (${color}).y), (${color}).z)`;
+          const maxColor = `max(max((${color}).x, (${color}).y), (${color}).z)`;
+          const merge = `(0.5 * (${minColor} + ${maxColor}))`;
+          return { expr: `mix(${color}, vec3<f32>(${merge}), ${level})`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/gradient-block.ts
+  var gradient_block_exports = {};
+  __export(gradient_block_exports, {
+    emitter: () => emitter66
+  });
+  function readSteps(raw) {
+    if (!Array.isArray(raw)) {
+      return [
+        { step: 0, color: { r: 0, g: 0, b: 0 } },
+        { step: 1, color: { r: 1, g: 1, b: 1 } }
+      ];
+    }
+    return raw.map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const e = entry;
+      const c = e.color;
+      if (typeof e.step !== "number" || !c || typeof c.r !== "number" || typeof c.g !== "number" || typeof c.b !== "number") {
+        return null;
+      }
+      return { step: e.step, color: { r: c.r, g: c.g, b: c.b } };
+    }).filter((entry) => entry !== null);
+  }
+  function colorLiteral(step) {
+    return `vec3<f32>(${formatFloat2(step.color.r)}, ${formatFloat2(step.color.g)}, ${formatFloat2(step.color.b)})`;
+  }
+  var emitter66;
+  var init_gradient_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/gradient-block.ts"() {
+      "use strict";
+      init_math_factory();
+      emitter66 = {
+        className: "GradientBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = block.inputs.get("gradient");
+          const steps = readSteps(block.serialized.colorSteps);
+          if (!input?.source || steps.length === 0) {
+            return { expr: "vec3<f32>(0.0, 0.0, 0.0)", type: "vec3f" };
+          }
+          const gradient = ctx.resolve(block, "gradient", stage, state);
+          const g = gradient.type === "f32" ? gradient.expr : `((${gradient.expr}).x)`;
+          const tempColor = ctx.temp(state, "gradientColor");
+          const tempPosition = ctx.temp(state, "gradientPosition");
+          state[stage].body.push(`var ${tempColor}: vec3<f32> = ${colorLiteral(steps[0])};`);
+          state[stage].body.push(`var ${tempPosition}: f32;`);
+          for (let i = 1; i < steps.length; i++) {
+            const previous = steps[i - 1];
+            const current = steps[i];
+            state[stage].body.push(`${tempPosition} = clamp((${g} - ${formatFloat2(previous.step)}) / (${formatFloat2(current.step)} - ${formatFloat2(previous.step)}), 0.0, 1.0);`);
+            state[stage].body.push(`${tempColor} = mix(${tempColor}, ${colorLiteral(current)}, ${tempPosition});`);
+          }
+          return { expr: tempColor, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/posterize-block.ts
+  var posterize_block_exports = {};
+  __export(posterize_block_exports, {
+    emitter: () => emitter67
+  });
+  function one(type) {
+    if (type === "f32") {
+      return "1.0";
+    }
+    if (type === "vec2f") {
+      return "vec2<f32>(1.0)";
+    }
+    if (type === "vec3f") {
+      return "vec3<f32>(1.0)";
+    }
+    if (type === "vec4f") {
+      return "vec4<f32>(1.0)";
+    }
+    throw new Error(`NodeMaterial: PosterizeBlock does not support ${type}`);
+  }
+  var emitter67;
+  var init_posterize_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/posterize-block.ts"() {
+      "use strict";
+      emitter67 = {
+        className: "PosterizeBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const value = ctx.resolve(block, "value", stage, state);
+          const steps = ctx.cast(ctx.resolve(block, "steps", stage, state), value.type).expr;
+          const interval = `(${one(value.type)} / ${steps})`;
+          return { expr: `(floor(${value.expr} / ${interval}) * ${interval})`, type: value.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/replace-color-block.ts
+  var replace_color_block_exports = {};
+  __export(replace_color_block_exports, {
+    emitter: () => emitter68
+  });
+  var emitter68;
+  var init_replace_color_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/replace-color-block.ts"() {
+      "use strict";
+      emitter68 = {
+        className: "ReplaceColorBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const value = ctx.resolve(block, "value", stage, state);
+          if (value.type === "f32" || value.type === "mat4f" || value.type === "texture2d" || value.type === "textureCube") {
+            throw new Error(`NodeMaterial: ReplaceColorBlock requires a vector/color value; got ${value.type}`);
+          }
+          const reference = ctx.cast(ctx.resolve(block, "reference", stage, state), value.type).expr;
+          const distance = ctx.cast(ctx.resolve(block, "distance", stage, state), "f32").expr;
+          const replacement = ctx.cast(ctx.resolve(block, "replacement", stage, state), value.type).expr;
+          return { expr: `select(${value.expr}, ${replacement}, length(${value.expr} - ${reference}) < ${distance})`, type: value.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/panner-block.ts
+  var panner_block_exports = {};
+  __export(panner_block_exports, {
+    emitter: () => emitter69
+  });
+  var emitter69;
+  var init_panner_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/panner-block.ts"() {
+      "use strict";
+      emitter69 = {
+        className: "PannerBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const uv = ctx.cast(ctx.resolve(block, "uv", stage, state), "vec2f");
+          const speed = ctx.cast(ctx.resolve(block, "speed", stage, state), "vec2f");
+          const time = ctx.cast(ctx.resolve(block, "time", stage, state), "f32");
+          return { expr: `(${uv.expr} + ${speed.expr} * ${time.expr})`, type: "vec2f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/rotate2d-block.ts
+  var rotate2d_block_exports = {};
+  __export(rotate2d_block_exports, {
+    emitter: () => emitter70
+  });
+  var emitter70;
+  var init_rotate2d_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/rotate2d-block.ts"() {
+      "use strict";
+      emitter70 = {
+        className: "Rotate2dBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = ctx.cast(ctx.resolve(block, "input", stage, state), "vec2f");
+          const angle = ctx.cast(ctx.resolve(block, "angle", stage, state), "f32");
+          return {
+            expr: `vec2<f32>(cos(${angle.expr}) * (${input.expr}).x - sin(${angle.expr}) * (${input.expr}).y, sin(${angle.expr}) * (${input.expr}).x + cos(${angle.expr}) * (${input.expr}).y)`,
+            type: "vec2f"
+          };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/triplanar-block.ts
+  var triplanar_block_exports = {};
+  __export(triplanar_block_exports, {
+    emitter: () => emitter71
+  });
+  function sanitize5(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  function formatFloat3(value) {
+    if (Number.isInteger(value)) {
+      return `${value}.0`;
+    }
+    return `${value}`;
+  }
+  function textureTransform(block) {
+    const tex = block.serialized["texture"];
+    const num2 = (name, fallback2) => {
+      const value = tex?.[name];
+      return typeof value === "number" ? value : fallback2;
+    };
+    return {
+      level: num2("level", 1),
+      uAng: num2("uAng", 0),
+      vAng: num2("vAng", 0),
+      wAng: num2("wAng", 0),
+      uOffset: num2("uOffset", 0),
+      vOffset: num2("vOffset", 0),
+      uScale: num2("uScale", 1),
+      vScale: num2("vScale", 1)
+    };
+  }
+  function bindingName(block, inputName, ctx, fallback2) {
+    const input = block.inputs.get(inputName);
+    if (input?.source) {
+      const producer = ctx.graph.blocks.get(input.source.blockId);
+      return sanitize5(producer?.name || fallback2);
+    }
+    return sanitize5(fallback2);
+  }
+  function ensureBinding(state, name) {
+    if (!state.textures.find((t) => t.name === name)) {
+      state.textures.push({ name, kind: "texture2d", texture: null });
+    }
+  }
+  function applyColorSpace2(expr, outputName, convertToLinear, convertToGamma) {
+    if (!convertToLinear && !convertToGamma) {
+      return expr;
+    }
+    const power = convertToLinear ? "2.2" : "0.45454545";
+    if (outputName === "rgba") {
+      return `vec4<f32>(pow(max(${expr}.xyz, vec3<f32>(0.0)), vec3<f32>(${power})), ${expr}.w)`;
+    }
+    if (outputName === "rgb") {
+      return `pow(max(${expr}.xyz, vec3<f32>(0.0)), vec3<f32>(${power}))`;
+    }
+    if (outputName === "r" || outputName === "g" || outputName === "b") {
+      return `pow(max(${expr}${OUTPUT2[outputName].swizzle}, 0.0), ${power})`;
+    }
+    return expr;
+  }
+  function emitTriPlanarSample(block, stage, state, ctx) {
+    if (stage !== "fragment") {
+      throw new Error("TriPlanarBlock: texture projection is supported only in the fragment stage");
+    }
+    const stageState = state.fragment;
+    const memoKey2 = `_triplanar_${block.id}_sample`;
+    const memo = stageState.memo.get(memoKey2);
+    if (memo) {
+      return memo;
+    }
+    const baseName = sanitize5(block.name || `triPlanar${block.id}`);
+    const texX = bindingName(block, "source", ctx, baseName);
+    const texY = bindingName(block, "sourceY", ctx, texX);
+    const texZ = bindingName(block, "sourceZ", ctx, texX);
+    ensureBinding(state, texX);
+    ensureBinding(state, texY);
+    ensureBinding(state, texZ);
+    const position = ctx.cast(ctx.resolve(block, "position", stage, state), "vec3f");
+    const normal = ctx.cast(ctx.resolve(block, "normal", stage, state), "vec3f");
+    const sharpnessInput = block.inputs.get("sharpness")?.source ? ctx.cast(ctx.resolve(block, "sharpness", stage, state), "f32").expr : "1.0";
+    const transform = textureTransform(block);
+    const temp = ctx.temp(state, "tri");
+    const n = `_n${temp}`;
+    const uvx = `_uvx${temp}`;
+    const uvy = `_uvy${temp}`;
+    const uvz = `_uvz${temp}`;
+    const x = `_x${temp}`;
+    const y = `_y${temp}`;
+    const z = `_z${temp}`;
+    const w = `_w${temp}`;
+    const sample = `_sample${temp}`;
+    stageState.body.push(`let ${n} = ${normal.expr};`);
+    stageState.body.push(`var ${uvx} = (${position.expr}).yz;`);
+    stageState.body.push(`var ${uvy} = (${position.expr}).zx;`);
+    stageState.body.push(`var ${uvz} = (${position.expr}).xy;`);
+    if (block.serialized["projectAsCube"] === true) {
+      stageState.body.push(`${uvx} = (${uvx}).yx;`);
+      stageState.body.push(`if (${n}.x >= 0.0) { ${uvx}.x = -${uvx}.x; }`);
+      stageState.body.push(`if (${n}.y < 0.0) { ${uvy}.y = -${uvy}.y; }`);
+      stageState.body.push(`if (${n}.z < 0.0) { ${uvz}.x = -${uvz}.x; }`);
+    }
+    stageState.body.push(`let _cU${temp} = cos(${formatFloat3(transform.uAng)});`);
+    stageState.body.push(`let _sU${temp} = sin(${formatFloat3(transform.uAng)});`);
+    stageState.body.push(`${uvx} = mat2x2<f32>(_cU${temp}, -_sU${temp}, _sU${temp}, _cU${temp}) * ${uvx};`);
+    stageState.body.push(`let _cV${temp} = cos(${formatFloat3(transform.vAng)});`);
+    stageState.body.push(`let _sV${temp} = sin(${formatFloat3(transform.vAng)});`);
+    stageState.body.push(`${uvy} = mat2x2<f32>(_cV${temp}, _sV${temp}, -_sV${temp}, _cV${temp}) * ${uvy};`);
+    stageState.body.push(`let _cW${temp} = cos(${formatFloat3(transform.wAng)});`);
+    stageState.body.push(`let _sW${temp} = sin(${formatFloat3(transform.wAng)});`);
+    stageState.body.push(`${uvz} = mat2x2<f32>(_cW${temp}, -_sW${temp}, _sW${temp}, _cW${temp}) * ${uvz};`);
+    stageState.body.push(`let _scale${temp} = vec2<f32>(${formatFloat3(transform.uScale)}, ${formatFloat3(transform.vScale)});`);
+    stageState.body.push(`let _offset${temp} = vec2<f32>(${formatFloat3(transform.uOffset)}, ${formatFloat3(transform.vOffset)});`);
+    stageState.body.push(`${uvx} = ${uvx} * _scale${temp} + _offset${temp};`);
+    stageState.body.push(`${uvy} = ${uvy} * _scale${temp} + _offset${temp};`);
+    stageState.body.push(`${uvz} = ${uvz} * _scale${temp} + _offset${temp};`);
+    stageState.body.push(`let ${x} = textureSample(nodeTex_${texX}, nodeSamp_${texX}, ${uvx});`);
+    stageState.body.push(`let ${y} = textureSample(nodeTex_${texY}, nodeSamp_${texY}, ${uvy});`);
+    stageState.body.push(`let ${z} = textureSample(nodeTex_${texZ}, nodeSamp_${texZ}, ${uvz});`);
+    stageState.body.push(`let ${w} = pow(abs(${n}), vec3<f32>(${sharpnessInput}));`);
+    stageState.body.push(
+      `let ${sample} = ((${x} * ${w}.x + ${y} * ${w}.y + ${z} * ${w}.z) / (${w}.x + ${w}.y + ${w}.z)) * ${formatFloat3(block.serialized["disableLevelMultiplication"] === true ? 1 : transform.level)};`
+    );
+    const result = { expr: sample, type: "vec4f" };
+    stageState.memo.set(memoKey2, result);
+    return result;
+  }
+  var OUTPUT2, emitter71;
+  var init_triplanar_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/triplanar-block.ts"() {
+      "use strict";
+      OUTPUT2 = {
+        rgba: { swizzle: "", type: "vec4f" },
+        rgb: { swizzle: ".xyz", type: "vec3f" },
+        r: { swizzle: ".x", type: "f32" },
+        g: { swizzle: ".y", type: "f32" },
+        b: { swizzle: ".z", type: "f32" },
+        a: { swizzle: ".w", type: "f32" }
+      };
+      emitter71 = {
+        className: "TriPlanarBlock",
+        emit(block, outputName, stage, state, ctx) {
+          if (outputName === "level") {
+            const transform = textureTransform(block);
+            return { expr: formatFloat3(transform.level), type: "f32" };
+          }
+          const sample = emitTriPlanarSample(block, stage, state, ctx);
+          const out = OUTPUT2[outputName] ?? OUTPUT2.rgba;
+          const serialized = block.serialized;
+          const converted = applyColorSpace2(sample.expr, outputName, serialized.convertToLinearSpace === true, serialized.convertToGammaSpace === true);
+          return { expr: converted === sample.expr ? `${sample.expr}${out.swizzle}` : converted, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/biplanar-block.ts
+  var biplanar_block_exports = {};
+  __export(biplanar_block_exports, {
+    emitter: () => emitter72
+  });
+  function sanitize6(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  function bindingName2(block, inputName, ctx, fallback2) {
+    const input = block.inputs.get(inputName);
+    if (input?.source) {
+      const producer = ctx.graph.blocks.get(input.source.blockId);
+      return sanitize6(producer?.name || fallback2);
+    }
+    return sanitize6(fallback2);
+  }
+  function ensureBinding2(state, name) {
+    if (!state.textures.find((t) => t.name === name)) {
+      state.textures.push({ name, kind: "texture2d", texture: null });
+    }
+  }
+  function applyColorSpace3(expr, outputName, convertToLinear, convertToGamma) {
+    if (!convertToLinear && !convertToGamma) {
+      return expr;
+    }
+    const power = convertToLinear ? "2.2" : "0.45454545";
+    if (outputName === "rgba") {
+      return `vec4<f32>(pow(max(${expr}.xyz, vec3<f32>(0.0)), vec3<f32>(${power})), ${expr}.w)`;
+    }
+    if (outputName === "rgb") {
+      return `pow(max(${expr}.xyz, vec3<f32>(0.0)), vec3<f32>(${power}))`;
+    }
+    if (outputName === "r" || outputName === "g" || outputName === "b") {
+      return `pow(max(${expr}${OUTPUT3[outputName].swizzle}, 0.0), ${power})`;
+    }
+    return expr;
+  }
+  function emitBiPlanarSample(block, stage, state, ctx) {
+    if (stage !== "fragment") {
+      throw new Error("BiPlanarBlock: texture projection is supported only in the fragment stage");
+    }
+    const stageState = state.fragment;
+    const memoKey2 = `_biplanar_${block.id}_sample`;
+    const memo = stageState.memo.get(memoKey2);
+    if (memo) {
+      return memo;
+    }
+    const baseName = sanitize6(block.name || `biPlanar${block.id}`);
+    const texX = bindingName2(block, "source", ctx, baseName);
+    const texY = bindingName2(block, "sourceY", ctx, texX);
+    ensureBinding2(state, texX);
+    ensureBinding2(state, texY);
+    const position = ctx.cast(ctx.resolve(block, "position", stage, state), "vec3f");
+    const normal = ctx.cast(ctx.resolve(block, "normal", stage, state), "vec3f");
+    const sharpness = block.inputs.get("sharpness")?.source ? ctx.cast(ctx.resolve(block, "sharpness", stage, state), "f32").expr : "1.0";
+    const temp = ctx.temp(state, "bi");
+    const p = `_p${temp}`;
+    const dx = `_dx${temp}`;
+    const dy = `_dy${temp}`;
+    const n = `_n${temp}`;
+    const ma = `_ma${temp}`;
+    const mi = `_mi${temp}`;
+    const me = `_me${temp}`;
+    const x = `_x${temp}`;
+    const y = `_y${temp}`;
+    const w = `_w${temp}`;
+    const sample = `_sample${temp}`;
+    stageState.body.push(`let ${p} = ${position.expr};`);
+    stageState.body.push(`let ${dx} = dpdx(${p});`);
+    stageState.body.push(`let ${dy} = dpdy(${p});`);
+    stageState.body.push(`let ${n} = abs(${normal.expr});`);
+    stageState.body.push(`var ${ma}: vec3<i32>;`);
+    stageState.body.push(
+      `if (${n}.x > ${n}.y && ${n}.x > ${n}.z) { ${ma} = vec3<i32>(0, 1, 2); } else if (${n}.y > ${n}.z) { ${ma} = vec3<i32>(1, 2, 0); } else { ${ma} = vec3<i32>(2, 0, 1); }`
+    );
+    stageState.body.push(`var ${mi}: vec3<i32>;`);
+    stageState.body.push(
+      `if (${n}.x < ${n}.y && ${n}.x < ${n}.z) { ${mi} = vec3<i32>(0, 1, 2); } else if (${n}.y < ${n}.z) { ${mi} = vec3<i32>(1, 2, 0); } else { ${mi} = vec3<i32>(2, 0, 1); }`
+    );
+    stageState.body.push(`let ${me} = vec3<i32>(3, 3, 3) - ${mi} - ${ma};`);
+    stageState.body.push(
+      `let ${x} = textureSampleGrad(nodeTex_${texX}, nodeSamp_${texX}, vec2<f32>(${p}[${ma}.y], ${p}[${ma}.z]), vec2<f32>(${dx}[${ma}.y], ${dx}[${ma}.z]), vec2<f32>(${dy}[${ma}.y], ${dy}[${ma}.z]));`
+    );
+    stageState.body.push(
+      `let ${y} = textureSampleGrad(nodeTex_${texY}, nodeSamp_${texY}, vec2<f32>(${p}[${me}.y], ${p}[${me}.z]), vec2<f32>(${dx}[${me}.y], ${dx}[${me}.z]), vec2<f32>(${dy}[${me}.y], ${dy}[${me}.z]));`
+    );
+    stageState.body.push(`var ${w} = vec2<f32>(${n}[${ma}.x], ${n}[${me}.x]);`);
+    stageState.body.push(`${w} = clamp((${w} - vec2<f32>(0.5773)) / vec2<f32>(1.0 - 0.5773), vec2<f32>(0.0), vec2<f32>(1.0));`);
+    stageState.body.push(`${w} = pow(${w}, vec2<f32>(${sharpness} / 8.0));`);
+    stageState.body.push(`let ${sample} = (${x} * ${w}.x + ${y} * ${w}.y) / (${w}.x + ${w}.y);`);
+    const result = { expr: sample, type: "vec4f" };
+    stageState.memo.set(memoKey2, result);
+    return result;
+  }
+  var OUTPUT3, emitter72;
+  var init_biplanar_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/biplanar-block.ts"() {
+      "use strict";
+      OUTPUT3 = {
+        rgba: { swizzle: "", type: "vec4f" },
+        rgb: { swizzle: ".xyz", type: "vec3f" },
+        r: { swizzle: ".x", type: "f32" },
+        g: { swizzle: ".y", type: "f32" },
+        b: { swizzle: ".z", type: "f32" },
+        a: { swizzle: ".w", type: "f32" }
+      };
+      emitter72 = {
+        className: "BiPlanarBlock",
+        emit(block, outputName, stage, state, ctx) {
+          if (outputName === "level") {
+            return { expr: "1.0", type: "f32" };
+          }
+          const sample = emitBiPlanarSample(block, stage, state, ctx);
+          const out = OUTPUT3[outputName] ?? OUTPUT3.rgba;
+          const serialized = block.serialized;
+          const converted = applyColorSpace3(sample.expr, outputName, serialized.convertToLinearSpace === true, serialized.convertToGammaSpace === true);
+          return { expr: converted === sample.expr ? `${sample.expr}${out.swizzle}` : converted, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/cloud-block.ts
+  var cloud_block_exports = {};
+  __export(cloud_block_exports, {
+    emitter: () => emitter73
+  });
+  function optional(block, inputName, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    return input?.source ? ctx.resolve(block, inputName, stage, state) : null;
+  }
+  function scalarOffset(block, inputName, stage, state, ctx) {
+    const value = optional(block, inputName, stage, state, ctx);
+    return value ? ctx.cast(value, "f32").expr : null;
+  }
+  var emitter73;
+  var init_cloud_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/cloud-block.ts"() {
+      "use strict";
+      emitter73 = {
+        className: "CloudBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const seed = ctx.resolve(block, "seed", stage, state);
+          if (seed.type !== "vec2f" && seed.type !== "vec3f") {
+            throw new Error(`NodeMaterial: CloudBlock requires vec2 or vec3 seed; got ${seed.type}`);
+          }
+          state[stage].helpers.set(
+            "nme_cloudNoise",
+            `fn nme_cloudRandom(p: f32) -> f32 {
+var temp = fract(p * 0.011);
+temp *= temp + 7.5;
+temp *= temp + temp;
+return fract(temp);
+}
+fn nme_cloudNoise2(x: vec2<f32>, chaos: vec2<f32>) -> f32 {
+let stepv = chaos * vec2<f32>(75.0, 120.0) + vec2<f32>(75.0, 120.0);
+let i = floor(x);
+let f = fract(x);
+let n = dot(i, stepv);
+let u = f * f * (vec2<f32>(3.0) - 2.0 * f);
+return mix(mix(nme_cloudRandom(n + dot(stepv, vec2<f32>(0.0, 0.0))), nme_cloudRandom(n + dot(stepv, vec2<f32>(1.0, 0.0))), u.x), mix(nme_cloudRandom(n + dot(stepv, vec2<f32>(0.0, 1.0))), nme_cloudRandom(n + dot(stepv, vec2<f32>(1.0, 1.0))), u.x), u.y);
+}
+fn nme_cloudNoise3(x: vec3<f32>, chaos: vec3<f32>) -> f32 {
+let stepv = chaos * vec3<f32>(60.0, 120.0, 75.0) + vec3<f32>(60.0, 120.0, 75.0);
+let i = floor(x);
+let f = fract(x);
+let n = dot(i, stepv);
+let u = f * f * (vec3<f32>(3.0) - 2.0 * f);
+return mix(mix(mix(nme_cloudRandom(n + dot(stepv, vec3<f32>(0.0, 0.0, 0.0))), nme_cloudRandom(n + dot(stepv, vec3<f32>(1.0, 0.0, 0.0))), u.x), mix(nme_cloudRandom(n + dot(stepv, vec3<f32>(0.0, 1.0, 0.0))), nme_cloudRandom(n + dot(stepv, vec3<f32>(1.0, 1.0, 0.0))), u.x), u.y), mix(mix(nme_cloudRandom(n + dot(stepv, vec3<f32>(0.0, 0.0, 1.0))), nme_cloudRandom(n + dot(stepv, vec3<f32>(1.0, 0.0, 1.0))), u.x), mix(nme_cloudRandom(n + dot(stepv, vec3<f32>(0.0, 1.0, 1.0))), nme_cloudRandom(n + dot(stepv, vec3<f32>(1.0, 1.0, 1.0))), u.x), u.y), u.z);
+}`
+          );
+          const octaves = Math.max(0, Math.trunc(typeof block.serialized.octaves === "number" ? block.serialized.octaves : 6));
+          const helperKey = `nme_cloudFbm_${octaves}`;
+          state[stage].helpers.set(
+            helperKey,
+            `fn nme_cloudFbm2_${octaves}(st: vec2<f32>, chaos: vec2<f32>) -> f32 {
+var value = 0.0;
+var amplitude = 0.5;
+var tempST = st;
+for (var i = 0; i < ${octaves}; i = i + 1) {
+value += amplitude * nme_cloudNoise2(tempST, chaos);
+tempST *= 2.0;
+amplitude *= 0.5;
+}
+return value;
+}
+fn nme_cloudFbm3_${octaves}(x: vec3<f32>, chaos: vec3<f32>) -> f32 {
+var value = 0.0;
+var amplitude = 0.5;
+var tempX = x;
+for (var i = 0; i < ${octaves}; i = i + 1) {
+value += amplitude * nme_cloudNoise3(tempX, chaos);
+tempX *= 2.0;
+amplitude *= 0.5;
+}
+return value;
+}`
+          );
+          const st = ctx.temp(state, "cloudSeed");
+          state[stage].body.push(`var ${st}: ${seed.type === "vec2f" ? "vec2<f32>" : "vec3<f32>"} = ${seed.expr};`);
+          const offsetX = scalarOffset(block, "offsetX", stage, state, ctx);
+          const offsetY = scalarOffset(block, "offsetY", stage, state, ctx);
+          const offsetZ = scalarOffset(block, "offsetZ", stage, state, ctx);
+          if (offsetX) {
+            state[stage].body.push(`${st}.x += 0.1 * ${offsetX};`);
+          }
+          if (offsetY) {
+            state[stage].body.push(`${st}.y += 0.1 * ${offsetY};`);
+          }
+          if (offsetZ && seed.type === "vec3f") {
+            state[stage].body.push(`${st}.z += 0.1 * ${offsetZ};`);
+          }
+          const chaos = optional(block, "chaos", stage, state, ctx);
+          const chaosExpr = chaos ? ctx.cast(chaos, seed.type).expr : seed.type === "vec2f" ? "vec2<f32>(0.0, 0.0)" : "vec3<f32>(0.0, 0.0, 0.0)";
+          return { expr: seed.type === "vec2f" ? `nme_cloudFbm2_${octaves}(${st}, ${chaosExpr})` : `nme_cloudFbm3_${octaves}(${st}, ${chaosExpr})`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/simplex-perlin-3d-block.ts
+  var simplex_perlin_3d_block_exports = {};
+  __export(simplex_perlin_3d_block_exports, {
+    emitter: () => emitter74
+  });
+  var emitter74;
+  var init_simplex_perlin_3d_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/simplex-perlin-3d-block.ts"() {
+      "use strict";
+      emitter74 = {
+        className: "SimplexPerlin3DBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const seed = ctx.cast(ctx.resolve(block, "seed", stage, state), "vec3f");
+          state[stage].helpers.set(
+            "nme_simplexPerlin3D",
+            `fn nme_simplexPerlin3D(source: vec3<f32>) -> f32 {
+let SKEWFACTOR = 1.0 / 3.0;
+let UNSKEWFACTOR = 1.0 / 6.0;
+let SIMPLEX_CORNER_POS = 0.5;
+let SIMPLEX_TETRAHEDRON_HEIGHT = 0.7071067811865476;
+var P = source;
+if (P.x == 0.0 && P.y == 0.0 && P.z == 0.0) {
+P.x = 0.00001;
+}
+P *= SIMPLEX_TETRAHEDRON_HEIGHT;
+var Pi = floor(P + dot(P, vec3<f32>(SKEWFACTOR)));
+let x0 = P - Pi + dot(Pi, vec3<f32>(UNSKEWFACTOR));
+let g = step(x0.yzx, x0.xyz);
+let l = vec3<f32>(1.0) - g;
+var Pi_1 = min(g.xyz, l.zxy);
+var Pi_2 = max(g.xyz, l.zxy);
+let x1 = x0 - Pi_1 + vec3<f32>(UNSKEWFACTOR);
+let x2 = x0 - Pi_2 + vec3<f32>(SKEWFACTOR);
+let x3 = x0 - vec3<f32>(SIMPLEX_CORNER_POS);
+let v1234_x = vec4<f32>(x0.x, x1.x, x2.x, x3.x);
+let v1234_y = vec4<f32>(x0.y, x1.y, x2.y, x3.y);
+let v1234_z = vec4<f32>(x0.z, x1.z, x2.z, x3.z);
+Pi = Pi - floor(Pi * (1.0 / 69.0)) * 69.0;
+let Pi_inc1 = step(Pi, vec3<f32>(69.0 - 1.5)) * (Pi + vec3<f32>(1.0));
+var Pt = vec4<f32>(Pi.x, Pi.y, Pi_inc1.x, Pi_inc1.y) + vec4<f32>(50.0, 161.0, 50.0, 161.0);
+Pt *= Pt;
+let V1xy_V2xy = mix(vec4<f32>(Pt.x, Pt.y, Pt.x, Pt.y), vec4<f32>(Pt.z, Pt.w, Pt.z, Pt.w), vec4<f32>(Pi_1.x, Pi_1.y, Pi_2.x, Pi_2.y));
+Pt = vec4<f32>(Pt.x, V1xy_V2xy.x, V1xy_V2xy.z, Pt.z) * vec4<f32>(Pt.y, V1xy_V2xy.y, V1xy_V2xy.w, Pt.w);
+let SOMELARGEFLOATS = vec3<f32>(635.298681, 682.357502, 668.926525);
+let ZINC = vec3<f32>(48.500388, 65.294118, 63.934599);
+let lowz_mods = vec3<f32>(1.0) / (SOMELARGEFLOATS + Pi.zzz * ZINC);
+let highz_mods = vec3<f32>(1.0) / (SOMELARGEFLOATS + Pi_inc1.zzz * ZINC);
+Pi_1 = select(highz_mods, lowz_mods, Pi_1.z < 0.5);
+Pi_2 = select(highz_mods, lowz_mods, Pi_2.z < 0.5);
+let hash_0 = fract(Pt * vec4<f32>(lowz_mods.x, Pi_1.x, Pi_2.x, highz_mods.x)) - vec4<f32>(0.49999);
+let hash_1 = fract(Pt * vec4<f32>(lowz_mods.y, Pi_1.y, Pi_2.y, highz_mods.y)) - vec4<f32>(0.49999);
+let hash_2 = fract(Pt * vec4<f32>(lowz_mods.z, Pi_1.z, Pi_2.z, highz_mods.z)) - vec4<f32>(0.49999);
+let grad_results = inverseSqrt(hash_0 * hash_0 + hash_1 * hash_1 + hash_2 * hash_2) * (hash_0 * v1234_x + hash_1 * v1234_y + hash_2 * v1234_z);
+let FINAL_NORMALIZATION = 37.837227241611314;
+var kernel_weights = v1234_x * v1234_x + v1234_y * v1234_y + v1234_z * v1234_z;
+kernel_weights = max(vec4<f32>(0.5) - kernel_weights, vec4<f32>(0.0));
+kernel_weights = kernel_weights * kernel_weights * kernel_weights;
+return dot(kernel_weights, grad_results) * FINAL_NORMALIZATION;
+}`
+          );
+          return { expr: `nme_simplexPerlin3D(${seed.expr})`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/voronoi-noise-block.ts
+  var voronoi_noise_block_exports = {};
+  __export(voronoi_noise_block_exports, {
+    emitter: () => emitter75
+  });
+  var emitter75;
+  var init_voronoi_noise_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/voronoi-noise-block.ts"() {
+      "use strict";
+      emitter75 = {
+        className: "VoronoiNoiseBlock",
+        emit(block, outputName, stage, state, ctx) {
+          const seed = ctx.cast(ctx.resolve(block, "seed", stage, state), "vec2f");
+          const offset = ctx.cast(ctx.resolve(block, "offset", stage, state), "f32");
+          const density = ctx.cast(ctx.resolve(block, "density", stage, state), "f32");
+          state[stage].helpers.set(
+            "nme_voronoi",
+            `fn nme_voronoiRandom(pIn: vec2<f32>) -> vec2<f32> {
+let p = vec2<f32>(dot(pIn, vec2<f32>(127.1, 311.7)), dot(pIn, vec2<f32>(269.5, 183.3)));
+return fract(sin(p) * 18.5453);
+}
+fn nme_voronoi(seed: vec2<f32>, offset: f32, density: f32) -> vec2<f32> {
+let n = floor(seed * density);
+let f = fract(seed * density);
+var outValue = 0.0;
+var cells = 0.0;
+var m = vec3<f32>(8.0);
+for (var j = -1; j <= 1; j = j + 1) {
+for (var i = -1; i <= 1; i = i + 1) {
+let g = vec2<f32>(f32(i), f32(j));
+let o = nme_voronoiRandom(n + g);
+let r = g - f + (vec2<f32>(0.5) + 0.5 * sin(vec2<f32>(offset) + 6.2831 * o));
+let d = dot(r, r);
+if (d < m.x) {
+m = vec3<f32>(d, o);
+outValue = m.x;
+cells = m.y;
+}
+}
+}
+return vec2<f32>(outValue, cells);
+}`
+          );
+          const temp = ctx.temp(state, "voronoi");
+          state[stage].body.push(`let ${temp} = nme_voronoi(${seed.expr}, ${offset.expr}, ${density.expr});`);
+          return { expr: outputName === "cells" ? `${temp}.y` : `${temp}.x`, type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/worley-noise-3d-block.ts
+  var worley_noise_3d_block_exports = {};
+  __export(worley_noise_3d_block_exports, {
+    emitter: () => emitter76
+  });
+  var emitter76;
+  var init_worley_noise_3d_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/worley-noise-3d-block.ts"() {
+      "use strict";
+      emitter76 = {
+        className: "WorleyNoise3DBlock",
+        emit(block, outputName, stage, state, ctx) {
+          const seed = ctx.cast(ctx.resolve(block, "seed", stage, state), "vec3f");
+          const jitter = ctx.cast(ctx.resolve(block, "jitter", stage, state), "f32");
+          const manhattan = block.serialized.manhattanDistance === true ? "true" : "false";
+          state[stage].helpers.set(
+            "nme_worley3D",
+            `fn nme_worleyPermuteScalar(x: f32) -> f32 {
+return ((34.0 * x + 1.0) * x) - floor(((34.0 * x + 1.0) * x) / 289.0) * 289.0;
+}
+fn nme_worleyDistance(x: f32, y: f32, z: f32, manhattanDistance: bool) -> f32 {
+return select(x * x + y * y + z * z, abs(x) + abs(y) + abs(z), manhattanDistance);
+}
+fn nme_worley(P: vec3<f32>, jitter: f32, manhattanDistance: bool) -> vec2<f32> {
+let K = 0.142857142857;
+let Ko = 0.428571428571;
+let K2 = 0.020408163265306;
+let Kz = 0.166666666667;
+let Kzo = 0.416666666667;
+let Pi = floor(P) - floor(floor(P) / 289.0) * 289.0;
+let Pf = fract(P) - vec3<f32>(0.5);
+var d1 = 100000.0;
+var d2 = 100000.0;
+for (var zi = -1; zi <= 1; zi = zi + 1) {
+for (var yi = -1; yi <= 1; yi = yi + 1) {
+for (var xi = -1; xi <= 1; xi = xi + 1) {
+let p0 = nme_worleyPermuteScalar(Pi.x + f32(xi));
+let p1 = nme_worleyPermuteScalar(p0 + Pi.y + f32(yi));
+let p2 = nme_worleyPermuteScalar(p1 + Pi.z + f32(zi));
+let ox = fract(p2 * K) - Ko;
+let oy = (floor(p2 * K) - floor(floor(p2 * K) / 7.0) * 7.0) * K - Ko;
+let oz = floor(p2 * K2) * Kz - Kzo;
+let dx = Pf.x - f32(xi) + jitter * ox;
+let dy = Pf.y - f32(yi) + jitter * oy;
+let dz = Pf.z - f32(zi) + jitter * oz;
+let d = nme_worleyDistance(dx, dy, dz, manhattanDistance);
+if (d < d1) {
+d2 = d1;
+d1 = d;
+} else if (d < d2) {
+d2 = d;
+}
+}
+}
+}
+return sqrt(vec2<f32>(d1, d2));
+}`
+          );
+          const temp = ctx.temp(state, "worley");
+          state[stage].body.push(`let ${temp} = nme_worley(${seed.expr}, ${jitter.expr}, ${manhattan});`);
+          return { expr: outputName === "y" ? `${temp}.y` : outputName === "output" ? temp : `${temp}.x`, type: outputName === "output" ? "vec2f" : "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-procedural.ts
+  var node_registry_extra_procedural_exports = {};
+  __export(node_registry_extra_procedural_exports, {
+    loadExtraEmitter: () => loadExtraEmitter2
+  });
+  function blockLoader2(key) {
+    switch (key) {
+      case "ColorMergerBlock":
+        return () => Promise.resolve().then(() => (init_color_merger(), color_merger_exports));
+      case "ColorConverterBlock":
+        return () => Promise.resolve().then(() => (init_color_converter_block(), color_converter_block_exports));
+      case "DesaturateBlock":
+        return () => Promise.resolve().then(() => (init_desaturate_block(), desaturate_block_exports));
+      case "GradientBlock":
+        return () => Promise.resolve().then(() => (init_gradient_block(), gradient_block_exports));
+      case "PosterizeBlock":
+        return () => Promise.resolve().then(() => (init_posterize_block(), posterize_block_exports));
+      case "ReplaceColorBlock":
+        return () => Promise.resolve().then(() => (init_replace_color_block(), replace_color_block_exports));
+      case "PannerBlock":
+        return () => Promise.resolve().then(() => (init_panner_block(), panner_block_exports));
+      case "Rotate2dBlock":
+        return () => Promise.resolve().then(() => (init_rotate2d_block(), rotate2d_block_exports));
+      case "TriPlanarBlock":
+        return () => Promise.resolve().then(() => (init_triplanar_block(), triplanar_block_exports));
+      case "BiPlanarBlock":
+        return () => Promise.resolve().then(() => (init_biplanar_block(), biplanar_block_exports));
+      case "CloudBlock":
+        return () => Promise.resolve().then(() => (init_cloud_block(), cloud_block_exports));
+      case "SimplexPerlin3DBlock":
+        return () => Promise.resolve().then(() => (init_simplex_perlin_3d_block(), simplex_perlin_3d_block_exports));
+      case "VoronoiNoiseBlock":
+        return () => Promise.resolve().then(() => (init_voronoi_noise_block(), voronoi_noise_block_exports));
+      case "WorleyNoise3DBlock":
+        return () => Promise.resolve().then(() => (init_worley_noise_3d_block(), worley_noise_3d_block_exports));
+      default:
+        return null;
+    }
+  }
+  async function loadExtraEmitter2(key) {
+    const loader = blockLoader2(key);
+    if (!loader) {
+      throw new Error(`NodeMaterial: no procedural extension emitter registered for block "${key}"`);
+    }
+    return (await loader()).emitter;
+  }
+  var init_node_registry_extra_procedural = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-procedural.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/matrix-blocks.ts
+  var matrix_blocks_exports = {};
+  __export(matrix_blocks_exports, {
+    emitter: () => emitter77
+  });
+  function optionalVec4(block, inputName, fallback2, stage, state, ctx) {
+    const input = block.inputs.get(inputName);
+    if (!input?.source) {
+      return fallback2;
+    }
+    return ctx.cast(ctx.resolve(block, inputName, stage, state), "vec4f").expr;
+  }
+  function emitMatrixBuilder(block, stage, state, ctx) {
+    const row0 = optionalVec4(block, "row0", "vec4<f32>(1.0, 0.0, 0.0, 0.0)", stage, state, ctx);
+    const row1 = optionalVec4(block, "row1", "vec4<f32>(0.0, 1.0, 0.0, 0.0)", stage, state, ctx);
+    const row2 = optionalVec4(block, "row2", "vec4<f32>(0.0, 0.0, 1.0, 0.0)", stage, state, ctx);
+    const row3 = optionalVec4(block, "row3", "vec4<f32>(0.0, 0.0, 0.0, 1.0)", stage, state, ctx);
+    return { expr: `mat4x4<f32>(${row0}, ${row1}, ${row2}, ${row3})`, type: "mat4f" };
+  }
+  var SPLIT_OUTPUT, emitter77;
+  var init_matrix_blocks = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/matrix-blocks.ts"() {
+      "use strict";
+      SPLIT_OUTPUT = {
+        row0: { expr: (input) => `(${input})[0]`, type: "vec4f" },
+        row1: { expr: (input) => `(${input})[1]`, type: "vec4f" },
+        row2: { expr: (input) => `(${input})[2]`, type: "vec4f" },
+        row3: { expr: (input) => `(${input})[3]`, type: "vec4f" },
+        col0: { expr: (input) => `vec4<f32>((${input})[0][0], (${input})[1][0], (${input})[2][0], (${input})[3][0])`, type: "vec4f" },
+        col1: { expr: (input) => `vec4<f32>((${input})[0][1], (${input})[1][1], (${input})[2][1], (${input})[3][1])`, type: "vec4f" },
+        col2: { expr: (input) => `vec4<f32>((${input})[0][2], (${input})[1][2], (${input})[2][2], (${input})[3][2])`, type: "vec4f" },
+        col3: { expr: (input) => `vec4<f32>((${input})[0][3], (${input})[1][3], (${input})[2][3], (${input})[3][3])`, type: "vec4f" }
+      };
+      emitter77 = {
+        className: "MatrixBlocks",
+        emit(block, outputName, stage, state, ctx) {
+          if (block.className === "MatrixBuilder") {
+            return emitMatrixBuilder(block, stage, state, ctx);
+          }
+          const input = ctx.cast(ctx.resolve(block, "input", stage, state), "mat4f");
+          if (block.className === "MatrixTransposeBlock") {
+            return { expr: `transpose(${input.expr})`, type: "mat4f" };
+          }
+          if (block.className === "MatrixDeterminantBlock") {
+            return { expr: `determinant(${input.expr})`, type: "f32" };
+          }
+          if (block.className === "MatrixSplitterBlock") {
+            const output = SPLIT_OUTPUT[outputName];
+            if (!output) {
+              throw new Error(`NodeMaterial: MatrixSplitterBlock has no output "${outputName}"`);
+            }
+            return { expr: output.expr(input.expr), type: output.type };
+          }
+          throw new Error(`NodeMaterial: unsupported matrix block "${block.className}"`);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/derivative-block.ts
+  var derivative_block_exports = {};
+  __export(derivative_block_exports, {
+    emitter: () => emitter78
+  });
+  var OUTPUT_FN, emitter78;
+  var init_derivative_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/derivative-block.ts"() {
+      "use strict";
+      OUTPUT_FN = {
+        dx: "dpdx",
+        dy: "dpdy"
+      };
+      emitter78 = {
+        className: "DerivativeBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          const fn = OUTPUT_FN[outputName];
+          if (!fn) {
+            throw new Error(`NodeMaterial: DerivativeBlock output "${outputName}" is not supported`);
+          }
+          const input = ctx.resolve(block, "input", stage, state);
+          return { expr: `${fn}(${input.expr})`, type: input.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/height-to-normal-block.ts
+  var height_to_normal_block_exports = {};
+  __export(height_to_normal_block_exports, {
+    emitter: () => emitter79
+  });
+  function boolLiteral(value, fallback2) {
+    return (typeof value === "boolean" ? value : fallback2) ? "true" : "false";
+  }
+  function emitHeightNormal(block, stage, state, ctx) {
+    const stageState = stage === "vertex" ? state.vertex : state.fragment;
+    const memoKey2 = `_heightToNormal_${block.id}`;
+    const existing = stageState.memo.get(memoKey2);
+    if (existing) {
+      return existing;
+    }
+    state.fragment.helpers.set(HELPER_KEY3, HELPER_WGSL4);
+    const height = ctx.cast(ctx.resolve(block, "input", stage, state), "f32").expr;
+    const pos = ctx.cast(ctx.resolve(block, "worldPosition", stage, state), "vec3f").expr;
+    const normal = ctx.cast(ctx.resolve(block, "worldNormal", stage, state), "vec3f").expr;
+    const tangentInput = block.inputs.get("worldTangent");
+    const generateInWorldSpace = block.serialized.generateInWorldSpace === true;
+    if (!generateInWorldSpace && !tangentInput?.source) {
+      throw new Error(`NodeMaterial: HeightToNormalBlock "${block.name}" requires worldTangent when generateInWorldSpace is false`);
+    }
+    const tangent = tangentInput?.source ? ctx.cast(ctx.resolve(block, "worldTangent", stage, state), "vec3f").expr : "vec3<f32>(0.0)";
+    const out = `_hn${ctx.temp(state, "heightNormal")}`;
+    stageState.body.push(
+      `let ${out} = nme_heightToNormal(${height}, ${pos}, ${tangent}, ${normal}, ${boolLiteral(block.serialized.generateInWorldSpace, false)}, ${boolLiteral(block.serialized.automaticNormalizationNormal, true)}, ${boolLiteral(block.serialized.automaticNormalizationTangent, true)});`
+    );
+    const result = { expr: out, type: "vec4f" };
+    stageState.memo.set(memoKey2, result);
+    return result;
+  }
+  var HELPER_KEY3, HELPER_WGSL4, emitter79;
+  var init_height_to_normal_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/height-to-normal-block.ts"() {
+      "use strict";
+      HELPER_KEY3 = "nme_heightToNormal";
+      HELPER_WGSL4 = `
+fn nme_heightToNormal(height: f32, position: vec3<f32>, tangent: vec3<f32>, normal: vec3<f32>, generateInWorldSpace: bool, normalizeNormal: bool, normalizeTangent: bool) -> vec4<f32> {
+    let norm = select(normal, normalize(normal), normalizeNormal);
+    let tgt = select(tangent, normalize(tangent), normalizeTangent);
+    let worlddX = dpdx(position);
+    let worlddY = dpdy(position);
+    let crossX = cross(norm, worlddX);
+    let crossY = cross(worlddY, norm);
+    let d = abs(dot(crossY, worlddX));
+    var inToNormal = (((height + dpdx(height)) - height) * crossY + ((height + dpdy(height)) - height) * crossX) * sign(d);
+    inToNormal.y = -inToNormal.y;
+    var result = normalize(d * norm - inToNormal);
+    if (!generateInWorldSpace) {
+        let biTangent = cross(norm, tgt);
+        let tbn = mat3x3<f32>(tgt, biTangent, norm);
+        result = tbn * result;
+        result = result * vec3<f32>(0.5) + vec3<f32>(0.5);
+    }
+    return vec4<f32>(result, 0.0);
+}
+`;
+      emitter79 = {
+        className: "HeightToNormalBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          const value = emitHeightNormal(block, stage, state, ctx);
+          if (outputName === "xyz") {
+            return { expr: `${value.expr}.xyz`, type: "vec3f" };
+          }
+          return value;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/tbn-block.ts
+  var tbn_block_exports = {};
+  __export(tbn_block_exports, {
+    emitter: () => emitter80
+  });
+  function emitTbnRows(block, stage, state, ctx) {
+    const stageState = stage === "vertex" ? state.vertex : state.fragment;
+    const memoKey2 = `_tbn_${block.id}`;
+    const existing = stageState.memo.get(memoKey2);
+    if (existing) {
+      return existing;
+    }
+    const normal = ctx.cast(ctx.resolve(block, "normal", stage, state), "vec3f").expr;
+    const tangent = ctx.cast(ctx.resolve(block, "tangent", stage, state), "vec4f").expr;
+    const world = ctx.cast(ctx.resolve(block, "world", stage, state), "mat4f").expr;
+    const prefix = `_tbn${ctx.temp(state, "tbn")}`;
+    stageState.body.push(`let ${prefix}_normal = normalize(${normal});`);
+    stageState.body.push(`let ${prefix}_tangent = normalize((${tangent}).xyz);`);
+    stageState.body.push(`let ${prefix}_bitangent = cross(${prefix}_normal, ${prefix}_tangent) * (${tangent}).w;`);
+    stageState.body.push(
+      `let ${prefix}_mat = mat3x3<f32>((${world})[0].xyz, (${world})[1].xyz, (${world})[2].xyz) * mat3x3<f32>(${prefix}_tangent, ${prefix}_bitangent, ${prefix}_normal);`
+    );
+    stageState.body.push(`let ${prefix}_rows = vec4<f32>(${prefix}_mat[0][0], ${prefix}_mat[1][1], ${prefix}_mat[2][2], 0.0);`);
+    const result = { expr: `${prefix}_rows`, type: "vec4f" };
+    stageState.memo.set(memoKey2, result);
+    return result;
+  }
+  var emitter80;
+  var init_tbn_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/tbn-block.ts"() {
+      "use strict";
+      emitter80 = {
+        className: "TBNBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          if (outputName === "TBN") {
+            throw new Error("NodeMaterial: TBNBlock object output is not supported; use row0/row1/row2 outputs");
+          }
+          const rows = emitTbnRows(block, stage, state, ctx).expr;
+          if (outputName === "row1") {
+            return { expr: `vec3<f32>(0.0, (${rows}).y, 0.0)`, type: "vec3f" };
+          }
+          if (outputName === "row2") {
+            return { expr: `vec3<f32>(0.0, 0.0, (${rows}).z)`, type: "vec3f" };
+          }
+          return { expr: `vec3<f32>((${rows}).x, 0.0, 0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/normal-blend-block.ts
+  var normal_blend_block_exports = {};
+  __export(normal_blend_block_exports, {
+    emitter: () => emitter81
+  });
+  function emitBlend(block, stage, state, ctx) {
+    const stageState = stage === "vertex" ? state.vertex : state.fragment;
+    const memoKey2 = `_normalBlend_${block.id}`;
+    const existing = stageState.memo.get(memoKey2);
+    if (existing) {
+      return existing;
+    }
+    const n0 = ctx.cast(ctx.resolve(block, "normalMap0", stage, state), "vec3f").expr;
+    const n1 = ctx.cast(ctx.resolve(block, "normalMap1", stage, state), "vec3f").expr;
+    const out = `_nb${ctx.temp(state, "normalBlend")}`;
+    stageState.body.push(`let ${out}_stepR = step(0.5, (${n0}).r);`);
+    stageState.body.push(`let ${out}_stepG = step(0.5, (${n0}).g);`);
+    stageState.body.push(
+      `let ${out} = vec3<f32>((1.0 - ${out}_stepR) * (${n0}).r * (${n1}).r * 2.0 + ${out}_stepR * (1.0 - (1.0 - (${n0}).r) * (1.0 - (${n1}).r) * 2.0), (1.0 - ${out}_stepG) * (${n0}).g * (${n1}).g * 2.0 + ${out}_stepG * (1.0 - (1.0 - (${n0}).g) * (1.0 - (${n1}).g) * 2.0), (${n0}).b * (${n1}).b);`
+    );
+    const result = { expr: out, type: "vec3f" };
+    stageState.memo.set(memoKey2, result);
+    return result;
+  }
+  var emitter81;
+  var init_normal_blend_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/normal-blend-block.ts"() {
+      "use strict";
+      emitter81 = {
+        className: "NormalBlendBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          return emitBlend(block, stage, state, ctx);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/ambient-occlusion-block.ts
+  var ambient_occlusion_block_exports = {};
+  __export(ambient_occlusion_block_exports, {
+    emitter: () => emitter82
+  });
+  function sanitize7(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  function num(value, fallback2) {
+    return typeof value === "number" ? `${value}` : `${fallback2}`;
+  }
+  var HELPER_KEY4, HELPER_WGSL5, emitter82;
+  var init_ambient_occlusion_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/ambient-occlusion-block.ts"() {
+      "use strict";
+      HELPER_KEY4 = "nme_ambientOcclusion";
+      HELPER_WGSL5 = `
+fn nme_aoNormalFromDepth(depthTex: texture_2d<f32>, depthSamp: sampler, depth: f32, coords: vec2<f32>, radius: f32) -> vec3<f32> {
+    let offset1 = vec2<f32>(0.0, radius);
+    let offset2 = vec2<f32>(radius, 0.0);
+    let depth1 = textureSampleLevel(depthTex, depthSamp, coords + offset1, 0.0).r;
+    let depth2 = textureSampleLevel(depthTex, depthSamp, coords + offset2, 0.0).r;
+    let p1 = vec3<f32>(offset1, depth1 - depth);
+    let p2 = vec3<f32>(offset2, depth2 - depth);
+    var normal = cross(p1, p2);
+    normal.z = -normal.z;
+    return normalize(normal);
+}
+
+fn nme_aoRandom(uv: vec2<f32>) -> vec3<f32> {
+    let x = fract(sin(dot(uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    let y = fract(sin(dot(uv, vec2<f32>(39.3468, 11.135))) * 24634.6345);
+    let z = fract(sin(dot(uv, vec2<f32>(73.156, 52.235))) * 12414.2347);
+    return normalize(vec3<f32>(x, y, z));
+}
+
+fn nme_computeAo(depthTex: texture_2d<f32>, depthSamp: sampler, fragCoord: vec4<f32>, screenSize: vec2<f32>, radius: f32, area: f32, fallOff: f32) -> f32 {
+    let uv = fragCoord.xy / screenSize;
+    let random = nme_aoRandom(uv * 4.0);
+    let depth = textureSampleLevel(depthTex, depthSamp, uv, 0.0).r;
+    let position = vec3<f32>(uv, depth);
+    let normal = nme_aoNormalFromDepth(depthTex, depthSamp, depth, uv, radius);
+    let radiusDepth = radius / depth;
+    let sampleSphere = array<vec3<f32>, 16>(
+        vec3<f32>(0.5381, 0.1856, -0.4319), vec3<f32>(0.1379, 0.2486, 0.4430), vec3<f32>(0.3371, 0.5679, -0.0057), vec3<f32>(-0.6999, -0.0451, -0.0019),
+        vec3<f32>(0.0689, -0.1598, -0.8547), vec3<f32>(0.0560, 0.0069, -0.1843), vec3<f32>(-0.0146, 0.1402, 0.0762), vec3<f32>(0.0100, -0.1924, -0.0344),
+        vec3<f32>(-0.3577, -0.5301, -0.4358), vec3<f32>(-0.3169, 0.1063, 0.0158), vec3<f32>(0.0103, -0.5869, 0.0046), vec3<f32>(-0.0897, -0.4940, 0.3287),
+        vec3<f32>(0.7119, -0.0154, -0.0918), vec3<f32>(-0.0533, 0.0596, -0.5411), vec3<f32>(0.0352, -0.0631, 0.5460), vec3<f32>(-0.4776, 0.2847, -0.0271)
+    );
+    var occlusion = 0.0;
+    for (var i = 0; i < 16; i = i + 1) {
+        let ray = radiusDepth * reflect(sampleSphere[i], random);
+        let hemiRay = position + sign(dot(ray, normal)) * ray;
+        let occlusionDepth = textureSample(depthTex, depthSamp, clamp(hemiRay.xy, vec2<f32>(0.001), vec2<f32>(0.999))).r;
+        let difference = depth - occlusionDepth;
+        occlusion += step(fallOff, difference) * (1.0 - smoothstep(fallOff, area, difference));
+    }
+    return clamp(1.0 - occlusion / 16.0, 0.0, 1.0);
+}
+`;
+      emitter82 = {
+        className: "AmbientOcclusionBlock",
+        stage: "fragment",
+        emit(block, _outputName, stage, state, ctx) {
+          const source = block.inputs.get("source")?.source;
+          if (!source) {
+            throw new Error(`NodeMaterial: AmbientOcclusionBlock "${block.name}" requires an ImageSourceBlock source`);
+          }
+          const producer = ctx.graph.blocks.get(source.blockId);
+          const bindingName3 = sanitize7(producer?.name || `ao${block.id}`);
+          if (!state.textures.find((t) => t.name === bindingName3)) {
+            state.textures.push({ name: bindingName3, kind: "texture2d", texture: null });
+          }
+          state.fragment.helpers.set(HELPER_KEY4, HELPER_WGSL5);
+          const screenSize = ctx.cast(ctx.resolve(block, "screenSize", stage, state), "vec2f").expr;
+          return {
+            expr: `nme_computeAo(nodeTex_${bindingName3}, nodeSamp_${bindingName3}, _NME_FRAG_COORD_, ${screenSize}, ${num(block.serialized.radius, 1e-4)}, ${num(block.serialized.area, 75e-4)}, ${num(block.serialized.fallOff, 1e-6)})`,
+            type: "f32"
+          };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/frag-coord-block.ts
+  var frag_coord_block_exports = {};
+  __export(frag_coord_block_exports, {
+    emitter: () => emitter83
+  });
+  var OUTPUTS2, emitter83;
+  var init_frag_coord_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/frag-coord-block.ts"() {
+      "use strict";
+      OUTPUTS2 = {
+        xyzw: { swizzle: "", type: "vec4f" },
+        xyz: { swizzle: ".xyz", type: "vec3f" },
+        xy: { swizzle: ".xy", type: "vec2f" },
+        x: { swizzle: ".x", type: "f32" },
+        y: { swizzle: ".y", type: "f32" },
+        z: { swizzle: ".z", type: "f32" },
+        w: { swizzle: ".w", type: "f32" }
+      };
+      emitter83 = {
+        className: "FragCoordBlock",
+        stage: "fragment",
+        emit(_block, outputName, _stage, state) {
+          state.usesScreenSize = true;
+          const out = OUTPUTS2[outputName];
+          if (!out) {
+            throw new Error(`NodeMaterial: FragCoordBlock has no output "${outputName}"`);
+          }
+          return { expr: `vec4<f32>(_NME_FRAG_COORD_.x, _NME_SCREEN_SIZE_.y - _NME_FRAG_COORD_.y, 1.0 - _NME_FRAG_COORD_.z, _NME_FRAG_COORD_.w)${out.swizzle}`, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/screen-size-block.ts
+  var screen_size_block_exports = {};
+  __export(screen_size_block_exports, {
+    emitter: () => emitter84
+  });
+  var OUTPUTS3, emitter84;
+  var init_screen_size_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/screen-size-block.ts"() {
+      "use strict";
+      OUTPUTS3 = {
+        xy: { swizzle: "", type: "vec2f" },
+        x: { swizzle: ".x", type: "f32" },
+        y: { swizzle: ".y", type: "f32" }
+      };
+      emitter84 = {
+        className: "ScreenSizeBlock",
+        stage: "fragment",
+        emit(_block, outputName, _stage, state) {
+          state.usesScreenSize = true;
+          const out = OUTPUTS3[outputName];
+          if (!out) {
+            throw new Error(`NodeMaterial: ScreenSizeBlock has no output "${outputName}"`);
+          }
+          return { expr: `_NME_SCREEN_SIZE_${out.swizzle}`, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/screen-space-block.ts
+  var screen_space_block_exports = {};
+  __export(screen_space_block_exports, {
+    emitter: () => emitter85
+  });
+  var OUTPUTS4, emitter85;
+  var init_screen_space_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/screen-space-block.ts"() {
+      "use strict";
+      OUTPUTS4 = {
+        output: { swizzle: ".xy", type: "vec2f" },
+        x: { swizzle: ".x", type: "f32" },
+        y: { swizzle: ".y", type: "f32" }
+      };
+      emitter85 = {
+        className: "ScreenSpaceBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          const vectorRaw = ctx.resolve(block, "vector", stage, state);
+          const vector = vectorRaw.type === "vec4f" ? vectorRaw : ctx.cast(vectorRaw, "vec3f");
+          const wvp = ctx.cast(ctx.resolve(block, "worldViewProjection", stage, state), "mat4f");
+          const clip = ctx.temp(state, "screenClip");
+          const uv = ctx.temp(state, "screenUv");
+          const vectorExpr = vector.type === "vec4f" ? vector.expr : `vec4<f32>(${vector.expr}, 1.0)`;
+          state.fragment.body.push(`let ${clip} = ${wvp.expr} * ${vectorExpr};`);
+          state.fragment.body.push(`let ${uv} = (${clip}.xy / ${clip}.w) * 0.5 + vec2<f32>(0.5, 0.5);`);
+          const out = OUTPUTS4[outputName];
+          if (!out) {
+            throw new Error(`NodeMaterial: ScreenSpaceBlock has no output "${outputName}"`);
+          }
+          return { expr: `${uv}${out.swizzle}`, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/twirl-block.ts
+  var twirl_block_exports = {};
+  __export(twirl_block_exports, {
+    emitter: () => emitter86
+  });
+  function defaultVec2(expr) {
+    return { expr, type: "vec2f" };
+  }
+  function defaultF32(expr) {
+    return { expr, type: "f32" };
+  }
+  var OUTPUTS5, emitter86;
+  var init_twirl_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/twirl-block.ts"() {
+      "use strict";
+      OUTPUTS5 = {
+        output: { swizzle: "", type: "vec2f" },
+        x: { swizzle: ".x", type: "f32" },
+        y: { swizzle: ".y", type: "f32" }
+      };
+      emitter86 = {
+        className: "TwirlBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          const input = ctx.cast(ctx.resolve(block, "input", stage, state), "vec2f");
+          const strength = ctx.cast(block.inputs.get("strength")?.source ? ctx.resolve(block, "strength", stage, state) : defaultF32("1.0"), "f32");
+          const center = ctx.cast(block.inputs.get("center")?.source ? ctx.resolve(block, "center", stage, state) : defaultVec2("vec2<f32>(0.5, 0.5)"), "vec2f");
+          const offset = ctx.cast(block.inputs.get("offset")?.source ? ctx.resolve(block, "offset", stage, state) : defaultVec2("vec2<f32>(0.0, 0.0)"), "vec2f");
+          const delta = ctx.temp(state, "twirlDelta");
+          const angle = ctx.temp(state, "twirlAngle");
+          const result = ctx.temp(state, "twirl");
+          state.fragment.body.push(`let ${delta} = ${input.expr} - ${center.expr};`);
+          state.fragment.body.push(`let ${angle} = ${strength.expr} * length(${delta});`);
+          state.fragment.body.push(
+            `let ${result} = vec2<f32>(cos(${angle}) * ${delta}.x - sin(${angle}) * ${delta}.y, sin(${angle}) * ${delta}.x + cos(${angle}) * ${delta}.y) + ${center.expr} + ${offset.expr};`
+          );
+          const out = OUTPUTS5[outputName];
+          if (!out) {
+            throw new Error(`NodeMaterial: TwirlBlock has no output "${outputName}"`);
+          }
+          return { expr: `${result}${out.swizzle}`, type: out.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/frag-depth-block.ts
+  var frag_depth_block_exports = {};
+  __export(frag_depth_block_exports, {
+    emitter: () => emitter87
+  });
+  var emitter87;
+  var init_frag_depth_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/frag-depth-block.ts"() {
+      "use strict";
+      emitter87 = {
+        className: "FragDepthBlock",
+        stage: "fragment",
+        sideEffect: true,
+        emit(block, _outputName, stage, state, ctx) {
+          const memoKey2 = `${block.id}|fragDepth`;
+          const existing = state.fragment.memo.get(memoKey2);
+          if (existing) {
+            return existing;
+          }
+          state.usesFragDepth = true;
+          const depthConn = block.inputs.get("depth");
+          if (depthConn?.source) {
+            const depth = ctx.cast(ctx.resolve(block, "depth", stage, state), "f32");
+            state.fragment.body.push(`_NME_FRAG_DEPTH_ = 1.0 - (${depth.expr});`);
+          } else if (block.inputs.get("worldPos")?.source && block.inputs.get("viewProjection")?.source) {
+            const worldPos = ctx.cast(ctx.resolve(block, "worldPos", stage, state), "vec4f");
+            const viewProjection = ctx.cast(ctx.resolve(block, "viewProjection", stage, state), "mat4f");
+            const p = ctx.temp(state, "fragDepthP");
+            state.fragment.body.push(`let ${p} = ${viewProjection.expr} * ${worldPos.expr};`);
+            state.fragment.body.push(`_NME_FRAG_DEPTH_ = ${p}.z / ${p}.w;`);
+          } else {
+            throw new Error("NodeMaterial: FragDepthBlock requires `depth` or both `worldPos` and `viewProjection` inputs");
+          }
+          const result = { expr: "_NME_FRAG_DEPTH_", type: "f32" };
+          state.fragment.memo.set(memoKey2, result);
+          return result;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-advanced.ts
+  var node_registry_extra_advanced_exports = {};
+  __export(node_registry_extra_advanced_exports, {
+    loadExtraEmitter: () => loadExtraEmitter3
+  });
+  function matrixBlocks() {
+    return Promise.resolve().then(() => (init_matrix_blocks(), matrix_blocks_exports));
+  }
+  function blockLoader3(key) {
+    switch (key) {
+      case "DerivativeBlock":
+        return () => Promise.resolve().then(() => (init_derivative_block(), derivative_block_exports));
+      case "HeightToNormalBlock":
+        return () => Promise.resolve().then(() => (init_height_to_normal_block(), height_to_normal_block_exports));
+      case "TBNBlock":
+        return () => Promise.resolve().then(() => (init_tbn_block(), tbn_block_exports));
+      case "NormalBlendBlock":
+        return () => Promise.resolve().then(() => (init_normal_blend_block(), normal_blend_block_exports));
+      case "AmbientOcclusionBlock":
+        return () => Promise.resolve().then(() => (init_ambient_occlusion_block(), ambient_occlusion_block_exports));
+      case "FragCoordBlock":
+        return () => Promise.resolve().then(() => (init_frag_coord_block(), frag_coord_block_exports));
+      case "ScreenSizeBlock":
+        return () => Promise.resolve().then(() => (init_screen_size_block(), screen_size_block_exports));
+      case "ScreenSpaceBlock":
+        return () => Promise.resolve().then(() => (init_screen_space_block(), screen_space_block_exports));
+      case "TwirlBlock":
+        return () => Promise.resolve().then(() => (init_twirl_block(), twirl_block_exports));
+      case "FragDepthBlock":
+        return () => Promise.resolve().then(() => (init_frag_depth_block(), frag_depth_block_exports));
+      case "MatrixBuilder":
+      case "MatrixSplitterBlock":
+      case "MatrixTransposeBlock":
+      case "MatrixDeterminantBlock":
+        return matrixBlocks;
+      default:
+        return null;
+    }
+  }
+  async function loadExtraEmitter3(key) {
+    const loader = blockLoader3(key);
+    if (!loader) {
+      throw new Error(`NodeMaterial: no advanced extension emitter registered for block "${key}"`);
+    }
+    return (await loader()).emitter;
+  }
+  var init_node_registry_extra_advanced = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-advanced.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/elbow-block.ts
+  var elbow_block_exports = {};
+  __export(elbow_block_exports, {
+    emitter: () => emitter88
+  });
+  var emitter88;
+  var init_elbow_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/elbow-block.ts"() {
+      "use strict";
+      emitter88 = {
+        className: "ElbowBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          return ctx.resolve(block, "input", stage, state);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/teleport-in-block.ts
+  var teleport_in_block_exports = {};
+  __export(teleport_in_block_exports, {
+    emitter: () => emitter89
+  });
+  var emitter89;
+  var init_teleport_in_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/teleport-in-block.ts"() {
+      "use strict";
+      emitter89 = {
+        className: "NodeMaterialTeleportInBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          return ctx.resolve(block, "input", stage, state);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/teleport-out-block.ts
+  var teleport_out_block_exports = {};
+  __export(teleport_out_block_exports, {
+    emitter: () => emitter90
+  });
+  var emitter90;
+  var init_teleport_out_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/teleport-out-block.ts"() {
+      "use strict";
+      emitter90 = {
+        className: "NodeMaterialTeleportOutBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const entryPoint = block.serialized["entryPoint"];
+          const entryPointId = typeof entryPoint === "number" ? entryPoint : typeof entryPoint === "string" && entryPoint.length > 0 ? Number(entryPoint) : NaN;
+          if (!Number.isFinite(entryPointId)) {
+            throw new Error(`NodeMaterial: TeleportOutBlock (id=${block.id}) has no entryPoint`);
+          }
+          const entryBlock = ctx.graph.blocks.get(entryPointId);
+          if (!entryBlock || entryBlock.className !== "NodeMaterialTeleportInBlock") {
+            throw new Error(`NodeMaterial: TeleportOutBlock (id=${block.id}) points to missing TeleportInBlock ${entryPointId}`);
+          }
+          return ctx.resolve(entryBlock, "input", stage, state);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/debug-block.ts
+  var debug_block_exports = {};
+  __export(debug_block_exports, {
+    emitter: () => emitter91
+  });
+  var emitter91;
+  var init_debug_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/debug-block.ts"() {
+      "use strict";
+      emitter91 = {
+        className: "NodeMaterialDebugBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const input = block.inputs.get("debug");
+          if (!input?.source) {
+            return { expr: "0.0", type: "f32" };
+          }
+          return ctx.resolve(block, "debug", stage, state);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/mesh-attribute-exists-block.ts
+  var mesh_attribute_exists_block_exports = {};
+  __export(mesh_attribute_exists_block_exports, {
+    emitter: () => emitter92
+  });
+  function attributeFlag(attributeType) {
+    switch (attributeType) {
+      case 1:
+        return "1.0";
+      case 2:
+        return "meshU.receivesShadow.z";
+      case 3:
+        return "meshU.receivesShadow.w";
+      case 4:
+        return "meshU.receivesShadow.y";
+      case 5:
+        return "0.0";
+      case 6:
+      // UV3
+      case 7:
+      // UV4
+      case 8:
+      // UV5
+      case 9:
+        return "0.0";
+      default:
+        return null;
+    }
+  }
+  var emitter92;
+  var init_mesh_attribute_exists_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/mesh-attribute-exists-block.ts"() {
+      "use strict";
+      emitter92 = {
+        className: "MeshAttributeExistsBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          state.usesMeshAttributeExists = true;
+          const input = ctx.resolve(block, "input", stage, state);
+          const flag = attributeFlag(block.serialized["attributeType"] ?? 0);
+          if (flag === null) {
+            return input;
+          }
+          const fallback2 = ctx.cast(ctx.resolve(block, "fallback", stage, state), input.type);
+          const expr = ctx.temp(state, "attr");
+          const s = stage === "vertex" ? state.vertex : state.fragment;
+          s.body.push(`let ${expr} = select(${fallback2.expr}, ${input.expr}, ${flag} > 0.5);`);
+          return { expr, type: input.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/clip-planes-block.ts
+  var clip_planes_block_exports = {};
+  __export(clip_planes_block_exports, {
+    emitter: () => emitter93
+  });
+  var emitter93;
+  var init_clip_planes_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/clip-planes-block.ts"() {
+      "use strict";
+      emitter93 = {
+        className: "ClipPlanesBlock",
+        stage: "vertex",
+        sideEffect: true,
+        emit(block, _outputName, _stage, state, ctx) {
+          state.usesClipPlanes = true;
+          const memoKey2 = `_clip_${block.id}`;
+          if (!state.vertex.memo.has(memoKey2)) {
+            const worldPosition = ctx.cast(ctx.resolve(block, "worldPosition", "vertex", state), "vec4f");
+            if (!state.varyings.find((v) => v._name === "vClipDistance")) {
+              state.varyings.push({ _name: "vClipDistance", _type: "f32" });
+            }
+            state.vertex.body.push(`out.vClipDistance = dot(${worldPosition.expr}, sceneU.clipPlane);`);
+            state.vertex.memo.set(memoKey2, { expr: "out.vClipDistance", type: "f32" });
+          }
+          if (!state.fragment.memo.has(memoKey2)) {
+            state.fragment.body.push(`if (in.vClipDistance > 0.0) { discard; }`);
+            state.fragment.memo.set(memoKey2, { expr: "in.vClipDistance", type: "f32" });
+          }
+          return { expr: "0.0", type: "f32" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflection-texture-base-block.ts
+  var reflection_texture_base_block_exports = {};
+  __export(reflection_texture_base_block_exports, {
+    emitter: () => emitter94
+  });
+  var emitter94;
+  var init_reflection_texture_base_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/reflection-texture-base-block.ts"() {
+      "use strict";
+      emitter94 = {
+        className: "ReflectionTextureBaseBlock",
+        emit(block) {
+          throw new Error(`ReflectionTextureBaseBlock "${block.name}" is an abstract compatibility block and cannot be emitted directly.`);
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/image-processing-block.ts
+  var image_processing_block_exports = {};
+  __export(image_processing_block_exports, {
+    emitter: () => emitter95
+  });
+  function imageProcessingHelper(convertInputToLinearSpace) {
+    const linearize = convertInputToLinearSpace ? `rgb = pow(max(rgb, vec3<f32>(0.0)), vec3<f32>(2.2));` : ``;
+    return `fn nme_apply_image_processing(inputColor: vec4<f32>) -> vec4<f32> {
+    var rgb = inputColor.rgb;
+    ${linearize}
+    rgb = rgb * sceneU.vImageInfos.x;
+    if (sceneU.vImageInfos.w > 0.5) {
+        rgb = 1.0 - exp2(-1.590579 * rgb);
+    }
+    rgb = pow(max(rgb, vec3<f32>(0.0)), vec3<f32>(0.45454545));
+    rgb = clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+    let highContrast = rgb * rgb * (vec3<f32>(3.0) - rgb * 2.0);
+    if (sceneU.vImageInfos.y < 1.0) {
+        rgb = mix(vec3<f32>(0.5), rgb, sceneU.vImageInfos.y);
+    } else {
+        rgb = mix(rgb, highContrast, sceneU.vImageInfos.y - 1.0);
+    }
+    return vec4<f32>(max(rgb, vec3<f32>(0.0)), inputColor.a);
+}`;
+  }
+  var emitter95;
+  var init_image_processing_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/image-processing-block.ts"() {
+      "use strict";
+      emitter95 = {
+        className: "ImageProcessingBlock",
+        stage: "fragment",
+        emit(block, outputName, stage, state, ctx) {
+          const convertInput = block.serialized.convertInputToLinearSpace !== false;
+          const helperKey = `nme_image_processing_${convertInput ? "linear" : "as_is"}`;
+          state.fragment.helpers.set(helperKey, imageProcessingHelper(convertInput));
+          const color = ctx.cast(ctx.resolve(block, "color", stage, state), "vec4f");
+          const t = ctx.temp(state, "ip");
+          state.fragment.body.push(`let ${t} = nme_apply_image_processing(${color.expr});`);
+          if (outputName === "rgb") {
+            return { expr: `${t}.rgb`, type: "vec3f" };
+          }
+          return { expr: t, type: "vec4f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/iridescence-block.ts
+  var iridescence_block_exports = {};
+  __export(iridescence_block_exports, {
+    emitter: () => emitter96
+  });
+  var IRIDESCENCE_HELPERS2, emitter96;
+  var init_iridescence_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/iridescence-block.ts"() {
+      "use strict";
+      IRIDESCENCE_HELPERS2 = `const NME_PBR_XYZ_TO_REC709: mat3x3<f32> = mat3x3<f32>(
+    3.2404542, -0.9692660, 0.0556434,
+    -1.5371385, 1.8760108, -0.2040259,
+    -0.4985314, 0.0415560, 1.0572252
+);
+fn nme_pbr_square3(x: vec3<f32>) -> vec3<f32> { return x * x; }
+fn nme_pbr_iorFromAirF0(f0: vec3<f32>) -> vec3<f32> {
+    let s = sqrt(clamp(f0, vec3<f32>(0.0), vec3<f32>(0.9999)));
+    return (vec3<f32>(1.0) + s) / (vec3<f32>(1.0) - s);
+}
+fn nme_pbr_r0FromIor3(iorT: vec3<f32>, iorI: f32) -> vec3<f32> { return nme_pbr_square3((iorT - vec3<f32>(iorI)) / (iorT + vec3<f32>(iorI))); }
+fn nme_pbr_r0FromIor(iorT: f32, iorI: f32) -> f32 { let r = (iorT - iorI) / (iorT + iorI); return r * r; }
+fn nme_pbr_evalSensitivity(opd: f32, shift: vec3<f32>) -> vec3<f32> {
+    let phase = 6.283185307179586 * opd * 1.0e-9;
+    let val = vec3<f32>(5.4856e-13, 4.4201e-13, 5.2481e-13);
+    let pos = vec3<f32>(1.6810e+06, 1.7953e+06, 2.2084e+06);
+    let vr = vec3<f32>(4.3278e+09, 9.3046e+09, 6.6121e+09);
+    var xyz = val * sqrt(6.283185307179586 * vr) * cos(pos * phase + shift) * exp(-(phase * phase) * vr);
+    xyz.x = xyz.x + 9.7470e-14 * sqrt(6.283185307179586 * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x) * exp(-4.5282e+09 * phase * phase);
+    xyz = xyz / 1.0685e-7;
+    return NME_PBR_XYZ_TO_REC709 * xyz;
+}
+fn nme_pbr_evalIridescence(outsideIor: f32, eta2: f32, cosTheta1: f32, thickness: f32, baseF0: vec3<f32>) -> vec3<f32> {
+    let iridescenceIor = mix(outsideIor, eta2, smoothstep(0.0, 0.03, thickness));
+    let sinTheta2Sq = ((outsideIor / iridescenceIor) * (outsideIor / iridescenceIor)) * (1.0 - cosTheta1 * cosTheta1);
+    let cosTheta2Sq = 1.0 - sinTheta2Sq;
+    if (cosTheta2Sq < 0.0) { return vec3<f32>(1.0); }
+    let cosTheta2 = sqrt(cosTheta2Sq);
+    let r0 = nme_pbr_r0FromIor(iridescenceIor, outsideIor);
+    let r12 = nme_pbr_fresSchlick(cosTheta1, vec3<f32>(r0), vec3<f32>(1.0)).x;
+    let t121 = 1.0 - r12;
+    var phi12 = 0.0;
+    if (iridescenceIor < outsideIor) { phi12 = 3.141592653589793; }
+    let phi21 = 3.141592653589793 - phi12;
+    let baseIor = nme_pbr_iorFromAirF0(baseF0);
+    let r1 = nme_pbr_r0FromIor3(baseIor, iridescenceIor);
+    let r23 = nme_pbr_fresSchlick(cosTheta2, r1, vec3<f32>(1.0));
+    var phi23 = vec3<f32>(0.0);
+    if (baseIor.x < iridescenceIor) { phi23.x = 3.141592653589793; }
+    if (baseIor.y < iridescenceIor) { phi23.y = 3.141592653589793; }
+    if (baseIor.z < iridescenceIor) { phi23.z = 3.141592653589793; }
+    let opd = 2.0 * iridescenceIor * thickness * cosTheta2;
+    let phi = vec3<f32>(phi21) + phi23;
+    let r123 = clamp(vec3<f32>(r12) * r23, vec3<f32>(1e-5), vec3<f32>(0.9999));
+    let smallR123 = sqrt(r123);
+    let rs = (t121 * t121) * r23 / (vec3<f32>(1.0) - r123);
+    var outI = vec3<f32>(r12) + rs;
+    var cm = rs - vec3<f32>(t121);
+    for (var m: i32 = 1; m <= 2; m = m + 1) {
+        cm = cm * smallR123;
+        outI = outI + cm * (2.0 * nme_pbr_evalSensitivity(f32(m) * opd, f32(m) * phi));
+    }
+    return max(outI, vec3<f32>(0.0));
+}`;
+      emitter96 = {
+        className: "IridescenceBlock",
+        stage: "fragment",
+        emit(_block, _outputName, _stage, state, _ctx) {
+          state.usesIridescence = true;
+          state.fragment.helpers.set("nme_pbr_iridescence_helpers", IRIDESCENCE_HELPERS2);
+          return { expr: `vec3<f32>(0.0)`, type: "vec3f" };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/loop-block.ts
+  var loop_block_exports = {};
+  __export(loop_block_exports, {
+    emitter: () => emitter97
+  });
+  function loopKey(stage, blockId) {
+    return `${stage}|${blockId}`;
+  }
+  function storageWritesForLoop(block, ctx) {
+    const writes = [];
+    for (const candidate of ctx.graph.blocks.values()) {
+      if (candidate.className !== "StorageWriteBlock") {
+        continue;
+      }
+      const loopID = candidate.inputs.get("loopID")?.source;
+      if (loopID?.blockId === block.id && loopID.outputName === "loopID") {
+        writes.push(candidate);
+      }
+    }
+    return writes;
+  }
+  var emitter97;
+  var init_loop_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/loop-block.ts"() {
+      "use strict";
+      init_node_types();
+      emitter97 = {
+        className: "LoopBlock",
+        emit(block, outputName, stage, state, ctx) {
+          const active = state.loopVariables.get(loopKey(stage, block.id));
+          if (outputName === "index") {
+            if (!active) {
+              throw new Error(`LoopBlock "${block.name}": index can only be read while emitting the loop body`);
+            }
+            return { expr: `f32(${active.indexVar})`, type: "f32" };
+          }
+          if (outputName === "loopID") {
+            throw new Error(`LoopBlock "${block.name}": loopID can only be consumed by StorageReadBlock/StorageWriteBlock`);
+          }
+          if (outputName !== "output") {
+            throw new Error(`LoopBlock "${block.name}": unsupported output "${outputName}"`);
+          }
+          const initial = ctx.resolve(block, "input", stage, state);
+          const valueVar = ctx.temp(state, "loop");
+          const indexVar = ctx.temp(state, "loopIndex");
+          const body = stage === "vertex" ? state.vertex.body : state.fragment.body;
+          body.push(`var ${valueVar}: ${WGSL[initial.type]} = ${initial.expr};`);
+          const iterationsInput = block.inputs.get("iterations");
+          const iterations = iterationsInput?.source ? `i32(${ctx.cast(ctx.resolve(block, "iterations", stage, state), "f32").expr})` : String(Math.max(0, Math.floor(block.serialized["iterations"] ?? 4)));
+          body.push(`for (var ${indexVar} = 0; ${indexVar} < ${iterations}; ${indexVar} = ${indexVar} + 1) {`);
+          const key = loopKey(stage, block.id);
+          const previous = state.loopVariables.get(key);
+          const stageState = stage === "vertex" ? state.vertex : state.fragment;
+          const previousMemo = new Map(stageState.memo);
+          state.loopVariables.set(key, { valueVar, valueType: initial.type, indexVar });
+          try {
+            for (const write of storageWritesForLoop(block, ctx)) {
+              const value = ctx.cast(ctx.resolve(write, "value", stage, state), initial.type);
+              body.push(`${valueVar} = ${value.expr};`);
+            }
+          } finally {
+            stageState.memo.clear();
+            for (const [memoKey2, memoValue] of previousMemo) {
+              stageState.memo.set(memoKey2, memoValue);
+            }
+            if (previous) {
+              state.loopVariables.set(key, previous);
+            } else {
+              state.loopVariables.delete(key);
+            }
+          }
+          body.push("}");
+          return { expr: valueVar, type: initial.type };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/storage-read-block.ts
+  var storage_read_block_exports = {};
+  __export(storage_read_block_exports, {
+    emitter: () => emitter98
+  });
+  function loopKey2(stage, blockId) {
+    return `${stage}|${blockId}`;
+  }
+  var emitter98;
+  var init_storage_read_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/storage-read-block.ts"() {
+      "use strict";
+      emitter98 = {
+        className: "StorageReadBlock",
+        emit(block, outputName, stage, state, _ctx) {
+          if (outputName !== "value") {
+            throw new Error(`StorageReadBlock "${block.name}": unsupported output "${outputName}"`);
+          }
+          const loopSource = block.inputs.get("loopID")?.source;
+          if (!loopSource) {
+            throw new Error(`StorageReadBlock "${block.name}": loopID input is not connected`);
+          }
+          const active = state.loopVariables.get(loopKey2(stage, loopSource.blockId));
+          if (!active) {
+            throw new Error(`StorageReadBlock "${block.name}": loop ${loopSource.blockId} is not active`);
+          }
+          return { expr: active.valueVar, type: active.valueType };
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/storage-write-block.ts
+  var storage_write_block_exports = {};
+  __export(storage_write_block_exports, {
+    emitter: () => emitter99
+  });
+  var emitter99;
+  var init_storage_write_block = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/storage-write-block.ts"() {
+      "use strict";
+      emitter99 = {
+        className: "StorageWriteBlock",
+        emit(block, _outputName, stage, state, ctx) {
+          const value = ctx.resolve(block, "value", stage, state);
+          return value;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-compat.ts
+  var node_registry_extra_compat_exports = {};
+  __export(node_registry_extra_compat_exports, {
+    loadExtraEmitter: () => loadExtraEmitter4
+  });
+  function blockLoader4(key) {
+    switch (key) {
+      case "ElbowBlock":
+        return () => Promise.resolve().then(() => (init_elbow_block(), elbow_block_exports));
+      case "NodeMaterialTeleportInBlock":
+        return () => Promise.resolve().then(() => (init_teleport_in_block(), teleport_in_block_exports));
+      case "NodeMaterialTeleportOutBlock":
+        return () => Promise.resolve().then(() => (init_teleport_out_block(), teleport_out_block_exports));
+      case "NodeMaterialDebugBlock":
+        return () => Promise.resolve().then(() => (init_debug_block(), debug_block_exports));
+      case "MeshAttributeExistsBlock":
+        return () => Promise.resolve().then(() => (init_mesh_attribute_exists_block(), mesh_attribute_exists_block_exports));
+      case "ClipPlanesBlock":
+        return () => Promise.resolve().then(() => (init_clip_planes_block(), clip_planes_block_exports));
+      case "ReflectionTextureBaseBlock":
+        return () => Promise.resolve().then(() => (init_reflection_texture_base_block(), reflection_texture_base_block_exports));
+      case "ImageProcessingBlock":
+        return () => Promise.resolve().then(() => (init_image_processing_block(), image_processing_block_exports));
+      case "IridescenceBlock":
+        return () => Promise.resolve().then(() => (init_iridescence_block(), iridescence_block_exports));
+      case "LoopBlock":
+        return () => Promise.resolve().then(() => (init_loop_block(), loop_block_exports));
+      case "StorageReadBlock":
+        return () => Promise.resolve().then(() => (init_storage_read_block(), storage_read_block_exports));
+      case "StorageWriteBlock":
+        return () => Promise.resolve().then(() => (init_storage_write_block(), storage_write_block_exports));
+      default:
+        return null;
+    }
+  }
+  async function loadExtraEmitter4(key) {
+    const loader = blockLoader4(key);
+    if (!loader) {
+      throw new Error(`NodeMaterial: no compatibility extension emitter registered for block "${key}"`);
+    }
+    return (await loader()).emitter;
+  }
+  var init_node_registry_extra_compat = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry-extra-compat.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry.ts
+  var node_registry_exports = {};
+  __export(node_registry_exports, {
+    hasBlockEmitter: () => hasBlockEmitter,
+    loadBlockEmitter: () => loadBlockEmitter
+  });
+  async function loadBlockEmitter(key) {
+    const baseLoader = baseBlockLoader(key);
+    if (baseLoader) {
+      return (await baseLoader()).emitter;
+    }
+    const extra = await loadExtraBlockEmitter(key);
+    if (extra) {
+      return extra;
+    }
+    throw new Error(`NodeMaterial: no emitter registered for block "${key}"`);
+  }
+  function hasBlockEmitter(key) {
+    return !!baseBlockLoader(key) || !!extraRegistryLoader(key);
+  }
+  function baseBlockLoader(key) {
+    switch (key) {
+      case "InputBlock":
+        return () => Promise.resolve().then(() => (init_input_block(), input_block_exports));
+      case "VectorMergerBlock":
+        return () => Promise.resolve().then(() => (init_vector_merger(), vector_merger_exports));
+      case "FragmentOutputBlock":
+        return () => Promise.resolve().then(() => (init_fragment_output(), fragment_output_exports));
+      case "AddBlock":
+        return () => Promise.resolve().then(() => (init_add_block(), add_block_exports));
+      case "SubtractBlock":
+        return () => Promise.resolve().then(() => (init_subtract_block(), subtract_block_exports));
+      case "MultiplyBlock":
+        return () => Promise.resolve().then(() => (init_multiply_block(), multiply_block_exports));
+      case "MinBlock":
+        return () => Promise.resolve().then(() => (init_min_block(), min_block_exports));
+      case "MaxBlock":
+        return () => Promise.resolve().then(() => (init_max_block(), max_block_exports));
+      case "PowBlock":
+        return () => Promise.resolve().then(() => (init_pow_block(), pow_block_exports));
+      case "StepBlock":
+        return () => Promise.resolve().then(() => (init_step_block(), step_block_exports));
+      case "DotBlock":
+        return () => Promise.resolve().then(() => (init_dot_block(), dot_block_exports));
+      case "ScaleBlock":
+        return () => Promise.resolve().then(() => (init_scale_block(), scale_block_exports));
+      case "OneMinusBlock":
+        return () => Promise.resolve().then(() => (init_oneminus_block(), oneminus_block_exports));
+      case "NegateBlock":
+        return () => Promise.resolve().then(() => (init_negate_block(), negate_block_exports));
+      case "NormalizeBlock":
+        return () => Promise.resolve().then(() => (init_normalize_block(), normalize_block_exports));
+      case "LerpBlock":
+        return () => Promise.resolve().then(() => (init_lerp_block(), lerp_block_exports));
+      case "ClampBlock":
+        return () => Promise.resolve().then(() => (init_clamp_block(), clamp_block_exports));
+      case "SmoothStepBlock":
+        return () => Promise.resolve().then(() => (init_smoothstep_block(), smoothstep_block_exports));
+      case "RemapBlock":
+        return () => Promise.resolve().then(() => (init_remap_block(), remap_block_exports));
+      case "TrigonometryBlock":
+        return () => Promise.resolve().then(() => (init_trigonometry_block(), trigonometry_block_exports));
+      case "VectorSplitterBlock":
+        return () => Promise.resolve().then(() => (init_vector_splitter(), vector_splitter_exports));
+      case "ColorSplitterBlock":
+        return () => Promise.resolve().then(() => (init_color_splitter(), color_splitter_exports));
+      case "TransformBlock":
+        return () => Promise.resolve().then(() => (init_transform_block(), transform_block_exports));
+      case "VertexOutputBlock":
+        return () => Promise.resolve().then(() => (init_vertex_output(), vertex_output_exports));
+      case "TextureBlock":
+        return () => Promise.resolve().then(() => (init_texture_block(), texture_block_exports));
+      case "ImageSourceBlock":
+        return () => Promise.resolve().then(() => (init_image_source(), image_source_exports));
+      case "FrontFacingBlock":
+        return () => Promise.resolve().then(() => (init_front_facing(), front_facing_exports));
+      case "ViewDirectionBlock":
+        return () => Promise.resolve().then(() => (init_view_direction(), view_direction_exports));
+      case "LightBlock":
+        return () => Promise.resolve().then(() => (init_light_block(), light_block_exports));
+      case "LightInformationBlock":
+        return () => Promise.resolve().then(() => (init_light_information(), light_information_exports));
+      case "FogBlock":
+        return () => Promise.resolve().then(() => (init_fog_block(), fog_block_exports));
+      case "PerturbNormalBlock":
+        return () => Promise.resolve().then(() => (init_perturb_normal(), perturb_normal_exports));
+      case "BonesBlock":
+        return () => Promise.resolve().then(() => (init_bones_block(), bones_block_exports));
+      case "InstancesBlock":
+        return () => Promise.resolve().then(() => (init_instances_block(), instances_block_exports));
+      case "MorphTargetsBlock":
+        return () => Promise.resolve().then(() => (init_morph_targets(), morph_targets_exports));
+      case "ShadowMapBlock":
+        return () => Promise.resolve().then(() => (init_shadow_map(), shadow_map_exports));
+      case "DiscardBlock":
+        return () => Promise.resolve().then(() => (init_discard_block(), discard_block_exports));
+      case "ReflectionTextureBlock":
+        return () => Promise.resolve().then(() => (init_reflection_texture_block(), reflection_texture_block_exports));
+      case "PBRMetallicRoughnessBlock":
+        return () => Promise.resolve().then(() => (init_pbr_metallic_roughness_block(), pbr_metallic_roughness_block_exports));
+      case "PBRMetallicRoughnessBlock__full":
+        return () => Promise.resolve().then(() => (init_pbr_metallic_roughness_block_full(), pbr_metallic_roughness_block_full_exports));
+      case "ReflectionBlock":
+        return () => Promise.resolve().then(() => (init_reflection_block(), reflection_block_exports));
+      case "ClearCoatBlock":
+        return () => Promise.resolve().then(() => (init_clearcoat_block(), clearcoat_block_exports));
+      case "SheenBlock":
+        return () => Promise.resolve().then(() => (init_sheen_block(), sheen_block_exports));
+      case "AnisotropyBlock":
+        return () => Promise.resolve().then(() => (init_anisotropy_block(), anisotropy_block_exports));
+      case "SubSurfaceBlock":
+        return () => Promise.resolve().then(() => (init_subsurface_block(), subsurface_block_exports));
+      case "RefractionBlock":
+        return () => Promise.resolve().then(() => (init_refraction_block(), refraction_block_exports));
+      default:
+        return null;
+    }
+  }
+  async function loadExtraBlockEmitter(key) {
+    const loader = extraRegistryLoader(key);
+    if (!loader) {
+      return null;
+    }
+    return (await loader()).loadExtraEmitter(key);
+  }
+  function extraRegistryLoader(key) {
+    switch (key) {
+      case "DivideBlock":
+      case "ModBlock":
+      case "ReciprocalBlock":
+      case "LengthBlock":
+      case "DistanceBlock":
+      case "CrossBlock":
+      case "ReflectBlock":
+      case "RefractBlock":
+      case "ArcTan2Block":
+      case "FresnelBlock":
+      case "OppositeBlock":
+      case "NLerpBlock":
+      case "ConditionalBlock":
+      case "CurveBlock":
+      case "WaveBlock":
+      case "RandomNumberBlock":
+        return () => Promise.resolve().then(() => (init_node_registry_extra_math(), node_registry_extra_math_exports));
+      case "ColorMergerBlock":
+      case "ColorConverterBlock":
+      case "DesaturateBlock":
+      case "GradientBlock":
+      case "PosterizeBlock":
+      case "ReplaceColorBlock":
+      case "PannerBlock":
+      case "Rotate2dBlock":
+      case "TriPlanarBlock":
+      case "BiPlanarBlock":
+      case "CloudBlock":
+      case "SimplexPerlin3DBlock":
+      case "VoronoiNoiseBlock":
+      case "WorleyNoise3DBlock":
+        return () => Promise.resolve().then(() => (init_node_registry_extra_procedural(), node_registry_extra_procedural_exports));
+      case "DerivativeBlock":
+      case "HeightToNormalBlock":
+      case "TBNBlock":
+      case "NormalBlendBlock":
+      case "AmbientOcclusionBlock":
+      case "FragCoordBlock":
+      case "ScreenSizeBlock":
+      case "ScreenSpaceBlock":
+      case "TwirlBlock":
+      case "FragDepthBlock":
+      case "MatrixBuilder":
+      case "MatrixSplitterBlock":
+      case "MatrixTransposeBlock":
+      case "MatrixDeterminantBlock":
+        return () => Promise.resolve().then(() => (init_node_registry_extra_advanced(), node_registry_extra_advanced_exports));
+      case "ElbowBlock":
+      case "NodeMaterialTeleportInBlock":
+      case "NodeMaterialTeleportOutBlock":
+      case "NodeMaterialDebugBlock":
+      case "MeshAttributeExistsBlock":
+      case "ClipPlanesBlock":
+      case "ReflectionTextureBaseBlock":
+      case "ImageProcessingBlock":
+      case "IridescenceBlock":
+      case "LoopBlock":
+      case "StorageReadBlock":
+      case "StorageWriteBlock":
+        return () => Promise.resolve().then(() => (init_node_registry_extra_compat(), node_registry_extra_compat_exports));
+      default:
+        return null;
+    }
+  }
+  var init_node_registry = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-registry.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-emitter.ts
+  function newStageState() {
+    return {
+      helpers: /* @__PURE__ */ new Map(),
+      body: [],
+      memo: /* @__PURE__ */ new Map()
+    };
+  }
+  function createBuildState() {
+    return {
+      vertex: newStageState(),
+      fragment: newStageState(),
+      vertexAttributes: [],
+      varyings: [],
+      nodeUboFields: [],
+      bindings: [],
+      textures: [],
+      pbrMrHelperRequests: [],
+      loopVariables: /* @__PURE__ */ new Map(),
+      nextTemp: 0,
+      usesLightsUbo: false,
+      usesScreenSize: false,
+      usesFragDepth: false,
+      usesClipPlanes: false,
+      usesMeshAttributeExists: false,
+      usesMorphTargets: false,
+      usesEnv: false,
+      usesClearcoat: false,
+      usesSheen: false,
+      usesAnisotropy: false,
+      usesIridescence: false,
+      usesSubsurface: false,
+      shadowLights: [],
+      hasSkeleton: false,
+      hasInstances: false
+    };
+  }
+  function memoKey(blockId, outputName) {
+    return `${blockId}|${outputName}`;
+  }
+  function stageOf(state, stage) {
+    return stage === "vertex" ? state.vertex : state.fragment;
+  }
+  function mintTemp(state, prefix = "t") {
+    const id = state.nextTemp++;
+    return `_${prefix}${id}`;
+  }
+  function castExpr(value, target) {
+    if (value.type === target) {
+      return value;
+    }
+    const t = WGSL[target];
+    if (value.type === "vec4f" && target === "vec3f") {
+      return { expr: `(${value.expr}).xyz`, type: target };
+    }
+    if (value.type === "vec4f" && target === "vec2f") {
+      return { expr: `(${value.expr}).xy`, type: target };
+    }
+    if (value.type === "vec3f" && target === "vec2f") {
+      return { expr: `(${value.expr}).xy`, type: target };
+    }
+    if ((value.type === "vec4f" || value.type === "vec3f" || value.type === "vec2f") && target === "f32") {
+      return { expr: `(${value.expr}).x`, type: target };
+    }
+    if (value.type === "f32" && (target === "vec2f" || target === "vec3f" || target === "vec4f")) {
+      return { expr: `${t}(${value.expr})`, type: target };
+    }
+    if (value.type === "vec3f" && target === "vec4f") {
+      return { expr: `vec4<f32>(${value.expr}, 1.0)`, type: target };
+    }
+    if (value.type === "vec2f" && target === "vec4f") {
+      return { expr: `vec4<f32>(${value.expr}, 0.0, 1.0)`, type: target };
+    }
+    if (value.type === "vec2f" && target === "vec3f") {
+      return { expr: `vec3<f32>(${value.expr}, 0.0)`, type: target };
+    }
+    throw new Error(`NodeMaterial: cannot cast ${value.type} to ${target} for expression \`${value.expr}\``);
+  }
+  function makeContext(graph, loadedEmitters) {
+    const ctx = {
+      graph,
+      _loadedEmitters: loadedEmitters,
+      temp: (state, prefix) => mintTemp(state, prefix),
+      cast: castExpr,
+      resolve: (block, inputName, stage, state) => {
+        const input = block.inputs.get(inputName);
+        if (!input) {
+          throw new Error(`NodeMaterial: block "${block.className}" (id=${block.id}) has no input "${inputName}"`);
+        }
+        if (!input.source) {
+          throw new Error(`NodeMaterial: block "${block.className}" (id=${block.id}) input "${inputName}" is not connected`);
+        }
+        const producer = graph.blocks.get(input.source.blockId);
+        if (!producer) {
+          throw new Error(`NodeMaterial: dangling connection ${block.id}.${inputName} -> block ${input.source.blockId}`);
+        }
+        return ctx.resolveOutput(producer, input.source.outputName, stage, state);
+      },
+      resolveOutput: (producer, outputName, stage, state) => {
+        const stageState = stageOf(state, stage);
+        const key = memoKey(producer.id, outputName);
+        const existing = stageState.memo.get(key);
+        if (existing) {
+          return existing;
+        }
+        const emitter100 = loadedEmitters.get(producer.className);
+        if (!emitter100) {
+          throw new Error(`NodeMaterial: no emitter loaded for block "${producer.className}"`);
+        }
+        const targetStage = emitter100.stage ?? stage;
+        const result = emitter100.emit(producer, outputName, targetStage, state, ctx);
+        if (targetStage !== stage) {
+          const vname = `v_${producer.id}_${outputName}`;
+          bridgeVarying(state, vname, result, targetStage, stage);
+          const bridged = { expr: `in.${vname}`, type: result.type };
+          stageState.memo.set(key, bridged);
+          return bridged;
+        }
+        stageState.memo.set(key, result);
+        return result;
+      }
+    };
+    return ctx;
+  }
+  function bridgeVarying(state, varyingName, value, from, to) {
+    if (from !== "vertex" || to !== "fragment") {
+      throw new Error("NodeMaterial: only vertex->fragment varyings are supported");
+    }
+    const already = state.varyings.find((v) => v._name === varyingName);
+    if (!already) {
+      state.varyings.push({ _name: varyingName, _type: WGSL[value.type] });
+      state.vertex.body.push(`out.${varyingName} = ${value.expr};`);
+    }
+  }
+  async function defaultBlockLoader(className) {
+    defaultRegistry ?? (defaultRegistry = Promise.resolve().then(() => (init_node_registry(), node_registry_exports)));
+    return (await defaultRegistry).loadBlockEmitter(className);
+  }
+  function pbrMrBlockNeedsFullEmitter(block) {
+    return block.serialized.enableSpecularAntiAliasing === true || !!block.inputs.get("clearcoat")?.source || !!block.inputs.get("sheen")?.source || !!block.inputs.get("subsurface")?.source || !!block.inputs.get("anisotropy")?.source || !!block.inputs.get("iridescence")?.source;
+  }
+  function graphNeedsFullPbrMrEmitter(graph) {
+    for (const block of graph.blocks.values()) {
+      if (block.className === "PBRMetallicRoughnessBlock" && pbrMrBlockNeedsFullEmitter(block)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  async function loadGraphEmitters(graph, blockLoader5 = defaultBlockLoader) {
+    const classNames = /* @__PURE__ */ new Set();
+    for (const b of graph.blocks.values()) {
+      classNames.add(b.className);
+    }
+    const map = /* @__PURE__ */ new Map();
+    const useFullPbrMrEmitter = blockLoader5 === defaultBlockLoader && graphNeedsFullPbrMrEmitter(graph);
+    await Promise.all(
+      Array.from(classNames).map(async (className) => {
+        const loaderKey = className === "PBRMetallicRoughnessBlock" && useFullPbrMrEmitter ? "PBRMetallicRoughnessBlock__full" : className;
+        const e = await blockLoader5(loaderKey);
+        map.set(className, e);
+      })
+    );
+    return map;
+  }
+  function emitGraph(graph, loadedEmitters, fragmentRootId, vertexRootId, shadowLights, meshCaps) {
+    const state = createBuildState();
+    if (shadowLights) {
+      for (const sl of shadowLights) {
+        state.shadowLights.push(sl);
+      }
+    }
+    if (meshCaps) {
+      if (meshCaps.hasSkeleton) {
+        state.hasSkeleton = true;
+      }
+      if (meshCaps.hasInstances) {
+        state.hasInstances = true;
+      }
+    }
+    const ctx = makeContext(graph, loadedEmitters);
+    const fragRoot = graph.blocks.get(fragmentRootId);
+    if (!fragRoot) {
+      throw new Error(`NodeMaterial: fragment root block ${fragmentRootId} not found`);
+    }
+    const fragEmitter = loadedEmitters.get(fragRoot.className);
+    if (!fragEmitter) {
+      throw new Error(`NodeMaterial: no emitter for fragment root "${fragRoot.className}"`);
+    }
+    fragEmitter.emit(fragRoot, "", "fragment", state, ctx);
+    if (vertexRootId !== null) {
+      const vertRoot = graph.blocks.get(vertexRootId);
+      if (!vertRoot) {
+        throw new Error(`NodeMaterial: vertex root block ${vertexRootId} not found`);
+      }
+      const vertEmitter = loadedEmitters.get(vertRoot.className);
+      if (!vertEmitter) {
+        throw new Error(`NodeMaterial: no emitter for vertex root "${vertRoot.className}"`);
+      }
+      vertEmitter.emit(vertRoot, "", "vertex", state, ctx);
+    }
+    for (const block of graph.blocks.values()) {
+      const e = loadedEmitters.get(block.className);
+      if (e?.sideEffect) {
+        e.emit(block, "", e.stage ?? "fragment", state, ctx);
+      }
+    }
+    return {
+      vertexWgsl: composeStage(state, "vertex"),
+      fragmentWgsl: composeStage(state, "fragment"),
+      state
+    };
+  }
+  function composeStage(state, stage) {
+    const s = stageOf(state, stage);
+    return s.body.join("\n");
+  }
+  var defaultRegistry;
+  var init_node_emitter = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-emitter.ts"() {
+      "use strict";
+      init_node_types();
+      defaultRegistry = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-pipeline.ts
+  function buildMeshStruct() {
+    return `struct MeshU {
+    world: mat4x4<f32>,
+    receivesShadow: vec4<f32>,
+    lc: u32,
+    li: array<vec4<u32>, ${Math.ceil(MAX_LIGHTS / 4)}>,
+};
+@group(1) @binding(0) var<uniform> meshU: MeshU;
+fn nli(i: u32) -> u32 { return meshU.li[i / 4u][i % 4u]; }`;
+  }
+  function getCache(engine) {
+    if (!_cache || _cachedDevice4 !== engine._device) {
+      _cache = /* @__PURE__ */ new Map();
+      _cachedDevice4 = engine._device;
+    }
+    return _cache;
+  }
+  function buildVertexIn(state) {
+    if (state.vertexAttributes.length === 0) {
+      return `struct VertexIn {};`;
+    }
+    const lines = state.vertexAttributes.map((a, i) => `    @location(${i}) ${a._name}: ${a._type},`);
+    return `struct VertexIn {
+${lines.join("\n")}
+};`;
+  }
+  function buildVertexOut(state) {
+    const lines = [`    @builtin(position) position: vec4<f32>,`];
+    state.varyings.forEach((v, i) => {
+      lines.push(`    @location(${i}) ${v._name}: ${v._type},`);
+    });
+    return `struct VertexOut {
+${lines.join("\n")}
+};`;
+  }
+  function buildNodeUbo(state, binding) {
+    if (state.nodeUboFields.length === 0) {
+      return null;
+    }
+    const layout = computeUboLayout(state.nodeUboFields);
+    const lines = state.nodeUboFields.map((f) => `    ${f._name}: ${f._type},`);
+    const struct = `struct NodeU {
+${lines.join("\n")}
+};
+@group(1) @binding(${binding}) var<uniform> nodeU: NodeU;`;
+    return { struct, size: layout._totalBytes, offsets: layout._offsets };
+  }
+  function indent(body) {
+    return body.split("\n").map((l) => l.length === 0 ? l : `    ${l}`).join("\n");
+  }
+  function compileNodePipeline(state, vertexBody, fragmentBody, opts) {
+    const { _engine, _format, _msaaSamples } = opts;
+    const device = _engine._device;
+    const mrt = opts._mrtOutput;
+    let nextBinding = 1;
+    const _nodeUboBinding = state.nodeUboFields.length > 0 ? nextBinding++ : null;
+    const nodeUbo = _nodeUboBinding !== null ? buildNodeUbo(state, _nodeUboBinding) : null;
+    const _nodeUboSize = nodeUbo?.size ?? 0;
+    const _nodeUboOffsets = nodeUbo?.offsets ?? /* @__PURE__ */ new Map();
+    const _textureBindings = [];
+    const textureWgslDecls = [];
+    for (const tex of state.textures) {
+      const _name = tex.name;
+      const _texBinding = nextBinding++;
+      const _sampBinding = nextBinding++;
+      _textureBindings.push({ _name, _texBinding, _sampBinding });
+      const wgslTexType = tex.kind === "textureCube" ? "texture_cube<f32>" : "texture_2d<f32>";
+      textureWgslDecls.push(`@group(1) @binding(${_texBinding}) var nodeTex_${_name}: ${wgslTexType};`);
+      textureWgslDecls.push(`@group(1) @binding(${_sampBinding}) var nodeSamp_${_name}: sampler;`);
+    }
+    const lightsWgslDecls = state.usesLightsUbo ? `struct LightEntry { vLightData: vec4<f32>, vLightDiffuse: vec4<f32>, vLightSpecular: vec4<f32>, vLightDirection: vec4<f32> };
+struct lightsUniforms { count: u32, _p0: u32, _p1: u32, _p2: u32, lights: array<LightEntry, ${MAX_LIGHTS}> };
+@group(0) @binding(1) var<uniform> nmeLights: lightsUniforms;` : "";
+    let _morphBindings = null;
+    const morphWgslDecls = [];
+    if (state.usesMorphTargets) {
+      const _textureBinding = nextBinding++;
+      const _uboBinding = nextBinding++;
+      _morphBindings = { _textureBinding, _uboBinding };
+      morphWgslDecls.push(
+        `@group(1) @binding(${_textureBinding}) var morphTargets: texture_2d<f32>;`,
+        `struct morphUniforms { weights: vec4<f32>, count: u32, texWidth: u32, rowsPerBand: u32, _p0: u32 };`,
+        `@group(1) @binding(${_uboBinding}) var<uniform> morph: morphUniforms;`,
+        // Helpers are emitted inline (module-scope) so they can reference `morph` + `morphTargets`.
+        `fn nme_morph_coord(vi: u32) -> vec2<i32> { let col = i32(vi % morph.texWidth); let row = i32(vi / morph.texWidth); return vec2<i32>(col, row); }`,
+        `fn nme_morphPosition(base: vec3<f32>, vi: u32) -> vec3<f32> {
+    var acc = base;
+    let co = nme_morph_coord(vi);
+    for (var i = 0u; i < morph.count; i = i + 1u) {
+        let posBase = i32(i * 2u) * i32(morph.rowsPerBand);
+        acc = acc + morph.weights[i] * textureLoad(morphTargets, vec2<i32>(co.x, posBase + co.y), 0).xyz;
+    }
+    return acc;
+}`,
+        `fn nme_morphNormal(base: vec3<f32>, vi: u32) -> vec3<f32> {
+    var acc = base;
+    let co = nme_morph_coord(vi);
+    for (var i = 0u; i < morph.count; i = i + 1u) {
+        let normBase = i32(i * 2u + 1u) * i32(morph.rowsPerBand);
+        acc = acc + morph.weights[i] * textureLoad(morphTargets, vec2<i32>(co.x, normBase + co.y), 0).xyz;
+    }
+    return acc;
+}`
+      );
+    }
+    let _envBindings = null;
+    let envWgslDecls = "";
+    let envBglEntries = [];
+    if (state.usesEnv && opts._envEmitter) {
+      const env = opts._envEmitter(nextBinding);
+      _envBindings = env.bindings;
+      envWgslDecls = env.wgslDecls;
+      envBglEntries = env.bglEntries;
+      nextBinding += env.bindingCount;
+    }
+    const noColorOutput = opts._noColorOutput === true;
+    const esmShadowOutput = opts._esmShadowOutput === true;
+    const shadowOutput = noColorOutput || esmShadowOutput;
+    const shadowEmit = !shadowOutput && state.shadowLights.length > 0 && opts._shadowEmitter ? opts._shadowEmitter(state.shadowLights, nextBinding, state.varyings) : null;
+    if (shadowEmit) {
+      nextBinding += shadowEmit._bindingCount;
+    }
+    const _shadowBindings = shadowEmit?._bindings ?? [];
+    const shadowWgslDecls = shadowEmit?._wgslDecls ?? "";
+    const shadowVertexInject = shadowEmit?._vertexInject ?? "";
+    const esmShadowDepthCode = opts._esmShadowDepthCode ?? "";
+    const _esmShadowParamsBinding = esmShadowOutput ? nextBinding++ : null;
+    const _geometryGpBinding = mrt && mrt._needsGpUbo ? nextBinding++ : null;
+    const _geomUbo = mrt && _geometryGpBinding !== null ? mrt._buildGeomUbo(_geometryGpBinding) : null;
+    const shadowFragmentHelper = shadowEmit?._fragmentHelper ?? (shadowOutput && state.shadowLights.length > 0 ? `fn nme_computeShadowFactors(input: VertexOut) -> array<f32, ${MAX_LIGHTS}> {
+    return array<f32, ${MAX_LIGHTS}>(${new Array(MAX_LIGHTS).fill("1.0").join(", ")});
+}` : "");
+    const helperSources = /* @__PURE__ */ new Map();
+    for (const s of [state.vertex, state.fragment]) {
+      for (const [k, v] of s.helpers) {
+        const existing2 = helperSources.get(k);
+        if (existing2 !== void 0 && existing2 !== v) {
+          throw new Error(`NodeMaterial: helper key "${k}" registered with conflicting source bodies`);
+        }
+        helperSources.set(k, v);
+      }
+    }
+    const vertexIn = buildVertexIn(state);
+    const vertexOut = buildVertexOut(state);
+    const fragmentOut = !mrt && !noColorOutput && state.usesFragDepth ? `struct FragmentOut {
+    @location(0) color: vec4<f32>,
+    @builtin(frag_depth) fragDepth: f32,
+};` : "";
+    const wgslParts = ["// Auto-generated by NodeMaterial \u2014 DO NOT EDIT", SCENE_UBO_WGSL, buildMeshStruct()];
+    if (nodeUbo) {
+      wgslParts.push(nodeUbo.struct);
+    }
+    if (textureWgslDecls.length > 0) {
+      wgslParts.push(textureWgslDecls.join("\n"));
+    }
+    if (lightsWgslDecls) {
+      wgslParts.push(lightsWgslDecls);
+    }
+    if (morphWgslDecls.length > 0) {
+      wgslParts.push(morphWgslDecls.join("\n"));
+    }
+    if (envWgslDecls) {
+      wgslParts.push(envWgslDecls);
+    }
+    wgslParts.push(vertexIn);
+    wgslParts.push(vertexOut);
+    if (fragmentOut) {
+      wgslParts.push(fragmentOut);
+    }
+    if (mrt) {
+      wgslParts.push(mrt._struct);
+    }
+    if (shadowWgslDecls) {
+      wgslParts.push(shadowWgslDecls);
+    }
+    if (_esmShadowParamsBinding !== null) {
+      wgslParts.push(
+        `struct NmeShadowParams { biasAndScale: vec4<f32>, depthValues: vec4<f32> };
+@group(1) @binding(${_esmShadowParamsBinding}) var<uniform> nmeShadowParams: NmeShadowParams;`
+      );
+    }
+    if (_geomUbo) {
+      wgslParts.push(_geomUbo._wgsl);
+    }
+    if (shadowFragmentHelper.length > 0) {
+      wgslParts.push(shadowFragmentHelper);
+    }
+    for (const src of helperSources.values()) {
+      wgslParts.push(src);
+    }
+    const vsSig = state.usesMorphTargets ? `(in: VertexIn, @builtin(vertex_index) vertexIndex: u32)` : `(in: VertexIn)`;
+    wgslParts.push(
+      `@vertex
+fn vs_main${vsSig} -> VertexOut {
+    var out: VertexOut;
+    var ${SENTINEL_VTX_OUTPUT}: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+${indent(vertexBody)}
+` + (!shadowOutput && shadowVertexInject.length > 0 ? `    ${shadowVertexInject}
+` : ``) + `    out.position = ${SENTINEL_VTX_OUTPUT};
+    return out;
+}`
+    );
+    const fsReturnType = mrt ? mrt._fsReturnType : noColorOutput ? "" : state.usesFragDepth && !esmShadowOutput ? " -> FragmentOut" : " -> @location(0) vec4<f32>";
+    const fragDepthDecl = !mrt && (noColorOutput || esmShadowOutput || state.usesFragDepth) ? `    var ${SENTINEL_FRAG_DEPTH}: f32 = in.position.z;
+` : "";
+    const fsReturn = mrt ? mrt._fsReturn : noColorOutput ? "" : esmShadowOutput ? `${indent(esmShadowDepthCode)}
+` : state.usesFragDepth ? `    return FragmentOut(${SENTINEL_FRAG_OUTPUT}, ${SENTINEL_FRAG_DEPTH});
+` : `    return ${SENTINEL_FRAG_OUTPUT};
+`;
+    wgslParts.push(
+      `@fragment
+fn fs_main(in: VertexOut, @builtin(front_facing) ${SENTINEL_FRONT_FACING}: bool)${fsReturnType} {
+    var ${SENTINEL_FRAG_OUTPUT}: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+` + fragDepthDecl + `${indent(fragmentBody)}
+` + fsReturn + `}`
+    );
+    const rawWgsl = wgslParts.join("\n\n");
+    const _wgsl = rawWgsl.replaceAll("_NME_CAMERA_POS_", "scene.vEyePosition.xyz").replaceAll("_NME_FOG_PARAMS_", "scene.vFogInfos").replaceAll("sceneU.", "scene.").replaceAll(SENTINEL_FRAG_COORD, "in.position").replaceAll(SENTINEL_SCREEN_SIZE, "vec2<f32>(scene.vFogColor.w, scene._envPad0)");
+    const alphaMode = opts._alphaMode ?? 0;
+    const depthFormat = opts._depthStencilFormat ?? "depth24plus-stencil8";
+    const cacheKey = `${_wgsl}|${_format}|${depthFormat}|${_msaaSamples}|${opts._backFaceCulling !== false ? 1 : 0}|${alphaMode}|${mrt ? mrt._cacheKey : noColorOutput ? 1 : esmShadowOutput ? 2 : 0}`;
+    const cache = getCache(_engine);
+    const existing = cache.get(cacheKey);
+    if (existing) {
+      return existing;
+    }
+    const blend = alphaModeToBlend(alphaMode);
+    const depthWriteEnabled = blend === void 0;
+    const sceneBGL = getSceneBindGroupLayout(_engine);
+    const meshBglEntries = [{ binding: 0, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } }];
+    if (_nodeUboBinding !== null) {
+      meshBglEntries.push({ binding: _nodeUboBinding, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } });
+    }
+    for (const tb of _textureBindings) {
+      meshBglEntries.push({ binding: tb._texBinding, visibility: SS.VERTEX | SS.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d" } });
+      meshBglEntries.push({ binding: tb._sampBinding, visibility: SS.VERTEX | SS.FRAGMENT, sampler: { type: "filtering" } });
+    }
+    if (_morphBindings !== null) {
+      meshBglEntries.push({
+        binding: _morphBindings._textureBinding,
+        visibility: SS.VERTEX,
+        texture: { sampleType: "unfilterable-float", viewDimension: "2d" }
+      });
+      meshBglEntries.push({
+        binding: _morphBindings._uboBinding,
+        visibility: SS.VERTEX,
+        buffer: { type: "uniform", minBindingSize: 32 }
+      });
+    }
+    if (_envBindings) {
+      meshBglEntries.push(...envBglEntries);
+    }
+    if (shadowEmit) {
+      meshBglEntries.push(...shadowEmit._bglEntries);
+    }
+    if (_esmShadowParamsBinding !== null) {
+      meshBglEntries.push({ binding: _esmShadowParamsBinding, visibility: SS.FRAGMENT, buffer: { type: "uniform" } });
+    }
+    if (_geomUbo) {
+      meshBglEntries.push(_geomUbo._bglEntry);
+    }
+    const _meshBGL = device.createBindGroupLayout({ label: "node-mesh", entries: meshBglEntries });
+    const _vertexBuffers = state.vertexAttributes.map((a, i) => ({
+      arrayStride: a._arrayStride,
+      stepMode: a._stepMode ?? "vertex",
+      attributes: [{ format: a._gpuFormat, offset: a._offset ?? 0, shaderLocation: i }]
+    }));
+    const shaderModule2 = device.createShaderModule({ label: "node-material", code: _wgsl });
+    const _pipeline = mrt ? mrt._buildPipeline(device, {
+      _shaderModule: shaderModule2,
+      _sceneBGL: sceneBGL,
+      _meshBGL,
+      _vertexBuffers,
+      _depthFormat: depthFormat,
+      _depthCompare: opts._depthCompare ?? REVERSE_DEPTH_COMPARE,
+      _msaaSamples
+    }) : device.createRenderPipeline(
+      noColorOutput ? {
+        label: "node-material-depth",
+        layout: device.createPipelineLayout({ bindGroupLayouts: [sceneBGL, _meshBGL] }),
+        vertex: { module: shaderModule2, entryPoint: "vs_main", buffers: _vertexBuffers },
+        fragment: { module: shaderModule2, entryPoint: "fs_main", targets: [] },
+        depthStencil: { format: depthFormat, depthCompare: opts._depthCompare ?? REVERSE_DEPTH_COMPARE, depthWriteEnabled: true },
+        multisample: { count: _msaaSamples },
+        primitive: { topology: "triangle-list", cullMode: opts._backFaceCulling !== false ? "back" : "none" }
+      } : {
+        ...createDefaultPipelineDescriptor({
+          _label: "node-material",
+          _engine,
+          _bgls: [sceneBGL, _meshBGL],
+          _vertModule: shaderModule2,
+          _fragModule: shaderModule2,
+          _vertexBuffers,
+          _format,
+          _depthStencilFormat: opts._depthStencilFormat,
+          _depthCompare: opts._depthCompare,
+          _msaaSamples,
+          _cullMode: opts._backFaceCulling !== false ? "back" : "none",
+          _blend: esmShadowOutput ? void 0 : blend,
+          _depthWriteEnabled: esmShadowOutput || depthWriteEnabled
+        }),
+        vertex: { module: shaderModule2, entryPoint: "vs_main", buffers: _vertexBuffers },
+        fragment: { module: shaderModule2, entryPoint: "fs_main", targets: [!esmShadowOutput && blend ? { format: _format, blend } : { format: _format }] }
+      }
+    );
+    const result = {
+      _wgsl,
+      _pipeline,
+      _meshBGL,
+      _nodeUboSize,
+      _nodeUboOffsets,
+      _nodeUboBinding,
+      _textureBindings,
+      _morphBindings,
+      _envBindings,
+      _shadowBindings,
+      _usesClipPlanes: state.usesClipPlanes,
+      _usesMeshAttributeFlags: state.usesMeshAttributeExists,
+      _esmShadowParamsBinding,
+      _geometryGpBinding
+    };
+    cache.set(cacheKey, result);
+    return result;
+  }
+  function alphaModeToBlend(mode) {
+    switch (mode) {
+      case 1:
+        return {
+          color: { srcFactor: "src-alpha", dstFactor: "one", operation: "add" },
+          alpha: { srcFactor: "one", dstFactor: "one", operation: "add" }
+        };
+      case 2:
+        return {
+          color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+          alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+        };
+      case 7:
+        return {
+          color: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
+          alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+        };
+      default:
+        return void 0;
+    }
+  }
+  var SENTINEL_FRAG_OUTPUT, SENTINEL_FRAG_DEPTH, SENTINEL_VTX_OUTPUT, SENTINEL_FRONT_FACING, SENTINEL_FRAG_COORD, SENTINEL_SCREEN_SIZE, _cache, _cachedDevice4;
+  var init_node_pipeline = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-pipeline.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_render_target();
+      init_scene_helpers();
+      init_scene_helpers();
+      init_scene_uniforms2();
+      init_ubo_layout();
+      init_types();
+      SENTINEL_FRAG_OUTPUT = "_NME_FRAG_OUTPUT_";
+      SENTINEL_FRAG_DEPTH = "_NME_FRAG_DEPTH_";
+      SENTINEL_VTX_OUTPUT = "_NME_VTX_OUTPUT_";
+      SENTINEL_FRONT_FACING = "_NME_FRONT_FACING_";
+      SENTINEL_FRAG_COORD = "_NME_FRAG_COORD_";
+      SENTINEL_SCREEN_SIZE = "_NME_SCREEN_SIZE_";
+      _cache = null;
+      _cachedDevice4 = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-snippet.ts
+  var node_snippet_exports = {};
+  __export(node_snippet_exports, {
+    fetchSnippetSource: () => fetchSnippetSource
+  });
+  async function fetchSnippetSource(snippetId, server = DEFAULT_SNIPPET_SERVER) {
+    const [id, version] = snippetId.split("#");
+    const url = version ? `${server}/${id}/${version}` : `${server}/${id}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`NodeMaterial: snippet fetch failed (${resp.status}) for ${url}`);
+    }
+    const outer = await resp.json();
+    if (!outer.jsonPayload) {
+      throw new Error(`NodeMaterial: snippet "${snippetId}" has no jsonPayload`);
+    }
+    const inner = JSON.parse(outer.jsonPayload);
+    if (!inner.nodeMaterial) {
+      throw new Error(`NodeMaterial: snippet "${snippetId}" has no nodeMaterial`);
+    }
+    return JSON.parse(inner.nodeMaterial);
+  }
+  var DEFAULT_SNIPPET_SERVER;
+  var init_node_snippet = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-snippet.ts"() {
+      "use strict";
+      DEFAULT_SNIPPET_SERVER = "https://snippet.babylonjs.com";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-env.ts
+  var node_env_exports = {};
+  __export(node_env_exports, {
+    emitEnv: () => emitEnv,
+    pushEnvBindGroupEntries: () => pushEnvBindGroupEntries
+  });
+  function emitEnv(startBinding) {
+    const iblTexBinding = startBinding;
+    const iblSampBinding = startBinding + 1;
+    const brdfTexBinding = startBinding + 2;
+    const brdfSampBinding = startBinding + 3;
+    const wgslDecls = [
+      `@group(1) @binding(${iblTexBinding}) var nmeIblTexture: texture_cube<f32>;`,
+      `@group(1) @binding(${iblSampBinding}) var nmeIblSampler: sampler;`,
+      `@group(1) @binding(${brdfTexBinding}) var nmeBrdfLUT: texture_2d<f32>;`,
+      `@group(1) @binding(${brdfSampBinding}) var nmeBrdfSampler: sampler;`
+    ].join("\n");
+    const bglEntries = [
+      { binding: iblTexBinding, visibility: SS.FRAGMENT, texture: { sampleType: "float", viewDimension: "cube" } },
+      { binding: iblSampBinding, visibility: SS.FRAGMENT, sampler: { type: "filtering" } },
+      { binding: brdfTexBinding, visibility: SS.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d" } },
+      { binding: brdfSampBinding, visibility: SS.FRAGMENT, sampler: { type: "filtering" } }
+    ];
+    return {
+      bindings: { _iblTexture: iblTexBinding, _iblSampler: iblSampBinding, _brdfLUT: brdfTexBinding, _brdfSampler: brdfSampBinding },
+      wgslDecls,
+      bglEntries,
+      bindingCount: 4
+    };
+  }
+  function pushEnvBindGroupEntries(scene, envBindings, entries) {
+    const env = scene._envTextures;
+    if (!env) {
+      throw new Error("NodeMaterial: PBR/Reflection block requires scene environment but scene._envTextures is unset. Call loadEnvironment() before registerScene().");
+    }
+    entries.push({ binding: envBindings._iblTexture, resource: env.specularCubeView });
+    entries.push({ binding: envBindings._iblSampler, resource: env.cubeSampler });
+    entries.push({ binding: envBindings._brdfLUT, resource: env.brdfLutView });
+    entries.push({ binding: envBindings._brdfSampler, resource: env.brdfSampler });
+  }
+  var init_node_env = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-env.ts"() {
+      "use strict";
+      init_gpu_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-shadow.ts
+  var node_shadow_exports = {};
+  __export(node_shadow_exports, {
+    emitShadow: () => emitShadow
+  });
+  function emitShadow(shadowLights, startBinding, varyings) {
+    const _bindings = [];
+    const wgslDecls = [];
+    const _bglEntries = [];
+    for (const sl of shadowLights) {
+      const suf = `_${sl.lightIndex}`;
+      if (!varyings.some((v) => v._name === `vPosFromLight${suf}`)) {
+        varyings.push({ _name: `vPosFromLight${suf}`, _type: "vec4<f32>" });
+      }
+      if (!varyings.some((v) => v._name === `vDepthMetric${suf}`)) {
+        varyings.push({ _name: `vDepthMetric${suf}`, _type: "f32" });
+      }
+    }
+    const vertLines = [`let _shadowWp4 = meshU.world * vec4<f32>(in.position, 1.0);`];
+    const dispatchLines = [`var _sf = ${SHADOW_FACTORS_ONE4};`];
+    let nextBinding = startBinding;
+    for (const sl of shadowLights) {
+      const suf = `_${sl.lightIndex}`;
+      const _lightIndex = sl.lightIndex;
+      const _texBinding = nextBinding++;
+      const _sampBinding = nextBinding++;
+      const _uboBinding = nextBinding++;
+      const _shadowType = sl.shadowType;
+      _bindings.push({ _lightIndex, _texBinding, _sampBinding, _uboBinding, _shadowType });
+      wgslDecls.push(
+        `struct shadowInfo${suf}Uniforms { lightMatrix: mat4x4<f32>, depthValues: vec4<f32>, shadowsInfo: vec4<f32> };`,
+        `@group(1) @binding(${_uboBinding}) var<uniform> shadowInfo${suf}: shadowInfo${suf}Uniforms;`
+      );
+      if (sl.shadowType === "pcf") {
+        wgslDecls.push(
+          `@group(1) @binding(${_texBinding}) var shadowTex${suf}: texture_depth_2d;`,
+          `@group(1) @binding(${_sampBinding}) var shadowComp${suf}: sampler_comparison;`,
+          `fn computeShadowPCF${suf}(posFromLight: vec4<f32>, depthMetric: f32, darkness: f32, mapSz: f32, invMapSz: f32) -> f32 {
+    let clipSpace = posFromLight.xyz / posFromLight.w;
+    let uv = vec2<f32>(0.5 * clipSpace.x + 0.5, 0.5 - 0.5 * clipSpace.y);
+    if (depthMetric < 0.0 || depthMetric > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+    let depthRef = clamp(clipSpace.z, 0.0, 1.0);
+    var tc = uv * mapSz + 0.5;
+    let st = fract(tc);
+    let base = (floor(tc) - 0.5) * invMapSz;
+    let uvw0 = 4.0 - 3.0 * st;
+    let uvw1 = vec2<f32>(7.0);
+    let uvw2 = 1.0 + 3.0 * st;
+    let u = vec3<f32>((3.0 - 2.0 * st.x) / uvw0.x - 2.0, (3.0 + st.x) / uvw1.x, st.x / uvw2.x + 2.0) * invMapSz;
+    let v = vec3<f32>((3.0 - 2.0 * st.y) / uvw0.y - 2.0, (3.0 + st.y) / uvw1.y, st.y / uvw2.y + 2.0) * invMapSz;
+    var sh = 0.0;
+    sh += uvw0.x * uvw0.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[0], v[0]), depthRef);
+    sh += uvw1.x * uvw0.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[1], v[0]), depthRef);
+    sh += uvw2.x * uvw0.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[2], v[0]), depthRef);
+    sh += uvw0.x * uvw1.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[0], v[1]), depthRef);
+    sh += uvw1.x * uvw1.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[1], v[1]), depthRef);
+    sh += uvw2.x * uvw1.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[2], v[1]), depthRef);
+    sh += uvw0.x * uvw2.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[0], v[2]), depthRef);
+    sh += uvw1.x * uvw2.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[1], v[2]), depthRef);
+    sh += uvw2.x * uvw2.y * textureSampleCompareLevel(shadowTex${suf}, shadowComp${suf}, base + vec2<f32>(u[2], v[2]), depthRef);
+    sh /= 144.0;
+    return mix(darkness, 1.0, sh);
+}`
+        );
+        dispatchLines.push(
+          `_sf[${sl.lightIndex}] = computeShadowPCF${suf}(input.vPosFromLight${suf}, input.vDepthMetric${suf}, shadowInfo${suf}.shadowsInfo.x, shadowInfo${suf}.shadowsInfo.y, shadowInfo${suf}.shadowsInfo.z);`
+        );
+        _bglEntries.push(
+          { binding: _texBinding, visibility: SS.FRAGMENT, texture: { sampleType: "depth", viewDimension: "2d" } },
+          { binding: _sampBinding, visibility: SS.FRAGMENT, sampler: { type: "comparison" } }
+        );
+      } else {
+        wgslDecls.push(
+          `@group(1) @binding(${_texBinding}) var shadowTex${suf}: texture_2d<f32>;`,
+          `@group(1) @binding(${_sampBinding}) var shadowSamp${suf}: sampler;`,
+          `fn computeFallOff${suf}(value: f32, clipSpace: vec2<f32>, frustumEdgeFalloff: f32) -> f32 {
+    let mask = smoothstep(1.0 - frustumEdgeFalloff, 1.00000012, clamp(dot(clipSpace, clipSpace), 0.0, 1.0));
+    return mix(value, 1.0, mask);
+}
+fn computeShadowESM${suf}(posFromLight: vec4<f32>, depthMetric: f32, darkness: f32, depthScale: f32, frustumEdgeFalloff: f32) -> f32 {
+    let clipSpace = posFromLight.xyz / posFromLight.w;
+    let uv = vec2<f32>(0.5 * clipSpace.x + 0.5, 0.5 - 0.5 * clipSpace.y);
+    if (depthMetric < 0.0 || depthMetric > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) { return 1.0; }
+    let shadowPixelDepth = clamp(depthMetric, 0.0, 1.0);
+    let shadowMapSample = textureSampleLevel(shadowTex${suf}, shadowSamp${suf}, uv, 0.0).x;
+    let esm = 1.0 - clamp(exp(min(87.0, depthScale * shadowPixelDepth)) * shadowMapSample, 0.0, 1.0 - darkness);
+    return computeFallOff${suf}(esm, clipSpace.xy, frustumEdgeFalloff);
+}`
+        );
+        dispatchLines.push(
+          `_sf[${sl.lightIndex}] = computeShadowESM${suf}(input.vPosFromLight${suf}, input.vDepthMetric${suf}, shadowInfo${suf}.shadowsInfo.x, shadowInfo${suf}.shadowsInfo.z, shadowInfo${suf}.shadowsInfo.w);`
+        );
+        _bglEntries.push(
+          { binding: _texBinding, visibility: SS.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d" } },
+          { binding: _sampBinding, visibility: SS.FRAGMENT, sampler: { type: "filtering" } }
+        );
+      }
+      vertLines.push(
+        `out.vPosFromLight${suf} = shadowInfo${suf}.lightMatrix * _shadowWp4;`,
+        `out.vDepthMetric${suf} = (out.vPosFromLight${suf}.z + shadowInfo${suf}.depthValues.x) / shadowInfo${suf}.depthValues.y;`
+      );
+      _bglEntries.push({
+        binding: _uboBinding,
+        visibility: SS.VERTEX | SS.FRAGMENT,
+        buffer: { type: "uniform", minBindingSize: 96 }
+      });
+    }
+    dispatchLines.push(`for (var _i = 0u; _i < ${MAX_LIGHTS}u; _i++) { _sf[_i] = mix(1.0, _sf[_i], meshU.receivesShadow.x); }`);
+    dispatchLines.push(`return _sf;`);
+    return {
+      _bindings,
+      _wgslDecls: wgslDecls.join("\n"),
+      _fragmentHelper: `fn nme_computeShadowFactors(input: VertexOut) -> ${SHADOW_FACTORS_TYPE} {
+    ${dispatchLines.join("\n    ")}
+}`,
+      _vertexInject: vertLines.join("\n    "),
+      _bglEntries,
+      _bindingCount: shadowLights.length * 3
+    };
+  }
+  var SHADOW_FACTORS_TYPE, SHADOW_FACTORS_ONE4;
+  var init_node_shadow = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-shadow.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_types();
+      SHADOW_FACTORS_TYPE = `array<f32, ${MAX_LIGHTS}>`;
+      SHADOW_FACTORS_ONE4 = `${SHADOW_FACTORS_TYPE}(${new Array(MAX_LIGHTS).fill("1.0").join(", ")})`;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-flags.ts
+  var NODE_NO_COLOR_OUTPUT, NODE_ESM_SHADOW_OUTPUT, NODE_GEOMETRY_OUTPUT;
+  var init_node_flags = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-flags.ts"() {
+      "use strict";
+      NODE_NO_COLOR_OUTPUT = 1 << 0;
+      NODE_ESM_SHADOW_OUTPUT = 1 << 1;
+      NODE_GEOMETRY_OUTPUT = 1 << 2;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-renderable.ts
+  var node_renderable_exports = {};
+  __export(node_renderable_exports, {
+    buildNodeMeshRenderables: () => buildNodeMeshRenderables,
+    getAttrBuffer: () => getAttrBuffer,
+    writeAttributeFlags: () => writeAttributeFlags
+  });
+  function getEmptyMorph(engine) {
+    const cached = emptyMorphByEngine.get(engine);
+    if (cached) {
+      return cached;
+    }
+    const texture = engine._device.createTexture({
+      label: "node-morph-empty",
+      size: [1, 1],
+      format: "rgba32float",
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST
+    });
+    engine._device.queue.writeTexture({ texture }, new F32([0, 0, 0, 0]).buffer, { bytesPerRow: 16 }, { width: 1, height: 1 });
+    const ubo = new ArrayBuffer(32);
+    const u32 = new U32(ubo, 16, 4);
+    u32[0] = 0;
+    u32[1] = 1;
+    u32[2] = 1;
+    const weightsBuffer = engine._device.createBuffer({ label: "node-morph-empty-ubo", size: 32, usage: BU.UNIFORM | BU.COPY_DST });
+    engine._device.queue.writeBuffer(weightsBuffer, 0, new U8(ubo));
+    const entry = { texture, weightsBuffer };
+    emptyMorphByEngine.set(engine, entry);
+    return entry;
+  }
+  function buildNodeMeshRenderables(scene, meshes, materialOverride) {
+    const engine = scene.surface.engine;
+    const device = engine._device;
+    const byMaterial = /* @__PURE__ */ new Map();
+    for (const m of meshes) {
+      const mat = materialOverride ?? m.material;
+      let list = byMaterial.get(mat);
+      if (!list) {
+        list = [];
+        byMaterial.set(mat, list);
+      }
+      list.push(m);
+    }
+    const renderables = [];
+    for (const [material, matMeshes] of byMaterial) {
+      const featureFlags = material._renderFeatures?.features ?? 0;
+      const noColorOutput = (featureFlags & NODE_NO_COLOR_OUTPUT) !== 0;
+      const esmShadowOutput = (featureFlags & NODE_ESM_SHADOW_OUTPUT) !== 0;
+      const shadowOutput = noColorOutput || esmShadowOutput;
+      const compile = shadowOutput ? compileNodePipeline(material._state, material._vertexBody, material._fragmentBody, {
+        _engine: engine,
+        _format: esmShadowOutput ? "rgba16float" : engine.format,
+        _depthStencilFormat: "depth32float",
+        _depthCompare: "less-equal",
+        _msaaSamples: 1,
+        _backFaceCulling: material._graph.backFaceCulling,
+        _noColorOutput: noColorOutput,
+        _esmShadowOutput: esmShadowOutput,
+        _esmShadowDepthCode: esmShadowOutput ? material._esmShadowDepthCode : void 0,
+        _alphaMode: esmShadowOutput ? 0 : void 0,
+        // The shared fragment body still references env IBL/BRDF samplers
+        // (e.g. nmeBrdfLUT) even in the no-color shadow-depth variant, so we
+        // must emit the env decls + BGL entries here too; otherwise WGSL fails
+        // to resolve those identifiers. _envEmitter is undefined for non-env
+        // materials (state.usesEnv === false), leaving them unaffected.
+        _envEmitter: material._envHelpers?.emitEnv
+      }) : material._compile;
+      const meshBGL = compile._meshBGL;
+      let nodeUBO = null;
+      if (compile._nodeUboBinding !== null && compile._nodeUboSize > 0) {
+        nodeUBO = device.createBuffer({ label: "node-ubo", size: compile._nodeUboSize, usage: BU.UNIFORM | BU.COPY_DST });
+        writeNodeUBO(engine, nodeUBO, material);
+        material._nodeUBO = nodeUBO;
+      }
+      const _packMeshWorld = engine._makePackMeshWorld?.(scene) ?? packMat4IntoF32;
+      const packets = [];
+      for (const _mesh of matMeshes) {
+        const meshUboBytes = 96 + 16 * Math.ceil(MAX_LIGHTS / 4);
+        const _meshUBO = device.createBuffer({ label: "node-mesh-ubo", size: meshUboBytes + 15 & ~15, usage: BU.UNIFORM | BU.COPY_DST });
+        const _meshScratch = new F32((meshUboBytes + 15 & ~15) / 4);
+        _packMeshWorld(_meshScratch, _mesh.worldMatrix, 0, 0);
+        const recv = _mesh.receiveShadows ? 1 : 0;
+        _meshScratch[16] = recv;
+        if (compile._usesMeshAttributeFlags) {
+          writeAttributeFlags(_mesh, _meshScratch);
+        }
+        writeMeshLightSelection(_mesh, scene.lights, _meshScratch.subarray(4));
+        device.queue.writeBuffer(_meshUBO, 0, _meshScratch);
+        const entries = [{ binding: 0, resource: { buffer: _meshUBO } }];
+        if (nodeUBO) {
+          entries.push({ binding: compile._nodeUboBinding, resource: { buffer: nodeUBO } });
+        }
+        for (const tb of compile._textureBindings) {
+          const slot = material._textureSlots.get(tb._name);
+          const tex = slot?.current;
+          if (!tex) {
+            throw new Error(
+              `NodeMaterial: texture binding "${tb._name}" not set. Provide it via options.textures or material.inputs["${tb._name}"].texture before the first render.`
+            );
+          }
+          entries.push({ binding: tb._texBinding, resource: tex.view });
+          entries.push({ binding: tb._sampBinding, resource: tex.sampler });
+        }
+        if (compile._morphBindings !== null) {
+          const mt = _mesh.morphTargets ?? getEmptyMorph(engine);
+          entries.push({ binding: compile._morphBindings._textureBinding, resource: mt.texture.createView() });
+          entries.push({ binding: compile._morphBindings._uboBinding, resource: { buffer: mt.weightsBuffer } });
+        }
+        if (compile._envBindings) {
+          material._envHelpers.pushEnvBindGroupEntries(scene, compile._envBindings, entries);
+        }
+        for (let si = 0; si < compile._shadowBindings.length; si++) {
+          const sb = compile._shadowBindings[si];
+          const sg = material._shadowGenerators[si];
+          if (!sg) {
+            throw new Error(`NodeMaterial: material requires shadow generator #${si} but none was supplied to parseNodeMaterialFromSnippet({ shadowGenerators }).`);
+          }
+          entries.push({ binding: sb._texBinding, resource: sg._depthTexture.createView() });
+          entries.push({ binding: sb._sampBinding, resource: sg._depthSampler });
+          entries.push({ binding: sb._uboBinding, resource: { buffer: sg._shadowUBO } });
+        }
+        if (compile._esmShadowParamsBinding !== null) {
+          entries.push({
+            binding: compile._esmShadowParamsBinding,
+            resource: { buffer: material._esmShadowParamsUBO }
+          });
+        }
+        const _meshBG = device.createBindGroup({ label: "node-mesh-bg", layout: meshBGL, entries });
+        packets.push({
+          _mesh,
+          _meshUBO,
+          _meshBG,
+          _meshScratch,
+          _lastWorldVersion: _mesh.worldMatrixVersion,
+          _lastReceivesShadow: recv,
+          _lastLightsCount: scene.lights.length
+        });
+      }
+      const attrNames = material._vertexAttrNames;
+      const updatePacketUBO = (pkt) => {
+        const recv = pkt._mesh.receiveShadows ? 1 : 0;
+        const worldVersion = pkt._mesh.worldMatrixVersion;
+        const worldChanged = worldVersion !== pkt._lastWorldVersion;
+        const recvChanged = recv !== pkt._lastReceivesShadow;
+        const lightsChanged = scene.lights.length !== pkt._lastLightsCount;
+        if (worldChanged || recvChanged || lightsChanged) {
+          _packMeshWorld(pkt._meshScratch, pkt._mesh.worldMatrix, 0, 0);
+          pkt._meshScratch[16] = recv;
+          if (compile._usesMeshAttributeFlags) {
+            writeAttributeFlags(pkt._mesh, pkt._meshScratch);
+          }
+          writeMeshLightSelection(pkt._mesh, scene.lights, pkt._meshScratch.subarray(4));
+          device.queue.writeBuffer(pkt._meshUBO, 0, pkt._meshScratch);
+          pkt._lastWorldVersion = worldVersion;
+          pkt._lastReceivesShadow = recv;
+          pkt._lastLightsCount = scene.lights.length;
+        }
+      };
+      const updateNodeUBO = () => {
+        if (nodeUBO && material._uboDirty) {
+          material._uboDirty = false;
+          writeNodeUBO(engine, nodeUBO, material);
+        }
+      };
+      const drawPacket = (pass, pkt) => {
+        const g = pkt._mesh._gpu;
+        for (let i = 0; i < attrNames.length; i++) {
+          const buf = getAttrBuffer(engine, g, attrNames[i]);
+          pass.setVertexBuffer(i, buf);
+        }
+        pass.setIndexBuffer(g.indexBuffer, g.indexFormat);
+        pass.setBindGroup(1, pkt._meshBG);
+        pass.drawIndexed(g.indexCount);
+      };
+      const isTransparent = !noColorOutput && !esmShadowOutput && material._needsAlphaBlending;
+      if (isTransparent) {
+        for (const pkt of packets) {
+          const wm = pkt._mesh.worldMatrix;
+          const cx = pkt._mesh.position?.x ?? wm[12];
+          const cy = pkt._mesh.position?.y ?? wm[13];
+          const cz = pkt._mesh.position?.z ?? wm[14];
+          const sortCenter = [cx, cy, cz];
+          const _baseUpdate = () => {
+            updatePacketUBO(pkt);
+            updateNodeUBO();
+            const m = pkt._mesh.worldMatrix;
+            sortCenter[0] = m[12];
+            sortCenter[1] = m[13];
+            sortCenter[2] = m[14];
+          };
+          const _invalidate = () => {
+            pkt._lastWorldVersion = -1;
+          };
+          const update = engine._wrapRenderableForFO?.(_baseUpdate, scene, _invalidate) ?? _baseUpdate;
+          const draw = (pass) => {
+            drawPacket(pass, pkt);
+            return 1;
+          };
+          const rTrans = {
+            order: 200,
+            isTransparent: true,
+            mesh: pkt._mesh,
+            _worldCenter: sortCenter,
+            bind() {
+              return { renderable: rTrans, pipeline: compile._pipeline, update, draw };
+            }
+          };
+          renderables.push(rTrans);
+        }
+      } else {
+        const _baseUpdate = () => {
+          for (const pkt of packets) {
+            updatePacketUBO(pkt);
+          }
+          updateNodeUBO();
+        };
+        const _invalidate = () => {
+          for (const pkt of packets) {
+            pkt._lastWorldVersion = -1;
+          }
+        };
+        const update = engine._wrapRenderableForFO?.(_baseUpdate, scene, _invalidate) ?? _baseUpdate;
+        const draw = (pass) => {
+          let draws = 0;
+          for (const pkt of packets) {
+            drawPacket(pass, pkt);
+            draws++;
+          }
+          return draws;
+        };
+        const rOpaque = {
+          order: 100,
+          isTransparent: false,
+          bind() {
+            return { renderable: rOpaque, pipeline: compile._pipeline, update, draw };
+          }
+        };
+        renderables.push(rOpaque);
+      }
+    }
+    const rebuildSingle = (s, mesh, override) => {
+      return buildNodeMeshRenderables(s, [mesh], override).renderables[0];
+    };
+    return { renderables, rebuildSingle };
+  }
+  function getZeroAttrBuffer(engine, gpu, name) {
+    let cache = zeroAttrCache.get(gpu);
+    if (!cache) {
+      cache = /* @__PURE__ */ new Map();
+      zeroAttrCache.set(gpu, cache);
+    }
+    const existing = cache.get(name);
+    if (existing) {
+      return existing;
+    }
+    const vertexCount = gpu.positionBuffer.size / 12;
+    const stride = name === "uv" || name === "uv2" ? 8 : name === "normal" ? 12 : name === "tangent" || name === "color" ? 16 : 16;
+    const buf = engine._device.createBuffer({ label: `node-zero-${name}`, size: vertexCount * stride, usage: BU.VERTEX | BU.COPY_DST });
+    cache.set(name, buf);
+    return buf;
+  }
+  function getAttrBuffer(engine, gpu, name) {
+    switch (name) {
+      case "position":
+        return gpu.positionBuffer;
+      case "normal":
+        return gpu.normalBuffer;
+      case "uv":
+        return gpu.uvBuffer;
+      case "uv2":
+        return gpu.uv2Buffer ?? getZeroAttrBuffer(engine, gpu, "uv2");
+      case "tangent":
+        return gpu.tangentBuffer ?? getZeroAttrBuffer(engine, gpu, "tangent");
+      case "color":
+        return gpu.colorBuffer ?? getZeroAttrBuffer(engine, gpu, "color");
+      default:
+        throw new Error(`NodeMaterial: unsupported attribute "${name}"`);
+    }
+  }
+  function writeAttributeFlags(mesh, scratch) {
+    const gpu = mesh._gpu;
+    scratch[17] = gpu.hasUv === false ? 0 : 1;
+    scratch[18] = gpu.hasTangent ? 1 : 0;
+    scratch[19] = gpu.hasColor ? 1 : 0;
+  }
+  var emptyMorphByEngine, zeroAttrCache;
+  var init_node_renderable = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-renderable.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_node_material();
+      init_node_pipeline();
+      init_node_flags();
+      init_lights_ubo();
+      init_types();
+      init_pack_mat4_into_f32();
+      emptyMorphByEngine = /* @__PURE__ */ new WeakMap();
+      zeroAttrCache = /* @__PURE__ */ new WeakMap();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-mr-helper-core.ts
+  var pbr_mr_helper_core_exports = {};
+  __export(pbr_mr_helper_core_exports, {
+    buildPbrMrHelperCore: () => buildPbrMrHelperCore
+  });
+  function buildPbrMrHelperCore(request) {
+    if (request.useClearcoat || request.useSheen || request.useRefraction || request.useSubsurface || request.useAnisotropy || request.useIridescence || request.useShAlbedoScaling || request.useCcBump || request.useCcTint || request.useSpecularAA || request.remapClearcoatF0) {
+      throw new Error("NodeMaterial: PBR-MR core helper cannot emit optional PBR feature code");
+    }
+    return HELPER_WGSL6(request.useEnv);
+  }
+  function HELPER_WGSL6(useEnv) {
+    const iblBlock = useEnv ? `
+    let envRot = sceneU.envRotationY;
+    let cosA = cos(envRot); let sinA = sin(envRot);
+    let N_specSrc = N;
+    let R_raw = reflect(-V, N_specSrc);
+    let R = v3(R_raw.x * cosA + R_raw.z * sinA, R_raw.y, -R_raw.x * sinA + R_raw.z * cosA);
+    let N_env = v3(Ng.x * cosA + Ng.z * sinA, Ng.y, -Ng.x * sinA + Ng.z * cosA);
+    let environmentIrradiance = (sceneU.vSphericalL00.xyz
+        + sceneU.vSphericalL1_1.xyz * N_env.y + sceneU.vSphericalL10.xyz * N_env.z + sceneU.vSphericalL11.xyz * N_env.x
+        + sceneU.vSphericalL2_2.xyz * (N_env.y * N_env.x) + sceneU.vSphericalL2_1.xyz * (N_env.y * N_env.z)
+        + sceneU.vSphericalL20.xyz * (3.0 * N_env.z * N_env.z - 1.0) + sceneU.vSphericalL21.xyz * (N_env.z * N_env.x)
+        + sceneU.vSphericalL22.xyz * (N_env.x * N_env.x - N_env.y * N_env.y));
+    let brdfSample = textureSample(nmeBrdfLUT, nmeBrdfSampler, v2(NdotV, rough_c));
+    let envBrdf = brdfSample.rgb;
+    let reflectanceF0Scalar = max(colorF0.r, max(colorF0.g, colorF0.b));
+    let baseSpecEnvReflectance = (colorF90 - v3(reflectanceF0Scalar)) * envBrdf.x + v3(reflectanceF0Scalar) * envBrdf.y;
+    let seo = clamp((NdotVUnclamped + ao_c) * (NdotVUnclamped + ao_c) - 1.0 + ao_c, 0.0, 1.0);
+    let _geoNF = select(-Ng, Ng, dot(Ng, V) > 0.0);
+    let _ehoRefl = reflect(-V, N);
+    let _ehoT = clamp(1.0 + 1.1 * dot(_ehoRefl, _geoNF), 0.0, 1.0);
+    let eho = _ehoT * _ehoT;
+    let _coloredR0 = colorF0;
+    let colorSpecEnvReflectance = ((colorF90 - _coloredR0) * envBrdf.x + _coloredR0 * envBrdf.y) * seo * eho;
+    let energyConservation = 1.0 + _coloredR0 * (1.0 / max(envBrdf.y, 0.001) - 1.0);
+    let maxLod = f32(textureNumLevels(nmeIblTexture) - 1);
+    let cubemapDim = f32(textureDimensions(nmeIblTexture).x);
+    let specLod = log2(cubemapDim * alphaG) * sceneU.vImageInfos.z;
+    var environmentRadiance = textureSampleLevel(nmeIblTexture, nmeIblSampler, R, clamp(specLod, 0.0, maxLod)).rgb;
+    var finalIrradiance = environmentIrradiance * surfaceAlbedo;
+    let finalRadianceScaled = environmentRadiance * colorSpecEnvReflectance * energyConservation;
+    let finalSpecularScaledDirect = specAcc * energyConservation;
+    let finalRefraction = v3(0.0);
+    let refractionOpacity = 1.0;
+    let ssRefractionIrradiance = v3(0.0);
+    finalIrradiance = finalIrradiance * ao_c;
+    r.diffuseInd = finalIrradiance;
+    r.specularInd = finalRadianceScaled;
+    let shFinalIbl = v3(0.0);
+    let shAlbedoScaling: f32 = 1.0;
+    r.lighting = finalIrradiance * shAlbedoScaling + ssRefractionIrradiance * ao_c + (finalRadianceScaled + finalSpecularScaledDirect + diffuseAcc) * shAlbedoScaling + diffuseTransmissionAcc + shDirectAcc + shFinalIbl + finalRefraction;` : `
+    r.diffuseInd = v3(0.0);
+    r.specularInd = v3(0.0);
+    r.lighting = diffuseAcc + diffuseTransmissionAcc + specAcc + shDirectAcc;`;
+    return `alias v2 = vec2<f32>;
+alias v3 = vec3<f32>;
+alias v4 = vec4<f32>;
+struct NmePbrMrResult {
+    lighting: v3,
+    diffuseDir: v3,
+    specularDir: v3,
+    diffuseInd: v3,
+    specularInd: v3,
+    shadow: f32,
+    lumOverAlpha: f32,
+};
+const NME_PBR_PI: f32 = 3.14159265358979323846;
+fn nme_pbr_distGGX(NdotH: f32, alphaG: f32) -> f32 {
+    let a2 = alphaG * alphaG;
+    let d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    return a2 / (NME_PBR_PI * d * d);
+}
+fn nme_pbr_geomGGX(NdotL: f32, NdotV: f32, alphaG: f32) -> f32 {
+    let a2 = alphaG * alphaG;
+    let gl = NdotL * sqrt(NdotV * (NdotV - a2 * NdotV) + a2);
+    let gv = NdotV * sqrt(NdotL * (NdotL - a2 * NdotL) + a2);
+    return 0.5 / max(gl + gv, 0.00001);
+}
+fn nme_pbr_fresSchlick(c: f32, F0: v3, F90: v3) -> v3 {
+    let t = 1.0 - c;
+    let t2 = t * t;
+    return F0 + (F90 - F0) * (t2 * t2 * t);
+}
+fn nme_pbr_diffuseEON(albedo: v3, sigma: f32, NdotL: f32, NdotV: f32, LdotV: f32) -> v3 {
+    return albedo * (1.0 / NME_PBR_PI);
+}
+fn nme_pbr_mr_compute(
+    worldPos: v3, geometricNormal: v3, worldNormal: v3, cameraPos: v3,
+    baseColor: v3, metallic: f32, roughness: f32, ao: f32,
+    ccIntensityIn: f32, ccRoughnessIn: f32, ccIor: f32,
+    ccBumpColor: v3, ccBumpUv: v2,
+    ccTintColor: v3, ccTintAtDistance: f32, ccTintThickness: f32,
+    shIntensityIn: f32, shColorIn: v3, shRoughnessIn: f32,
+    baseIor: f32,
+    refrIntensityIn: f32, refrIor: f32, refrTintAtDistance: f32,
+    ssTintColor: v3, ssThickness: f32,
+    ssTranslucencyIntensityIn: f32, ssDiffusionDist: v3,
+    anisoIntensityIn: f32, anisoDirection: v2, anisoUv: v2,
+    shadowFactors: array<f32, ${MAX_LIGHTS}>
+) -> NmePbrMrResult {
+    var r: NmePbrMrResult;
+    let Ng = normalize(geometricNormal);
+    let N = normalize(worldNormal);
+    let V = normalize(cameraPos - worldPos);
+    let NdotVUnclamped = dot(N, V);
+    let NdotV = abs(NdotVUnclamped) + 0.0000001;
+    let metallic_c = clamp(metallic, 0.0, 1.0);
+    let rough_c = clamp(roughness, 0.0, 1.0);
+    var alphaG = rough_c * rough_c + 0.0005;
+    let AA_factor_x = 0.0;
+    let AA_factor_y = 0.0;
+    let dielectricF0Raw = (baseIor - 1.0) / (baseIor + 1.0);
+    let dielectricF0Scalar = dielectricF0Raw * dielectricF0Raw;
+    let dielectricF0 = v3(dielectricF0Scalar);
+    var surfaceAlbedo = baseColor * (1.0 - metallic_c) * (1.0 - dielectricF0Scalar);
+    let colorF0 = mix(dielectricF0, baseColor, metallic_c);
+    let colorF90 = v3(1.0);
+    let ao_c = clamp(ao, 0.0, 1.0);
+    let directRoughness = max(rough_c, AA_factor_x);
+    let directAlphaG = directRoughness * directRoughness + 0.0005;
+    let anisoT = v3(1.0, 0.0, 0.0);
+    let anisoB = v3(0.0, 0.0, 1.0);
+    let aniAlphaTB = v2(alphaG, alphaG);
+    let aniN = N;
+    let ccDirectSpecAcc = v3(0.0);
+    let directSpecR0 = colorF0;
+    let ccNormalW = N;
+    let ccNdotV: f32 = 0.0;
+    let shDirectAcc = v3(0.0);
+    let translucencyIntensity = 0.0;
+    let ssTransmittance = v3(0.0);
+    let directDiffuseTranslucencyScale = 1.0;
+    var diffuseAcc = v3(0.0);
+    var diffuseTransmissionAcc = v3(0.0);
+    var specAcc = v3(0.0);
+    var aggShadow: f32 = 0.0;
+    var nLights: f32 = 0.0;
+    let lc = min(meshU.lc, ${MAX_LIGHTS}u);
+    for (var i: u32 = 0u; i < lc; i = i + 1u) {
+        let lightIndex = nli(i);
+        let entry = nmeLights.lights[lightIndex];
+        let t = u32(entry.vLightData.w);
+        let sh = shadowFactors[lightIndex];
+        if (t == 3u) {
+            let Ldir = normalize(entry.vLightData.xyz);
+            let nl = clamp(0.5 + 0.5 * dot(N, Ldir), 0.0000001, 1.0);
+            let groundSky = mix(entry.vLightDirection.xyz, entry.vLightDiffuse.rgb, nl);
+            var baseLayerAtten: f32 = 1.0;
+            var baseLayerAbsorption = v3(1.0);
+            let H_h = normalize(V + Ldir);
+            let NdotH_h = clamp(dot(N, H_h), 0.0000001, 1.0);
+            let VdotH_h = saturate(dot(V, H_h));
+            let cF_h = nme_pbr_fresSchlick(VdotH_h, directSpecR0, colorF90);
+            let D_h = nme_pbr_distGGX(NdotH_h, directAlphaG);
+            let G_h = nme_pbr_geomGGX(nl, NdotV, directAlphaG);
+            specAcc = specAcc + cF_h * D_h * G_h * nl * entry.vLightDiffuse.rgb * sh * baseLayerAtten * baseLayerAbsorption;
+            diffuseAcc = diffuseAcc + groundSky * surfaceAlbedo * sh * baseLayerAtten * baseLayerAbsorption;
+            aggShadow = aggShadow + sh;
+            nLights = nLights + 1.0;
+            continue;
+        }
+        var L: v3;
+        var atten: f32 = 1.0;
+        let color = entry.vLightDiffuse.rgb;
+        if (t == 1u) {
+            L = normalize(-entry.vLightData.xyz);
+        } else {
+            let toL = entry.vLightData.xyz - worldPos;
+            let d2 = dot(toL, toL);
+            let dist = sqrt(d2);
+            L = toL / max(dist, 0.0001);
+            let range = entry.vLightDiffuse.a;
+            if (t == 2u) {
+                let invD2 = 1.0 / max(d2, 0.0000001);
+                let cosHalfAngle = entry.vLightDirection.w;
+                let kappa = 6.64385618977 / max(1.0 - cosHalfAngle, 0.0001);
+                let cd = dot(-entry.vLightDirection.xyz, L);
+                let dirFall = exp2(kappa * (cd - 1.0));
+                atten = invD2 * dirFall;
+            } else {
+                atten = 1.0 / max(d2, 0.0000001);
+            }
+        }
+        let NdotLUnclamped = dot(N, L);
+        let NdotL = clamp(NdotLUnclamped, 0.0000001, 1.0);
+        var baseLayerAtten: f32 = 1.0;
+        var baseLayerAbsorption = v3(1.0);
+        let _LdotV = select(0.0, dot(L, V), t == 1u);
+        let _eonDiffuse = nme_pbr_diffuseEON(surfaceAlbedo, 0.0, NdotL, NdotV, _LdotV);
+        diffuseAcc = diffuseAcc + _eonDiffuse * directDiffuseTranslucencyScale * NdotL * color * atten * sh * baseLayerAtten * baseLayerAbsorption;
+        if (NdotLUnclamped < 0.0 && translucencyIntensity > 0.0) {
+            let _trNdotL = abs(NdotLUnclamped) + 0.0000001;
+            let _wrapW = 0.02;
+            let _wrapT = 1.0 + _wrapW;
+            let _wrapNdotL = clamp((_trNdotL + _wrapW) / (_wrapT * _wrapT), 0.0, 1.0);
+            let _clampedAlbT = clamp(surfaceAlbedo, v3(0.1), v3(1.0));
+            let _eonTransmit = nme_pbr_diffuseEON(_clampedAlbT, 0.0, max(NdotL, 0.0000001), NdotV, _LdotV) / _clampedAlbT;
+            diffuseTransmissionAcc = diffuseTransmissionAcc + _eonTransmit * (ssTransmittance * _wrapNdotL) * color * atten * sh * baseLayerAtten * baseLayerAbsorption;
+        }
+        if (NdotL > 0.0 && atten > 0.0) {
+            let H = normalize(V + L);
+            let NdotH = clamp(dot(N, H), 0.0000001, 1.0);
+            let VdotH = saturate(dot(V, H));
+            let cF = nme_pbr_fresSchlick(VdotH, directSpecR0, colorF90);
+            let D = nme_pbr_distGGX(NdotH, directAlphaG);
+            let G = nme_pbr_geomGGX(NdotL, NdotV, directAlphaG);
+            specAcc = specAcc + cF * D * G * NdotL * color * atten * sh * baseLayerAtten * baseLayerAbsorption;
+        }
+        aggShadow = aggShadow + sh;
+        nLights = nLights + 1.0;
+    }
+    r.diffuseDir = diffuseAcc;
+    r.specularDir = specAcc;
+${iblBlock}
+    ${useEnv ? `let _radLum = clamp(dot(finalRadianceScaled * shAlbedoScaling, v3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    let _specLum = clamp(dot(finalSpecularScaledDirect * shAlbedoScaling, v3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    r.lumOverAlpha = _radLum + _specLum;` : `let _specLum = clamp(dot(specAcc, v3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    r.lumOverAlpha = _specLum;`}
+    var colorOut = max(r.lighting, v3(0.0)) * sceneU.vImageInfos.x;
+    if (sceneU.vImageInfos.w > 0.5) {
+        colorOut = 1.0 - exp2(-1.590579 * colorOut);
+    }
+    colorOut = pow(max(colorOut, v3(0.0)), v3(0.45454545));
+    colorOut = clamp(colorOut, v3(0.0), v3(1.0));
+    let highContrast = colorOut * colorOut * (v3(3.0) - colorOut * 2.0);
+    if (sceneU.vImageInfos.y < 1.0) {
+        colorOut = mix(v3(0.5), colorOut, sceneU.vImageInfos.y);
+    } else {
+        colorOut = mix(colorOut, highContrast, sceneU.vImageInfos.y - 1.0);
+    }
+    r.lighting = max(colorOut, v3(0.0));
+    if (nLights > 0.0) { r.shadow = aggShadow / nLights; } else { r.shadow = 1.0; }
+    return r;
+}
+`;
+  }
+  var init_pbr_mr_helper_core = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/blocks/pbr-mr-helper-core.ts"() {
+      "use strict";
+      init_types();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-material.ts
+  async function parseNodeMaterialFromSnippet(engine, snippetId, options = {}) {
+    const source = options.json !== void 0 ? typeof options.json === "string" ? JSON.parse(options.json) : options.json : await (await Promise.resolve().then(() => (init_node_snippet(), node_snippet_exports))).fetchSnippetSource(snippetId, options.snippetServer);
+    const graph = parseNodeMaterialSource(source);
+    const emitters = await loadGraphEmitters(graph, options.blockLoader);
+    const fragRoot = findBlockByClassName(graph, "FragmentOutputBlock");
+    if (!fragRoot) {
+      throw new Error("NodeMaterial: graph has no FragmentOutputBlock");
+    }
+    const vertRoot = findBlockByClassName(graph, "VertexOutputBlock");
+    const shadowLightsPre = [];
+    if (options.shadowGenerators && options.shadowGenerators.length > 0) {
+      const defaultIdx = options.shadowGenerators.map((_, i) => i);
+      const indices = options.shadowLightIndices ?? defaultIdx;
+      for (let i = 0; i < options.shadowGenerators.length; i++) {
+        shadowLightsPre.push({ lightIndex: indices[i], shadowType: options.shadowGenerators[i]._shadowType });
+      }
+    }
+    const { vertexWgsl, fragmentWgsl, state } = emitGraph(graph, emitters, fragRoot.id, vertRoot ? vertRoot.id : null, shadowLightsPre, {
+      hasSkeleton: options.hasSkeleton ?? false,
+      hasInstances: options.hasInstances ?? false
+    });
+    await resolvePbrMrHelpers(state);
+    let envHelpers = null;
+    let _envEmitter;
+    if (state.usesEnv) {
+      envHelpers = await Promise.resolve().then(() => (init_node_env(), node_env_exports));
+      _envEmitter = envHelpers.emitEnv;
+    }
+    let _shadowEmitter;
+    if (options.shadowGenerators && options.shadowGenerators.length > 0) {
+      _shadowEmitter = (await Promise.resolve().then(() => (init_node_shadow(), node_shadow_exports))).emitShadow;
+    }
+    const compile = compileNodePipeline(state, vertexWgsl, fragmentWgsl, {
+      _engine: engine,
+      _format: engine.format,
+      _msaaSamples: engine.msaaSamples,
+      _backFaceCulling: graph.backFaceCulling,
+      _alphaMode: graph.needsAlphaBlending ? graph.alphaMode : 0,
+      _envEmitter,
+      _shadowEmitter
+    });
+    const inputs = {};
+    const uniformValues = /* @__PURE__ */ new Map();
+    for (const [name, blockId] of graph.namedInputs) {
+      const block = graph.blocks.get(blockId);
+      const _name = sanitize8(block.name || `input${block.id}`);
+      const _offsetBytes = compile._nodeUboOffsets.get(_name);
+      if (_offsetBytes === void 0) {
+        continue;
+      }
+      const _type = bjsTypeToNodeType2(block.serialized["type"] ?? 16);
+      if (_type === "mat4f") {
+        continue;
+      }
+      const len = floatCount(_type);
+      const defaultValues = extractDefault(block.serialized["value"], _type);
+      const _values = new F32(len);
+      _values.set(defaultValues);
+      const slot = { _name, _type, _offsetBytes, _values };
+      uniformValues.set(_name, slot);
+      const handleType = handleTypeOf(_type);
+      const setDirty = () => {
+        material._uboDirty = true;
+      };
+      const handle = {
+        type: handleType,
+        get value() {
+          return handleType === "f32" ? slot._values[0] : Array.from(slot._values);
+        },
+        set value(v) {
+          if (typeof v === "number") {
+            slot._values[0] = v;
+          } else {
+            slot._values.set(v);
+          }
+          setDirty();
+        }
+      };
+      inputs[name] = handle;
+    }
+    for (const block of graph.blocks.values()) {
+      if (block.className !== "InputBlock") {
+        continue;
+      }
+      const _name = sanitize8(block.name || `input${block.id}`);
+      if (uniformValues.has(_name)) {
+        continue;
+      }
+      const _offsetBytes = compile._nodeUboOffsets.get(_name);
+      if (_offsetBytes === void 0) {
+        continue;
+      }
+      const _type = bjsTypeToNodeType2(block.serialized["type"] ?? 16);
+      if (_type === "mat4f") {
+        continue;
+      }
+      const len = floatCount(_type);
+      const defaultValues = extractDefault(block.serialized["value"], _type);
+      const _values = new F32(len);
+      _values.set(defaultValues);
+      uniformValues.set(_name, { _name, _type, _offsetBytes, _values });
+    }
+    const attrNames = state.vertexAttributes.map((a) => a._name);
+    const textureSlots = /* @__PURE__ */ new Map();
+    for (const tb of compile._textureBindings) {
+      const slot = { current: options.textures?.[tb._name] ?? null };
+      textureSlots.set(tb._name, slot);
+      const handle = {
+        type: "texture2d",
+        get texture() {
+          return slot.current;
+        },
+        set texture(v) {
+          slot.current = v;
+        }
+      };
+      inputs[tb._name] = handle;
+    }
+    const _buildGroup = async (scene, meshes) => {
+      const { buildNodeMeshRenderables: buildNodeMeshRenderables2 } = await Promise.resolve().then(() => (init_node_renderable(), node_renderable_exports));
+      const result = buildNodeMeshRenderables2(scene, meshes);
+      _buildGroup._rebuildSingle = result.rebuildSingle;
+      return result;
+    };
+    _buildGroup._materialFamily = "node";
+    const material = {
+      inputs,
+      _renderFeatures: { features: 0 },
+      _buildGroup,
+      _uboVersion: 0,
+      _compile: compile,
+      _state: state,
+      _graph: graph,
+      _vertexBody: vertexWgsl,
+      _fragmentBody: fragmentWgsl,
+      _vertexAttrNames: attrNames,
+      _shadowGenerators: options.shadowGenerators ?? [],
+      _needsAlphaBlending: graph.needsAlphaBlending,
+      _nodeUBO: null,
+      _uboDirty: false,
+      _uniformValues: uniformValues,
+      _textureSlots: textureSlots,
+      _envHelpers: envHelpers,
+      _emitters: emitters,
+      _hasSkeleton: options.hasSkeleton ?? false,
+      _hasInstances: options.hasInstances ?? false
+    };
+    return material;
+  }
+  function isCorePbrMrRequest(request) {
+    return !request.useClearcoat && !request.useSheen && !request.useRefraction && !request.useSubsurface && !request.useAnisotropy && !request.useShAlbedoScaling && !request.useCcBump && !request.useCcTint && !request.useSpecularAA && !request.remapClearcoatF0;
+  }
+  async function resolvePbrMrHelpers(state) {
+    if (state.pbrMrHelperRequests.length === 0) {
+      return;
+    }
+    if (state.pbrMrHelperRequests.some((request) => !isCorePbrMrRequest(request))) {
+      throw new Error("NodeMaterial: advanced PBR-MR helper request must be emitted by the full PBR-MR block");
+    }
+    const core = await Promise.resolve().then(() => (init_pbr_mr_helper_core(), pbr_mr_helper_core_exports));
+    for (const request of state.pbrMrHelperRequests) {
+      state.fragment.helpers.set(request.key, core.buildPbrMrHelperCore(request));
+    }
+  }
+  function sanitize8(name) {
+    return name.replace(/[^A-Za-z0-9_]/g, "_");
+  }
+  function bjsTypeToNodeType2(t) {
+    if (t === 1 || t === 2) {
+      return "f32";
+    }
+    if (t === 4) {
+      return "vec2f";
+    }
+    if (t === 8 || t === 32) {
+      return "vec3f";
+    }
+    if (t === 16 || t === 64) {
+      return "vec4f";
+    }
+    if (t === 128) {
+      return "mat4f";
+    }
+    throw new Error(`NodeMaterial: unsupported BJS connection point type 0x${t.toString(16)}`);
+  }
+  function floatCount(type) {
+    switch (type) {
+      case "f32":
+        return 1;
+      case "vec2f":
+        return 2;
+      case "vec3f":
+        return 3;
+      case "vec4f":
+        return 4;
+      case "mat4f":
+        return 16;
+      default:
+        return 0;
+    }
+  }
+  function handleTypeOf(t) {
+    if (t === "mat4f" || t === "texture2d" || t === "textureCube") {
+      return "vec4f";
+    }
+    return t;
+  }
+  function extractDefault(raw, type) {
+    const n = floatCount(type);
+    if (typeof raw === "number") {
+      return [raw];
+    }
+    if (Array.isArray(raw)) {
+      const out = raw.slice(0, n).map((v) => typeof v === "number" ? v : 0);
+      while (out.length < n) {
+        out.push(0);
+      }
+      return out;
+    }
+    if (raw && typeof raw === "object") {
+      const obj = raw;
+      const picks = [];
+      for (const k of ["x", "y", "z", "w"]) {
+        if (typeof obj[k] === "number") {
+          picks.push(obj[k]);
+        }
+      }
+      if (picks.length > 0) {
+        while (picks.length < n) {
+          picks.push(0);
+        }
+        return picks.slice(0, n);
+      }
+      const rgba = [];
+      for (const k of ["r", "g", "b", "a"]) {
+        if (typeof obj[k] === "number") {
+          rgba.push(obj[k]);
+        }
+      }
+      if (rgba.length > 0) {
+        while (rgba.length < n) {
+          rgba.push(1);
+        }
+        return rgba.slice(0, n);
+      }
+    }
+    return new Array(n).fill(0);
+  }
+  function writeNodeUBO(engine, buffer, material) {
+    const size = material._compile._nodeUboSize;
+    if (size === 0) {
+      return;
+    }
+    const scratch = new F32(size / 4);
+    for (const slot of material._uniformValues.values()) {
+      const dstIdx = slot._offsetBytes >> 2;
+      scratch.set(slot._values, dstIdx);
+    }
+    engine._device.queue.writeBuffer(buffer, 0, scratch);
+  }
+  var init_node_material = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/node/node-material.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_node_parser();
+      init_node_emitter();
+      init_node_pipeline();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/_loader-scratch.ts
+  function getLoaderTmpLocal() {
+    return _tmpLocal ?? (_tmpLocal = allocateMat4());
+  }
+  function getLoaderTmpAnim() {
+    return _tmpAnim ?? (_tmpAnim = allocateMat4());
+  }
+  function getLoaderTmpInstance() {
+    return _tmpInstance ?? (_tmpInstance = allocateMat4());
+  }
+  var _tmpLocal, _tmpAnim, _tmpInstance;
+  var init_loader_scratch = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/_loader-scratch.ts"() {
+      "use strict";
+      init_matrix_allocator();
+      _tmpLocal = null;
+      _tmpAnim = null;
+      _tmpInstance = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-parser.ts
+  function resolveAccessor(json, binChunk, accessorIdx) {
+    const accessor = json.accessors[accessorIdx];
+    const componentCount = TYPE_SIZES[accessor.type] ?? 1;
+    const count = accessor.count;
+    const len = count * componentCount;
+    let Ctor;
+    switch (accessor.componentType) {
+      case FLOAT:
+        Ctor = F32;
+        break;
+      case UNSIGNED_SHORT:
+        Ctor = U16;
+        break;
+      case UNSIGNED_INT:
+        Ctor = U32;
+        break;
+      case UNSIGNED_BYTE:
+        Ctor = U8;
+        break;
+      default:
+        throw new Error(`Unsupported component type: ${accessor.componentType}`);
+    }
+    const data = accessor.bufferView === void 0 ? new Ctor(len) : new Ctor(binChunk.buffer, binChunk.byteOffset + (json.bufferViews[accessor.bufferView].byteOffset ?? 0) + (accessor.byteOffset ?? 0), len);
+    return { _data: data, _count: count, _componentCount: componentCount };
+  }
+  function getTextureImageIndex(tex) {
+    return tex.extensions?.EXT_texture_webp?.source ?? tex.source;
+  }
+  function anyPrimitive(json, pred) {
+    for (const m of json.meshes ?? []) {
+      for (const p of m.primitives ?? []) {
+        if (pred(p)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  function needsOrmComposite(json) {
+    const mats = json.materials ?? [];
+    const textures = json.textures ?? [];
+    for (const m of mats) {
+      const mr = m.pbrMetallicRoughness?.metallicRoughnessTexture;
+      const occ = m.occlusionTexture;
+      if (mr && occ && textures[mr.index] && textures[occ.index] && getTextureImageIndex(textures[mr.index]) !== getTextureImageIndex(textures[occ.index])) {
+        return true;
+      }
+    }
+    return false;
+  }
+  async function resolveImage(json, binChunk, imageIdx, baseUrl) {
+    const image = json.images[imageIdx];
+    if (image.bufferView !== void 0) {
+      const bv = json.bufferViews[image.bufferView];
+      const offset = binChunk.byteOffset + (bv.byteOffset ?? 0);
+      const slice = binChunk.buffer.slice(offset, offset + bv.byteLength);
+      const blob = new Blob([slice], { type: image.mimeType ?? "image/png" });
+      return createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+    }
+    if (image.uri) {
+      const imageUrl = new URL(image.uri, baseUrl + "x").href;
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to load image: ${response.status} ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      const bmp = await createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+      return bmp;
+    }
+    throw new Error("Image has neither bufferView nor uri");
+  }
+  function buildParentMap(json) {
+    const parentMap = /* @__PURE__ */ new Map();
+    const nodes = json.nodes ?? [];
+    for (let i = 0; i < nodes.length; i++) {
+      const children = nodes[i].children;
+      if (children) {
+        for (const childIdx of children) {
+          parentMap.set(childIdx, i);
+        }
+      }
+    }
+    return parentMap;
+  }
+  function findParent(parentMap, childIdx) {
+    return parentMap.get(childIdx) ?? -1;
+  }
+  function computeNodeWorldMatrix(json, nodeIdx, parentMap, cache) {
+    const cached = cache.get(nodeIdx);
+    if (cached) {
+      return cached;
+    }
+    const node = json.nodes[nodeIdx];
+    const parentIdx = findParent(parentMap, nodeIdx);
+    const parentWorld = parentIdx !== -1 ? computeNodeWorldMatrix(json, parentIdx, parentMap, cache) : RH_TO_LH_ROOT;
+    let localBuf;
+    if (node.matrix) {
+      localBuf = new F32(node.matrix);
+    } else {
+      const t = node.translation ?? [0, 0, 0];
+      const r = node.rotation ?? [0, 0, 0, 1];
+      const s = node.scale ?? [1, 1, 1];
+      const local = getLoaderTmpLocal();
+      mat4ComposeInto(local, 0, t[0], t[1], t[2], r[0], r[1], r[2], r[3], s[0], s[1], s[2]);
+      localBuf = local;
+    }
+    const world = new F32(16);
+    mat4MultiplyInto(world, 0, parentWorld, 0, localBuf, 0);
+    cache.set(nodeIdx, world);
+    return world;
+  }
+  var FLOAT, UNSIGNED_SHORT, UNSIGNED_INT, UNSIGNED_BYTE, TYPE_SIZES, RH_TO_LH_ROOT;
+  var init_gltf_parser = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-parser.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_mat4_compose_into();
+      init_mat4_multiply_into();
+      init_loader_scratch();
+      FLOAT = 5126;
+      UNSIGNED_SHORT = 5123;
+      UNSIGNED_INT = 5125;
+      UNSIGNED_BYTE = 5121;
+      TYPE_SIZES = {
+        SCALAR: 1,
+        VEC2: 2,
+        VEC3: 3,
+        VEC4: 4,
+        MAT2: 4,
+        MAT3: 9,
+        MAT4: 16
+      };
+      RH_TO_LH_ROOT = new F32([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-material.ts
+  async function assembleMaterial(json, binChunk, materialIdx, baseUrl, imageCache) {
+    const mat = json.materials?.[materialIdx];
+    if (!mat) {
+      return {
+        _baseColorFactor: [1, 1, 1, 1],
+        _metallicFactor: 1,
+        _roughnessFactor: 1,
+        _emissiveFactor: [0, 0, 0],
+        _baseColorImage: null,
+        _metallicRoughnessImage: null,
+        _normalImage: null,
+        _normalScale: 1,
+        _occlusionTexCoord: 0,
+        _occlusionImage: null,
+        _emissiveImage: null,
+        _doubleSided: false,
+        _alphaMode: "OPAQUE",
+        _alphaCutoff: 0.5
+      };
+    }
+    const pbr = mat.pbrMetallicRoughness ?? {};
+    const fetchImg = makeImageFetcher(json, binChunk, baseUrl, imageCache);
+    const [baseColorImg, mrImg, normalImg, occlusionImg, emissiveImg] = await Promise.all([
+      fetchImg(pbr.baseColorTexture),
+      fetchImg(pbr.metallicRoughnessTexture),
+      fetchImg(mat.normalTexture),
+      fetchImg(mat.occlusionTexture),
+      fetchImg(mat.emissiveTexture)
+    ]);
+    return {
+      _baseColorFactor: pbr.baseColorFactor ?? [1, 1, 1, 1],
+      _metallicFactor: pbr.metallicFactor ?? 1,
+      _roughnessFactor: pbr.roughnessFactor ?? 1,
+      _emissiveFactor: mat.emissiveFactor ?? [0, 0, 0],
+      _baseColorImage: baseColorImg,
+      _metallicRoughnessImage: mrImg,
+      _normalImage: normalImg,
+      _normalScale: typeof mat.normalTexture?.scale === "number" ? mat.normalTexture.scale : 1,
+      _occlusionTexCoord: typeof mat.occlusionTexture?.texCoord === "number" ? mat.occlusionTexture.texCoord : 0,
+      _occlusionImage: occlusionImg,
+      _emissiveImage: emissiveImg,
+      _doubleSided: !!mat.doubleSided,
+      _alphaMode: mat.alphaMode ?? "OPAQUE",
+      _alphaCutoff: mat.alphaCutoff ?? 0.5,
+      _rawMatDef: mat
+    };
+  }
+  function makeImageFetcher(json, binChunk, baseUrl, imageCache) {
+    return (texInfo) => {
+      if (!texInfo) {
+        return Promise.resolve(null);
+      }
+      const imgIdx = getTextureImageIndex(json.textures[texInfo.index]);
+      if (imageCache) {
+        let cached = imageCache.get(imgIdx);
+        if (!cached) {
+          cached = resolveImage(json, binChunk, imgIdx, baseUrl);
+          imageCache.set(imgIdx, cached);
+        }
+        return cached;
+      }
+      return resolveImage(json, binChunk, imgIdx, baseUrl);
+    };
+  }
+  var init_gltf_material = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-material.ts"() {
+      "use strict";
+      init_gltf_parser();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/color.ts
+  function linearToSrgbByte(v) {
+    const c = Math.max(0, Math.min(1, v));
+    return Math.round((c <= 31308e-7 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055) * 255);
+  }
+  var init_color = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/color.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-pbr-builder.ts
+  function uploadTex(engine, bitmap, srgb, sampler, generateMipmaps2, fallback2) {
+    const device = engine._device;
+    const w = bitmap?.width ?? 1;
+    const h = bitmap?.height ?? 1;
+    const fmt = srgb ? "rgba8unorm-srgb" : "rgba8unorm";
+    const mips = bitmap ? mipLevelCount(w, h) : 1;
+    const tex = device.createTexture({
+      size: { width: w, height: h },
+      format: fmt,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.COPY_SRC | TU.RENDER_ATTACHMENT,
+      mipLevelCount: mips
+    });
+    if (bitmap) {
+      device.queue.copyExternalImageToTexture({ source: bitmap }, { texture: tex, premultipliedAlpha: false }, { width: w, height: h });
+      generateMipmaps2(engine, tex);
+    } else {
+      device.queue.writeTexture({ texture: tex }, fallback2 ?? new U8([255, 255, 255, 255]), { bytesPerRow: 4 }, { width: 1, height: 1 });
+    }
+    const result = {
+      texture: tex,
+      view: tex.createView(),
+      sampler,
+      width: w,
+      height: h
+    };
+    engine._dlr?.b(result, bitmap, srgb, !!bitmap, fallback2);
+    return result;
+  }
+  function assemblePbrProps(mat, baseColorTexture, ormTexture, normalTexture, emissiveTexture, extLayers) {
+    const ef = mat._emissiveFactor;
+    const defaultFactor = ef[0] === 1 && ef[1] === 1 && ef[2] === 1 || ef[0] === 0 && ef[1] === 0 && ef[2] === 0;
+    return {
+      baseColorTexture,
+      normalTexture,
+      ormTexture,
+      emissiveTexture,
+      ...mat._baseColorImage && !isDefaultBaseColorFactor(mat._baseColorFactor) ? { baseColorFactor: mat._baseColorFactor } : void 0,
+      doubleSided: mat._doubleSided,
+      occlusionStrength: mat._occlusionImage ? 1 : 0,
+      ...mat._normalScale !== 1 ? { normalTextureScale: mat._normalScale } : void 0,
+      ...mat._metallicRoughnessImage ? { metallicFactor: mat._metallicFactor, roughnessFactor: mat._roughnessFactor } : void 0,
+      ...!defaultFactor ? { emissiveColor: [ef[0], ef[1], ef[2]] } : void 0,
+      enableSpecularAA: true,
+      ...mat._alphaMode === "BLEND" ? { alphaBlend: true, alpha: mat._baseColorFactor[3] } : void 0,
+      ...mat._alphaMode === "MASK" ? { alpha: mat._baseColorFactor[3], alphaCutOff: mat._alphaCutoff } : void 0,
+      ...mat._rawMatDef?.name ? { name: mat._rawMatDef.name } : void 0,
+      ...extLayers,
+      _buildGroup: pbrGroupBuilder,
+      _uboVersion: 0
+    };
+  }
+  function isDefaultBaseColorFactor(f) {
+    return f[0] === 1 && f[1] === 1 && f[2] === 1 && f[3] === 1;
+  }
+  function buildDefaultPbrTextures(engine, mat, sampler, generateMipmaps2, getCachedTex) {
+    const baseColorTexture = mat._baseColorImage ? getCachedTex(mat._baseColorImage, true) : (() => {
+      const f = mat._baseColorFactor;
+      return uploadTex(
+        engine,
+        null,
+        true,
+        sampler,
+        generateMipmaps2,
+        new U8([linearToSrgbByte(f[0]), linearToSrgbByte(f[1]), linearToSrgbByte(f[2]), Math.round(Math.max(0, Math.min(1, f[3])) * 255)])
+      );
+    })();
+    const normalTexture = mat._normalImage ? getCachedTex(mat._normalImage, false) : void 0;
+    const emissiveTexture = mat._emissiveImage ? getCachedTex(mat._emissiveImage, true) : void 0;
+    const single = mat._metallicRoughnessImage ?? mat._occlusionImage;
+    let ormTexture;
+    if (single && (!mat._metallicRoughnessImage || !mat._occlusionImage || mat._metallicRoughnessImage === mat._occlusionImage)) {
+      ormTexture = getCachedTex(single, false);
+    } else if (!single) {
+      const clamp = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255);
+      ormTexture = uploadTex(engine, null, false, sampler, generateMipmaps2, new U8([255, clamp(mat._roughnessFactor), clamp(mat._metallicFactor), 255]));
+    } else {
+      ormTexture = getCachedTex(mat._metallicRoughnessImage, false);
+    }
+    return { baseColorTexture, ormTexture, normalTexture, emissiveTexture };
+  }
+  async function runMatExts(mat, exts, ctx) {
+    if (!exts.length) {
+      return void 0;
+    }
+    const fragments = await Promise.all(exts.map((ext14) => ext14.applyMaterial(mat, ctx)));
+    let layers;
+    for (const f of fragments) {
+      if (f) {
+        layers ?? (layers = {});
+        Object.assign(layers, f);
+      }
+    }
+    return layers;
+  }
+  var identityTexWrap;
+  var init_gltf_pbr_builder = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-pbr-builder.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_pbr_material();
+      init_mip_count();
+      init_color();
+      identityTexWrap = (tex) => tex;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-interleave.ts
+  var gltf_interleave_exports = {};
+  __export(gltf_interleave_exports, {
+    accessorIsStrided: () => accessorIsStrided,
+    buildInterleavedMesh: () => buildInterleavedMesh,
+    buildInterleavedPartial: () => buildInterleavedPartial,
+    computeAabbStrided: () => computeAabbStrided,
+    installLazyCpu: () => installLazyCpu
+  });
+  function createSequentialIndices(vertexCount) {
+    const indices = vertexCount > 65535 ? new U32(vertexCount) : new U16(vertexCount);
+    for (let i = 0; i < vertexCount; i++) {
+      indices[i] = i;
+    }
+    return indices;
+  }
+  function accessorIsStrided(json, idx) {
+    const a = json.accessors[idx];
+    const bv = json.bufferViews[a.bufferView];
+    const stride = bv.byteStride;
+    if (stride === void 0) {
+      return false;
+    }
+    const elemBytes = (TYPE_SIZES[a.type] ?? 1) * (COMP_BYTES[a.componentType] ?? 4);
+    return stride !== elemBytes;
+  }
+  function resolveStrided(json, binChunk, accessorIdx) {
+    const accessor = json.accessors[accessorIdx];
+    const bufferView = json.bufferViews[accessor.bufferView];
+    const ab = binChunk.buffer;
+    return {
+      _bufferView: accessor.bufferView,
+      _stride: bufferView.byteStride,
+      _offset: accessor.byteOffset ?? 0,
+      _componentType: accessor.componentType,
+      _componentCount: TYPE_SIZES[accessor.type] ?? 1,
+      _count: accessor.count,
+      _slice: new U8(ab, binChunk.byteOffset + (bufferView.byteOffset ?? 0), bufferView.byteLength)
+    };
+  }
+  function destrideToTight(il) {
+    const dv = new DV(il._slice.buffer, il._slice.byteOffset, il._slice.byteLength);
+    const cb = COMP_BYTES[il._componentType] ?? 4;
+    const ct = il._componentType;
+    const cc = il._componentCount;
+    const out = new F32(il._count * cc);
+    for (let v = 0; v < il._count; v++) {
+      const rowBase = il._offset + v * il._stride;
+      for (let c = 0; c < cc; c++) {
+        const off = rowBase + c * cb;
+        out[v * cc + c] = ct === FLOAT2 ? dv.getFloat32(off, true) : ct === UNSIGNED_SHORT2 ? dv.getUint16(off, true) : ct === UNSIGNED_INT2 ? dv.getUint32(off, true) : dv.getUint8(off);
+      }
+    }
+    return out;
+  }
+  function buildInterleavedPartial(json, binChunk, primitive, worldMatrix, nodeIdx) {
+    const attrs = primitive.attributes;
+    let anyStrided = false;
+    for (const name in attrs) {
+      if (accessorIsStrided(json, attrs[name])) {
+        anyStrided = true;
+        break;
+      }
+    }
+    if (!anyStrided) {
+      return void 0;
+    }
+    const vb = {};
+    let vertexCount = 0;
+    const resolveOne = (name, eager) => {
+      const idx = attrs[name];
+      if (idx === void 0) {
+        return { _tight: null, _count: 0 };
+      }
+      if (accessorIsStrided(json, idx)) {
+        const il = resolveStrided(json, binChunk, idx);
+        return { _tight: eager ? destrideToTight(il) : null, _il: il, _count: il._count };
+      }
+      const av = resolveAccessor(json, binChunk, idx);
+      return { _tight: av._data, _count: av._count };
+    };
+    const pos = resolveOne("POSITION", false);
+    vb._p = pos._il;
+    vertexCount = pos._count;
+    const nrm = resolveOne("NORMAL", false);
+    vb._n = nrm._il;
+    const uv = resolveOne("TEXCOORD_0", false);
+    vb._u = uv._il;
+    const tan = resolveOne("TANGENT", true);
+    vb._t = tan._il;
+    const uv2 = resolveOne("TEXCOORD_1", true);
+    vb._u2 = uv2._il;
+    const col = resolveOne("COLOR_0", true);
+    vb._c = col._il;
+    const positions = pos._tight;
+    let normals = nrm._tight;
+    let uvs = uv._tight;
+    const tangents = tan._tight;
+    const uv2s = uv2._tight;
+    const colors = col._tight;
+    if (!normals && !vb._n) {
+      normals = new F32(vertexCount * 3);
+    }
+    if (!uvs && !vb._u) {
+      uvs = new F32(vertexCount * 2);
+    }
+    const idxData = primitive.indices !== void 0 ? resolveAccessor(json, binChunk, primitive.indices) : null;
+    const indices = idxData ? idxData._data instanceof U32 ? new U32(idxData._data) : idxData._data instanceof U8 ? Uint16Array.from(idxData._data) : new U16(idxData._data.buffer, idxData._data.byteOffset, idxData._count) : createSequentialIndices(vertexCount);
+    return {
+      _positions: positions,
+      _normals: normals,
+      _tangents: tangents,
+      _uvs: uvs,
+      _uv2s: uv2s,
+      _colors: colors,
+      _indices: indices,
+      _vertexCount: vertexCount,
+      _indexCount: indices.length,
+      _worldMatrix: worldMatrix,
+      _vb: vb,
+      _nodeIndex: nodeIdx,
+      _primitive: primitive
+    };
+  }
+  function buildInterleavedGpu(engine, m) {
+    const vbsrc = m._vb;
+    const shared = /* @__PURE__ */ new Map();
+    const vbuf = (a, tight) => {
+      if (!a) {
+        return tight ? createMappedBuffer(engine, tight, BU.VERTEX) : null;
+      }
+      let b = shared.get(a._bufferView);
+      if (!b) {
+        shared.set(a._bufferView, b = createMappedBuffer(engine, a._slice, BU.VERTEX));
+      }
+      return b;
+    };
+    const k = (a) => `${a?._stride ?? 0},${a?._offset ?? 0}`;
+    return {
+      positionBuffer: vbuf(vbsrc._p, m._positions),
+      normalBuffer: vbuf(vbsrc._n, m._normals),
+      tangentBuffer: m._tangents ? vbuf(vbsrc._t, m._tangents) : null,
+      uvBuffer: vbuf(vbsrc._u, m._uvs),
+      uv2Buffer: m._uv2s ? vbuf(vbsrc._u2, m._uv2s) : null,
+      colorBuffer: m._colors ? vbuf(vbsrc._c, m._colors) : null,
+      indexBuffer: createMappedBuffer(engine, m._indices, BU.INDEX),
+      indexCount: m._indexCount,
+      indexFormat: m._indices instanceof U32 ? "uint32" : "uint16",
+      _vbLayout: vbsrc,
+      _vbKey: `vb${k(vbsrc._p)}.${k(vbsrc._n)}.${k(vbsrc._t)}.${k(vbsrc._u)}`
+    };
+  }
+  function buildInterleavedMesh(engine, m, index, material) {
+    const gpu = buildInterleavedGpu(engine, m);
+    const [boundMin, boundMax] = m._vb._p ? computeAabbStrided(m._vb._p, m._worldMatrix) : computeAabb(m._positions, m._worldMatrix);
+    const mesh = {
+      name: `gltf_mesh_${index}`,
+      material,
+      receiveShadows: false,
+      boundMin,
+      boundMax,
+      skeleton: null,
+      morphTargets: null,
+      _gpu: gpu
+    };
+    initMeshTransform(mesh);
+    installLazyCpu(mesh, m);
+    mesh._cpuIndices = m._indices instanceof U32 ? m._indices : new U32(m._indices);
+    engine._dlr?.m(mesh, m._uv2s, m._tangents, m._colors, m._indices, gpu.indexFormat);
+    return mesh;
+  }
+  function computeAabbStrided(il, world) {
+    const dv = new DV(il._slice.buffer, il._slice.byteOffset, il._slice.byteLength);
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let v = 0; v < il._count; v++) {
+      const base = il._offset + v * il._stride;
+      const lx = dv.getFloat32(base, true);
+      const ly = dv.getFloat32(base + 4, true);
+      const lz = dv.getFloat32(base + 8, true);
+      let x = lx, y = ly, z = lz;
+      if (world) {
+        x = world[0] * lx + world[4] * ly + world[8] * lz + world[12];
+        y = world[1] * lx + world[5] * ly + world[9] * lz + world[13];
+        z = world[2] * lx + world[6] * ly + world[10] * lz + world[14];
+      }
+      if (x < minX) {
+        minX = x;
+      }
+      if (x > maxX) {
+        maxX = x;
+      }
+      if (y < minY) {
+        minY = y;
+      }
+      if (y > maxY) {
+        maxY = y;
+      }
+      if (z < minZ) {
+        minZ = z;
+      }
+      if (z > maxZ) {
+        maxZ = z;
+      }
+    }
+    return [
+      [minX, minY, minZ],
+      [maxX, maxY, maxZ]
+    ];
+  }
+  function installLazyCpu(mesh, m) {
+    const vb = m._vb;
+    if (vb._p) {
+      Object.defineProperty(mesh, "_cpuPositions", lazyCpuDesc(vb._p));
+    } else if (m._positions) {
+      mesh._cpuPositions = m._positions;
+    }
+    if (vb._n) {
+      Object.defineProperty(mesh, "_cpuNormals", lazyCpuDesc(vb._n));
+    } else if (m._normals) {
+      mesh._cpuNormals = m._normals;
+    }
+    if (vb._u) {
+      Object.defineProperty(mesh, "_cpuUvs", lazyCpuDesc(vb._u));
+    } else if (m._uvs) {
+      mesh._cpuUvs = m._uvs;
+    }
+  }
+  function lazyCpuDesc(il) {
+    let cached;
+    return {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return cached ?? (cached = destrideToTight(il));
+      },
+      set(v) {
+        cached = v;
+      }
+    };
+  }
+  var FLOAT2, UNSIGNED_SHORT2, UNSIGNED_INT2, UNSIGNED_BYTE2, COMP_BYTES;
+  var init_gltf_interleave = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-interleave.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_compute_aabb();
+      init_mesh();
+      init_gpu_buffers();
+      init_gltf_parser();
+      FLOAT2 = 5126;
+      UNSIGNED_SHORT2 = 5123;
+      UNSIGNED_INT2 = 5125;
+      UNSIGNED_BYTE2 = 5121;
+      COMP_BYTES = { [UNSIGNED_BYTE2]: 1, [UNSIGNED_SHORT2]: 2, [UNSIGNED_INT2]: 4, [FLOAT2]: 4 };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/meshopt-decode.ts
+  function loadMeshoptScript() {
+    if (scriptLoadPromise) {
+      return scriptLoadPromise;
+    }
+    scriptLoadPromise = new Promise((resolve, reject) => {
+      const existing = globalThis.MeshoptDecoder;
+      if (existing) {
+        resolve(existing);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = meshoptBaseUrl + "meshopt_decoder.js";
+      script.onload = () => {
+        const mod = globalThis.MeshoptDecoder;
+        if (!mod) {
+          reject(new Error("meshopt_decoder.js loaded but MeshoptDecoder is undefined"));
+        } else {
+          resolve(mod);
+        }
+      };
+      script.onerror = () => reject(new Error("Failed to load meshopt_decoder.js from " + script.src));
+      document.head.appendChild(script);
+    });
+    return scriptLoadPromise;
+  }
+  async function getMeshoptDecoder() {
+    const mod = await loadMeshoptScript();
+    await mod.ready;
+    return mod;
+  }
+  var meshoptBaseUrl, scriptLoadPromise;
+  var init_meshopt_decode = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/meshopt-decode.ts"() {
+      "use strict";
+      meshoptBaseUrl = "/";
+      scriptLoadPromise = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-meshopt.ts
+  var gltf_feature_meshopt_exports = {};
+  __export(gltf_feature_meshopt_exports, {
+    default: () => gltf_feature_meshopt_default
+  });
+  function align4(n) {
+    return n + 3 & ~3;
+  }
+  var feature, gltf_feature_meshopt_default;
+  var init_gltf_feature_meshopt = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-meshopt.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_meshopt_decode();
+      feature = {
+        id: "EXT_meshopt_compression",
+        async preParse(json, binChunk) {
+          const bufferViews = json.bufferViews ?? [];
+          const decoder = await getMeshoptDecoder();
+          const materialized = new Array(bufferViews.length);
+          const newOffsets = new Array(bufferViews.length);
+          let total = 0;
+          for (let i = 0; i < bufferViews.length; i++) {
+            const bv = bufferViews[i];
+            const ext14 = bv.extensions?.EXT_meshopt_compression;
+            let bytes;
+            if (ext14) {
+              if ((ext14.buffer ?? 0) !== 0) {
+                throw new Error(`EXT_meshopt_compression: compressed source buffer ${ext14.buffer} is not buffer 0 (unsupported)`);
+              }
+              const source = new U8(binChunk.buffer, binChunk.byteOffset + (ext14.byteOffset ?? 0), ext14.byteLength);
+              const target = new U8(ext14.count * ext14.byteStride);
+              decoder.decodeGltfBuffer(target, ext14.count, ext14.byteStride, source, ext14.mode, ext14.filter ?? "NONE");
+              bytes = target;
+            } else {
+              if ((bv.buffer ?? 0) !== 0) {
+                throw new Error(`EXT_meshopt_compression: uncompressed bufferView in buffer ${bv.buffer} is not buffer 0 (unsupported)`);
+              }
+              bytes = new U8(binChunk.buffer.slice(binChunk.byteOffset + (bv.byteOffset ?? 0), binChunk.byteOffset + (bv.byteOffset ?? 0) + bv.byteLength));
+            }
+            materialized[i] = bytes;
+            newOffsets[i] = total;
+            total = align4(total + bytes.length);
+          }
+          const packed = new U8(total);
+          for (let i = 0; i < bufferViews.length; i++) {
+            const bv = bufferViews[i];
+            packed.set(materialized[i], newOffsets[i]);
+            bv.buffer = 0;
+            bv.byteOffset = newOffsets[i];
+            bv.byteLength = materialized[i].length;
+            if (bv.extensions) {
+              delete bv.extensions.EXT_meshopt_compression;
+            }
+          }
+          return new DV(packed.buffer);
+        }
+      };
+      gltf_feature_meshopt_default = feature;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-quantization.ts
+  var gltf_ext_quantization_exports = {};
+  __export(gltf_ext_quantization_exports, {
+    default: () => gltf_ext_quantization_default
+  });
+  function align42(n) {
+    return n + 3 & ~3;
+  }
+  function readComponent(view, offset, componentType, normalized) {
+    switch (componentType) {
+      case BYTE: {
+        const c = view.getInt8(offset);
+        return normalized ? Math.max(c / 127, -1) : c;
+      }
+      case UNSIGNED_BYTE3: {
+        const c = view.getUint8(offset);
+        return normalized ? c / 255 : c;
+      }
+      case SHORT: {
+        const c = view.getInt16(offset, true);
+        return normalized ? Math.max(c / 32767, -1) : c;
+      }
+      case UNSIGNED_SHORT3: {
+        const c = view.getUint16(offset, true);
+        return normalized ? c / 65535 : c;
+      }
+      case FLOAT3:
+        return view.getFloat32(offset, true);
+      default:
+        throw new Error(`KHR_mesh_quantization: unsupported componentType ${componentType}`);
+    }
+  }
+  var BYTE, UNSIGNED_BYTE3, SHORT, UNSIGNED_SHORT3, FLOAT3, TYPE_COMPONENTS, COMPONENT_BYTES, feature2, gltf_ext_quantization_default;
+  var init_gltf_ext_quantization = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-quantization.ts"() {
+      "use strict";
+      init_typed_arrays();
+      BYTE = 5120;
+      UNSIGNED_BYTE3 = 5121;
+      SHORT = 5122;
+      UNSIGNED_SHORT3 = 5123;
+      FLOAT3 = 5126;
+      TYPE_COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT2: 4, MAT3: 9, MAT4: 16 };
+      COMPONENT_BYTES = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
+      feature2 = {
+        id: "KHR_mesh_quantization",
+        async preParse(json, binChunk) {
+          const accessors = json.accessors ?? [];
+          const bufferViews = json.bufferViews ?? [];
+          const convert = [];
+          let appended = 0;
+          for (let i = 0; i < accessors.length; i++) {
+            const a = accessors[i];
+            if (a.bufferView === void 0) {
+              continue;
+            }
+            const componentCount = TYPE_COMPONENTS[a.type] ?? 1;
+            const stride = bufferViews[a.bufferView]?.byteStride;
+            const signed = a.componentType === BYTE || a.componentType === SHORT;
+            const stridedFloat = a.componentType === FLOAT3 && stride !== void 0 && stride !== componentCount * 4;
+            if (signed || a.normalized === true || stridedFloat) {
+              convert.push(i);
+              appended = align42(appended + a.count * componentCount * 4);
+            }
+          }
+          if (convert.length === 0) {
+            return;
+          }
+          const baseLen = align42(binChunk.byteLength);
+          const out = new ArrayBuffer(baseLen + appended);
+          new U8(out).set(new U8(binChunk.buffer, binChunk.byteOffset, binChunk.byteLength));
+          const outView = new DV(out);
+          let cursor = baseLen;
+          for (const i of convert) {
+            const a = accessors[i];
+            const bv = bufferViews[a.bufferView];
+            const componentCount = TYPE_COMPONENTS[a.type] ?? 1;
+            const compBytes = COMPONENT_BYTES[a.componentType];
+            const stride = bv.byteStride ?? componentCount * compBytes;
+            const srcBase = (bv.byteOffset ?? 0) + (a.byteOffset ?? 0);
+            const dstOffset = cursor;
+            for (let v = 0; v < a.count; v++) {
+              for (let c = 0; c < componentCount; c++) {
+                const value = readComponent(binChunk, srcBase + v * stride + c * compBytes, a.componentType, !!a.normalized);
+                outView.setFloat32(dstOffset + (v * componentCount + c) * 4, value, true);
+              }
+            }
+            const byteLength = a.count * componentCount * 4;
+            const newBvIndex = bufferViews.length;
+            bufferViews.push({ buffer: 0, byteOffset: dstOffset, byteLength });
+            a.bufferView = newBvIndex;
+            a.byteOffset = 0;
+            a.componentType = FLOAT3;
+            a.normalized = false;
+            cursor = align42(cursor + byteLength);
+          }
+          return outView;
+        }
+      };
+      gltf_ext_quantization_default = feature2;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/draco-decode.ts
+  function loadDracoScript() {
+    if (scriptLoadPromise2) {
+      return scriptLoadPromise2;
+    }
+    scriptLoadPromise2 = new Promise((resolve, reject) => {
+      const existing = globalThis.DracoDecoderModule;
+      if (existing) {
+        resolve(existing);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = dracoBaseUrl + "draco_decoder.js";
+      script.onload = () => {
+        const factory = globalThis.DracoDecoderModule;
+        if (!factory) {
+          reject(new Error("draco_decoder.js loaded but DracoDecoderModule is undefined"));
+        } else {
+          resolve(factory);
+        }
+      };
+      script.onerror = () => reject(new Error("Failed to load draco_decoder.js from " + script.src));
+      document.head.appendChild(script);
+    });
+    return scriptLoadPromise2;
+  }
+  async function getDracoModule() {
+    if (modulePromise) {
+      return modulePromise;
+    }
+    modulePromise = (async () => {
+      const factory = await loadDracoScript();
+      return factory({ locateFile: (f) => dracoBaseUrl + f });
+    })();
+    return modulePromise;
+  }
+  async function decodeDracoPrimitive(compressed, attributeMap, accessorTypes) {
+    const module = await getDracoModule();
+    const decoder = new module.Decoder();
+    const buffer = new module.DecoderBuffer();
+    buffer.Init(compressed, compressed.byteLength);
+    const mesh = new module.Mesh();
+    const status = decoder.DecodeBufferToMesh(buffer, mesh);
+    if (!status.ok()) {
+      const err = status.error_msg();
+      module.destroy(buffer);
+      module.destroy(mesh);
+      module.destroy(decoder);
+      throw new Error("Draco decode failed: " + err);
+    }
+    const numPoints = mesh.num_points();
+    const numFaces = mesh.num_faces();
+    const indexCount = numFaces * 3;
+    const indexByteLength = indexCount * 4;
+    const indexPtr = module._malloc(indexByteLength);
+    decoder.GetTrianglesUInt32Array(mesh, indexByteLength, indexPtr);
+    const indices = new U32(module.HEAPU32.buffer, indexPtr, indexCount).slice();
+    module._free(indexPtr);
+    const attributes = /* @__PURE__ */ new Map();
+    for (const name of Object.keys(attributeMap)) {
+      const uniqueId = attributeMap[name];
+      const attr = decoder.GetAttributeByUniqueId(mesh, uniqueId);
+      const componentCount = accessorTypes[name] ?? 3;
+      const totalComponents = numPoints * componentCount;
+      const isIntAttr = name === "JOINTS_0" || name === "JOINTS_1";
+      const bytesPerElement = 4;
+      const byteLength = totalComponents * bytesPerElement;
+      const ptr = module._malloc(byteLength);
+      const dataType = isIntAttr ? module.DT_INT32 : module.DT_FLOAT32;
+      decoder.GetAttributeDataArrayForAllPoints(mesh, attr, dataType, byteLength, ptr);
+      if (isIntAttr) {
+        attributes.set(name, new I32(module.HEAP32.buffer, ptr, totalComponents).slice());
+      } else {
+        attributes.set(name, new F32(module.HEAPF32.buffer, ptr, totalComponents).slice());
+      }
+      module._free(ptr);
+    }
+    module.destroy(buffer);
+    module.destroy(mesh);
+    module.destroy(decoder);
+    return { _attributes: attributes, _indices: indices, _vertexCount: numPoints, _indexCount: indexCount };
+  }
+  function getDracoBufferViewBytes(json, binChunk, bufferViewIdx) {
+    const view = json.bufferViews[bufferViewIdx];
+    if (!view) {
+      throw new Error(`Draco bufferView ${bufferViewIdx} not found`);
+    }
+    const offset = binChunk.byteOffset + (view.byteOffset ?? 0);
+    return new U8(binChunk.buffer, offset, view.byteLength);
+  }
+  var dracoBaseUrl, modulePromise, scriptLoadPromise2;
+  var init_draco_decode = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/draco-decode.ts"() {
+      "use strict";
+      init_typed_arrays();
+      dracoBaseUrl = "/";
+      modulePromise = null;
+      scriptLoadPromise2 = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-draco.ts
+  var gltf_feature_draco_exports = {};
+  __export(gltf_feature_draco_exports, {
+    default: () => gltf_feature_draco_default
+  });
+  var TYPE_COMPONENT_COUNTS, feature3, gltf_feature_draco_default;
+  var init_gltf_feature_draco = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-draco.ts"() {
+      "use strict";
+      init_draco_decode();
+      TYPE_COMPONENT_COUNTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT2: 4, MAT3: 9, MAT4: 16 };
+      feature3 = {
+        id: "KHR_draco_mesh_compression",
+        async preMesh(jsonIn, binChunk) {
+          const json = jsonIn;
+          const out = /* @__PURE__ */ new Map();
+          for (const mesh of json.meshes ?? []) {
+            for (const primitive of mesh.primitives ?? []) {
+              const ext14 = primitive.extensions?.KHR_draco_mesh_compression;
+              if (!ext14) {
+                continue;
+              }
+              const bytes = getDracoBufferViewBytes(json, binChunk, ext14.bufferView);
+              const accessorTypes = {};
+              for (const name of Object.keys(ext14.attributes)) {
+                const accIdx = primitive.attributes?.[name];
+                if (accIdx !== void 0 && json.accessors?.[accIdx]) {
+                  accessorTypes[name] = TYPE_COMPONENT_COUNTS[json.accessors[accIdx].type] ?? 3;
+                }
+              }
+              const decoded = await decodeDracoPrimitive(bytes, ext14.attributes, accessorTypes);
+              out.set(primitive, decoded);
+            }
+          }
+          return out;
+        }
+      };
+      gltf_feature_draco_default = feature3;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-clearcoat.ts
+  var gltf_ext_clearcoat_exports = {};
+  __export(gltf_ext_clearcoat_exports, {
+    default: () => gltf_ext_clearcoat_default
+  });
+  var ext, gltf_ext_clearcoat_default;
+  var init_gltf_ext_clearcoat = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-clearcoat.ts"() {
+      "use strict";
+      ext = {
+        id: "KHR_materials_clearcoat",
+        async applyMaterial(mat, ctx) {
+          const c = mat._rawMatDef?.extensions?.KHR_materials_clearcoat;
+          if (!c) {
+            return null;
+          }
+          const [tex, rough, normal] = await Promise.all([
+            ctx._texture(c.clearcoatTexture, false),
+            ctx._texture(c.clearcoatRoughnessTexture, false),
+            ctx._texture(c.clearcoatNormalTexture, false)
+          ]);
+          return {
+            clearCoat: {
+              isEnabled: true,
+              intensity: c.clearcoatFactor ?? (c.clearcoatTexture ? 1 : 0),
+              roughness: c.clearcoatRoughnessFactor ?? (c.clearcoatRoughnessTexture ? 1 : 0),
+              texture: tex,
+              roughnessTexture: rough,
+              bumpTexture: normal,
+              bumpTextureScale: c.clearcoatNormalTexture?.scale ?? 1,
+              useF0Remap: false
+            }
+          };
+        }
+      };
+      gltf_ext_clearcoat_default = ext;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-iridescence.ts
+  var gltf_ext_iridescence_exports = {};
+  __export(gltf_ext_iridescence_exports, {
+    default: () => gltf_ext_iridescence_default
+  });
+  var ext2, gltf_ext_iridescence_default;
+  var init_gltf_ext_iridescence = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-iridescence.ts"() {
+      "use strict";
+      ext2 = {
+        id: "KHR_materials_iridescence",
+        async applyMaterial(mat, ctx) {
+          const iri = mat._rawMatDef?.extensions?.KHR_materials_iridescence;
+          if (!iri) {
+            return null;
+          }
+          const [tex, thicknessTex] = await Promise.all([ctx._texture(iri.iridescenceTexture, true), ctx._texture(iri.iridescenceThicknessTexture, true)]);
+          return {
+            iridescence: {
+              isEnabled: true,
+              intensity: iri.iridescenceFactor ?? 0,
+              indexOfRefraction: iri.iridescenceIor ?? 1.3,
+              minimumThickness: iri.iridescenceThicknessMinimum ?? 100,
+              maximumThickness: iri.iridescenceThicknessMaximum ?? 400,
+              texture: tex,
+              thicknessTexture: thicknessTex
+            }
+          };
+        }
+      };
+      gltf_ext_iridescence_default = ext2;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-emissive-strength.ts
+  var gltf_ext_emissive_strength_exports = {};
+  __export(gltf_ext_emissive_strength_exports, {
+    default: () => gltf_ext_emissive_strength_default
+  });
+  var ext3, gltf_ext_emissive_strength_default;
+  var init_gltf_ext_emissive_strength = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-emissive-strength.ts"() {
+      "use strict";
+      ext3 = {
+        id: "KHR_materials_emissive_strength",
+        async applyMaterial(mat) {
+          const e = mat._rawMatDef?.extensions?.KHR_materials_emissive_strength;
+          if (!e) {
+            return null;
+          }
+          const s = e.emissiveStrength ?? 1;
+          const f = mat._emissiveFactor;
+          return {
+            emissiveColor: [f[0] * s, f[1] * s, f[2] * s]
+          };
+        }
+      };
+      gltf_ext_emissive_strength_default = ext3;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-sheen.ts
+  var gltf_ext_sheen_exports = {};
+  __export(gltf_ext_sheen_exports, {
+    default: () => gltf_ext_sheen_default
+  });
+  var ext4, gltf_ext_sheen_default;
+  var init_gltf_ext_sheen = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-sheen.ts"() {
+      "use strict";
+      ext4 = {
+        id: "KHR_materials_sheen",
+        async applyMaterial(mat, ctx) {
+          const s = mat._rawMatDef?.extensions?.KHR_materials_sheen;
+          if (!s) {
+            return null;
+          }
+          const tex = await ctx._texture(s.sheenColorTexture, true);
+          return {
+            sheen: {
+              isEnabled: true,
+              color: s.sheenColorFactor ?? [0, 0, 0],
+              roughness: s.sheenRoughnessFactor ?? 0,
+              intensity: 1,
+              texture: tex,
+              albedoScaling: true
+            }
+          };
+        }
+      };
+      gltf_ext_sheen_default = ext4;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-anisotropy.ts
+  var gltf_ext_anisotropy_exports = {};
+  __export(gltf_ext_anisotropy_exports, {
+    default: () => gltf_ext_anisotropy_default
+  });
+  var ext5, gltf_ext_anisotropy_default;
+  var init_gltf_ext_anisotropy = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-anisotropy.ts"() {
+      "use strict";
+      ext5 = {
+        id: "KHR_materials_anisotropy",
+        async applyMaterial(mat) {
+          const a = mat._rawMatDef?.extensions?.KHR_materials_anisotropy;
+          if (!a) {
+            return null;
+          }
+          const rot = a.anisotropyRotation ?? 0;
+          return {
+            anisotropy: {
+              isEnabled: true,
+              intensity: a.anisotropyStrength ?? 0,
+              direction: [Math.cos(rot), Math.sin(rot)]
+            }
+          };
+        }
+      };
+      gltf_ext_anisotropy_default = ext5;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-unlit.ts
+  var gltf_ext_unlit_exports = {};
+  __export(gltf_ext_unlit_exports, {
+    default: () => gltf_ext_unlit_default
+  });
+  var ext6, gltf_ext_unlit_default;
+  var init_gltf_ext_unlit = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-unlit.ts"() {
+      "use strict";
+      ext6 = {
+        id: "KHR_materials_unlit",
+        async applyMaterial(mat) {
+          if (!mat._rawMatDef?.extensions?.KHR_materials_unlit) {
+            return null;
+          }
+          const f = mat._baseColorFactor;
+          const tint = mat._baseColorImage ? [f[0], f[1], f[2]] : void 0;
+          return tint ? { unlit: true, unlitColor: tint } : { unlit: true };
+        }
+      };
+      gltf_ext_unlit_default = ext6;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-spec-gloss.ts
+  var gltf_ext_spec_gloss_exports = {};
+  __export(gltf_ext_spec_gloss_exports, {
+    default: () => gltf_ext_spec_gloss_default
+  });
+  var ext7, gltf_ext_spec_gloss_default;
+  var init_gltf_ext_spec_gloss = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-spec-gloss.ts"() {
+      "use strict";
+      ext7 = {
+        id: "KHR_materials_pbrSpecularGlossiness",
+        async applyMaterial(mat, ctx) {
+          const sg = mat._rawMatDef?.extensions?.KHR_materials_pbrSpecularGlossiness;
+          if (!sg) {
+            return null;
+          }
+          const [diffuse, specGloss] = await Promise.all([ctx._texture(sg.diffuseTexture, true), ctx._texture(sg.specularGlossinessTexture, true)]);
+          const sf = sg.specularFactor;
+          const out = { metallicFactor: 0, roughnessFactor: 1 - (sg.glossinessFactor ?? 1), reflectance: sf ? Math.max(sf[0], sf[1], sf[2]) : 1 };
+          if (diffuse) {
+            out.baseColorTexture = diffuse;
+          }
+          if (specGloss) {
+            out.specGlossTexture = specGloss;
+          }
+          return out;
+        }
+      };
+      gltf_ext_spec_gloss_default = ext7;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-dielectric.ts
+  var gltf_ext_dielectric_exports = {};
+  __export(gltf_ext_dielectric_exports, {
+    default: () => gltf_ext_dielectric_default
+  });
+  var ext8, gltf_ext_dielectric_default;
+  var init_gltf_ext_dielectric = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-dielectric.ts"() {
+      "use strict";
+      ext8 = {
+        id: "KHR_materials_dielectric",
+        async applyMaterial(mat, ctx) {
+          const exts = mat._rawMatDef?.extensions;
+          if (!exts) {
+            return null;
+          }
+          const eIor = exts.KHR_materials_ior;
+          const eSp = exts.KHR_materials_specular;
+          const eVol = exts.KHR_materials_volume;
+          const eTx = exts.KHR_materials_transmission;
+          const eDisp = exts.KHR_materials_dispersion;
+          if (!eIor && !eSp && !eVol && !eTx && !eDisp) {
+            return null;
+          }
+          const [specTex, specColTex, thickTex, transTex] = await Promise.all([
+            ctx._texture(eSp?.specularTexture, false),
+            ctx._texture(eSp?.specularColorTexture, true),
+            ctx._texture(eVol?.thicknessTexture, false),
+            ctx._texture(eTx?.transmissionTexture, false)
+          ]);
+          const out = {};
+          const subsurface = {};
+          if (eIor) {
+            const ior = typeof eIor.ior === "number" ? eIor.ior : 1.5;
+            if (ior !== 1.5) {
+              out.metallicF0Factor = ((ior - 1) / (ior + 1)) ** 2 / 0.04;
+              out.specularWeight = 1;
+              out._hasReflExt = true;
+            }
+            subsurface.refraction = { indexOfRefraction: ior };
+          }
+          if (eSp) {
+            if (typeof eSp.specularFactor === "number") {
+              if (Math.abs(eSp.specularFactor - 1) > 1e-6) {
+                out.metallicF0Factor = eSp.specularFactor;
+                out.specularWeight = eSp.specularFactor;
+                out._hasReflExt = true;
+              } else {
+                delete out.metallicF0Factor;
+                delete out.specularWeight;
+              }
+            }
+            if (Array.isArray(eSp.specularColorFactor) && eSp.specularColorFactor.length === 3) {
+              if (eSp.specularColorFactor[0] !== 1 || eSp.specularColorFactor[1] !== 1 || eSp.specularColorFactor[2] !== 1) {
+                out.metallicReflectanceColor = [eSp.specularColorFactor[0], eSp.specularColorFactor[1], eSp.specularColorFactor[2]];
+                out._hasReflExt = true;
+              }
+            }
+            if (specTex) {
+              out.metallicReflectanceTexture = specTex;
+              out.useOnlyMetallicFromMetallicReflectanceTexture = true;
+            }
+            if (specColTex) {
+              out.reflectanceTexture = specColTex;
+            }
+          }
+          if (eVol) {
+            const thicknessFactor = typeof eVol.thicknessFactor === "number" ? eVol.thicknessFactor : 0;
+            if (thicknessFactor > 0 || thickTex) {
+              subsurface.thickness = {
+                min: 0,
+                max: thicknessFactor || 1,
+                useGlTFChannel: true,
+                ...thickTex ? { texture: thickTex } : void 0
+              };
+            }
+            const color = Array.isArray(eVol.attenuationColor) && eVol.attenuationColor.length === 3 ? eVol.attenuationColor : void 0;
+            const atDistance = typeof eVol.attenuationDistance === "number" ? eVol.attenuationDistance : void 0;
+            if (color || atDistance !== void 0) {
+              subsurface.tint = {
+                ...color ? { color } : void 0,
+                ...atDistance !== void 0 ? { atDistance } : void 0
+              };
+            } else if (subsurface.thickness) {
+              subsurface.tint = { color: [1, 1, 1], atDistance: 1 };
+            }
+          }
+          if (eTx) {
+            const intensity = typeof eTx.transmissionFactor === "number" ? eTx.transmissionFactor : 0;
+            if (intensity > 0 || transTex) {
+              out.transmissive = true;
+              const refraction = {
+                ...subsurface.refraction ?? {},
+                intensity,
+                useThicknessAsDepth: !!subsurface.thickness,
+                ...transTex ? { texture: transTex } : void 0
+              };
+              subsurface.refraction = refraction;
+            }
+          }
+          if (eDisp && typeof eDisp.dispersion === "number" && eDisp.dispersion > 0 && subsurface.refraction && subsurface.thickness) {
+            subsurface.refraction = { ...subsurface.refraction, dispersion: 20 / eDisp.dispersion };
+          }
+          if (Object.keys(subsurface).length > 0) {
+            out.subsurface = subsurface;
+          }
+          return Object.keys(out).length > 0 ? out : null;
+        }
+      };
+      gltf_ext_dielectric_default = ext8;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-uv-transform.ts
+  var gltf_ext_uv_transform_exports = {};
+  __export(gltf_ext_uv_transform_exports, {
+    default: () => gltf_ext_uv_transform_default
+  });
+  var ext9, gltf_ext_uv_transform_default;
+  var init_gltf_ext_uv_transform = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-uv-transform.ts"() {
+      "use strict";
+      init_texture_2d();
+      ext9 = {
+        id: "KHR_texture_transform",
+        wrapTexture(tex, texInfo) {
+          const info = texInfo;
+          if (!info) {
+            return tex;
+          }
+          const kt = info.extensions?.KHR_texture_transform;
+          const patch = {};
+          if (kt) {
+            if (kt.scale) {
+              patch.uScale = kt.scale[0];
+              patch.vScale = kt.scale[1];
+            }
+            if (kt.offset) {
+              patch.uOffset = kt.offset[0];
+              patch.vOffset = kt.offset[1];
+            }
+            if (kt.rotation) {
+              patch.uAng = kt.rotation;
+            }
+            if (Object.keys(patch).length) {
+              patch._hasTx = true;
+            }
+          }
+          const tc = kt?.texCoord ?? info.texCoord;
+          if (tc === 1) {
+            patch._texCoord = 1;
+          }
+          return Object.keys(patch).length ? cloneTexture2D(tex, patch) : tex;
+        }
+      };
+      gltf_ext_uv_transform_default = ext9;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-basisu.ts
+  var gltf_ext_basisu_exports = {};
+  __export(gltf_ext_basisu_exports, {
+    default: () => gltf_ext_basisu_default
+  });
+  function basisSourceIndex(tex) {
+    const source = tex?.extensions?.KHR_texture_basisu?.source;
+    return typeof source === "number" ? source : null;
+  }
+  function textureIndex(texInfo) {
+    const index = texInfo?.index;
+    return typeof index === "number" ? index : null;
+  }
+  function textureUsesBasisu(json, texInfo) {
+    const index = textureIndex(texInfo);
+    return index !== null && basisSourceIndex(json.textures?.[index]) !== null;
+  }
+  function stripBasisuTexture(json, owner, slot, data) {
+    if (!textureUsesBasisu(json, owner?.[slot])) {
+      return false;
+    }
+    data[slot] = owner[slot];
+    delete owner[slot];
+    return true;
+  }
+  function prepareBasisuMaterials(json, binChunk, baseUrl) {
+    for (const mat of json.materials ?? []) {
+      const data = { json, binChunk, baseUrl };
+      const pbr = mat.pbrMetallicRoughness ?? {};
+      let hasBasisu = stripBasisuTexture(json, pbr, "baseColorTexture", data);
+      hasBasisu = stripBasisuTexture(json, pbr, "metallicRoughnessTexture", data) || hasBasisu;
+      hasBasisu = stripBasisuTexture(json, mat, "normalTexture", data) || hasBasisu;
+      hasBasisu = stripBasisuTexture(json, mat, "occlusionTexture", data) || hasBasisu;
+      hasBasisu = stripBasisuTexture(json, mat, "emissiveTexture", data) || hasBasisu;
+      const spec = mat.extensions?.KHR_materials_specular;
+      if (spec) {
+        hasBasisu = stripBasisuTexture(json, spec, "specularTexture", data) || hasBasisu;
+        hasBasisu = stripBasisuTexture(json, spec, "specularColorTexture", data) || hasBasisu;
+      }
+      if (hasBasisu) {
+        Object.defineProperty(mat, BASISU_MATERIAL_DATA, { value: data });
+      }
+    }
+  }
+  async function resolveImageBuffer(ctx, imageIdx) {
+    const image = ctx.json.images?.[imageIdx];
+    if (!image) {
+      throw new Error(`${NAME}: image ${imageIdx} not found`);
+    }
+    if (image.bufferView !== void 0) {
+      const bv = ctx.json.bufferViews?.[image.bufferView];
+      if (!bv) {
+        throw new Error(`${NAME}: bufferView ${image.bufferView} not found`);
+      }
+      const offset = ctx.binChunk.byteOffset + (bv.byteOffset ?? 0);
+      const copy = new U8(bv.byteLength);
+      copy.set(new U8(ctx.binChunk.buffer, offset, bv.byteLength));
+      return copy.buffer;
+    }
+    if (image.uri) {
+      const url = new URL(image.uri, ctx.baseUrl + "x").href;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`${NAME}: failed to load image ${response.status} ${response.statusText}`);
+      }
+      return response.arrayBuffer();
+    }
+    throw new Error(`${NAME}: image has neither bufferView nor uri`);
+  }
+  async function loadBasisuBitmap(data, texInfo) {
+    const index = textureIndex(texInfo);
+    if (index === null) {
+      return null;
+    }
+    const source = basisSourceIndex(data.json.textures?.[index]);
+    if (source === null) {
+      return null;
+    }
+    data.bitmaps ?? (data.bitmaps = /* @__PURE__ */ new Map());
+    let bitmap = data.bitmaps.get(index);
+    if (!bitmap) {
+      bitmap = resolveImageBuffer(data, source).then(decodeKtx2ImageBitmapFromBuffer);
+      data.bitmaps.set(index, bitmap);
+    }
+    return bitmap;
+  }
+  async function uploadBasisuTexture(data, ctx, texInfo, sRGB) {
+    const index = textureIndex(texInfo);
+    if (index === null) {
+      return void 0;
+    }
+    data.textures ?? (data.textures = /* @__PURE__ */ new Map());
+    const key = `${index}:${sRGB ? 1 : 0}`;
+    let tex = data.textures.get(key);
+    if (!tex) {
+      const source = basisSourceIndex(data.json.textures?.[index]);
+      if (source === null) {
+        return void 0;
+      }
+      tex = await uploadKtx2Texture2D(ctx._engine, await resolveImageBuffer(data, source), sRGB);
+      data.textures.set(key, tex);
+    }
+    return tex;
+  }
+  async function compositeOrm(mr, occ) {
+    const w = mr.width;
+    const h = mr.height;
+    const c1 = new OffscreenCanvas(w, h);
+    const x1 = c1.getContext("2d");
+    x1.drawImage(mr, 0, 0, w, h);
+    const d1 = x1.getImageData(0, 0, w, h);
+    const c2 = new OffscreenCanvas(w, h);
+    const x2 = c2.getContext("2d");
+    x2.drawImage(occ, 0, 0, w, h);
+    const d2 = x2.getImageData(0, 0, w, h);
+    for (let j = 0; j < d1.data.length; j += 4) {
+      d1.data[j] = d2.data[j];
+    }
+    x1.putImageData(d1, 0, 0);
+    return createImageBitmap(c1);
+  }
+  async function uploadOrmTexture(data, ctx) {
+    const mrInfo = data.metallicRoughnessTexture;
+    const occInfo = data.occlusionTexture;
+    const mrIndex = textureIndex(mrInfo);
+    const occIndex = textureIndex(occInfo);
+    if (mrIndex === null && occIndex === null) {
+      return void 0;
+    }
+    if (mrIndex === null || occIndex === null || mrIndex === occIndex) {
+      return uploadBasisuTexture(data, ctx, mrInfo ?? occInfo, false);
+    }
+    data.textures ?? (data.textures = /* @__PURE__ */ new Map());
+    const key = `orm:${mrIndex}:${occIndex}`;
+    let tex = data.textures.get(key);
+    if (!tex) {
+      const [mr, occ] = await Promise.all([loadBasisuBitmap(data, mrInfo), loadBasisuBitmap(data, occInfo)]);
+      if (!mr || !occ) {
+        return void 0;
+      }
+      tex = ctx._uploadImage(await compositeOrm(mr, occ), false);
+      data.textures.set(key, tex);
+    }
+    return tex;
+  }
+  function readComponent2(view, offset, componentType, normalized) {
+    switch (componentType) {
+      case FLOAT4:
+        return view.getFloat32(offset, true);
+      case 5125: {
+        const v = view.getUint32(offset, true);
+        return normalized ? v / 4294967295 : v;
+      }
+      case 5123: {
+        const v = view.getUint16(offset, true);
+        return normalized ? v / 65535 : v;
+      }
+      case 5122: {
+        const v = view.getInt16(offset, true);
+        return normalized ? Math.max(v / 32767, -1) : v;
+      }
+      case 5121: {
+        const v = view.getUint8(offset);
+        return normalized ? v / 255 : v;
+      }
+      case 5120: {
+        const v = view.getInt8(offset);
+        return normalized ? Math.max(v / 127, -1) : v;
+      }
+      default:
+        throw new Error(`${NAME}: strided accessor uses unsupported component type: ${componentType}`);
+    }
+  }
+  function readStridedFloat(json, binChunk, accessorIdx) {
+    const accessor = json.accessors[accessorIdx];
+    const bufferView = json.bufferViews[accessor.bufferView];
+    const componentType = accessor.componentType;
+    const compBytes = COMPONENT_BYTES2[componentType];
+    if (!compBytes) {
+      throw new Error(`${NAME}: strided accessor ${accessorIdx} uses unsupported component type: ${componentType}`);
+    }
+    const componentCount = TYPE_SIZES2[accessor.type] ?? 1;
+    const elementBytes = componentCount * compBytes;
+    const byteStride = bufferView.byteStride ?? elementBytes;
+    if (byteStride < elementBytes) {
+      throw new Error(`${NAME}: invalid accessor stride ${byteStride} for accessor ${accessorIdx}`);
+    }
+    const normalized = accessor.normalized === true;
+    const baseOffset = binChunk.byteOffset + (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+    const view = new DV(binChunk.buffer);
+    const out = new F32(accessor.count * componentCount);
+    for (let i = 0, o = 0; i < accessor.count; i++) {
+      const src = baseOffset + i * byteStride;
+      for (let c = 0; c < componentCount; c++, o++) {
+        out[o] = readComponent2(view, src + c * compBytes, componentType, normalized);
+      }
+    }
+    return out;
+  }
+  var NAME, FLOAT4, COMPONENT_BYTES2, TYPE_SIZES2, BASISU_MATERIAL_DATA, ext10, gltf_ext_basisu_default;
+  var init_gltf_ext_basisu = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-basisu.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gltf_parser();
+      init_ktx2_loader();
+      NAME = "KHR_texture_basisu";
+      FLOAT4 = 5126;
+      COMPONENT_BYTES2 = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
+      TYPE_SIZES2 = {
+        SCALAR: 1,
+        VEC2: 2,
+        VEC3: 3,
+        VEC4: 4,
+        MAT2: 4,
+        MAT3: 9,
+        MAT4: 16
+      };
+      BASISU_MATERIAL_DATA = "__basisuMaterialData";
+      ext10 = {
+        id: NAME,
+        async preMesh(json, binChunk, baseUrl) {
+          const gltf = json;
+          prepareBasisuMaterials(gltf, binChunk, baseUrl);
+          const decoded = /* @__PURE__ */ new Map();
+          for (const mesh of gltf.meshes ?? []) {
+            for (const primitive of mesh.primitives ?? []) {
+              const attrs = primitive.attributes ?? {};
+              const strided = Object.keys(attrs).some((name) => gltf.bufferViews?.[gltf.accessors?.[attrs[name]]?.bufferView]?.byteStride !== void 0);
+              if (!strided) {
+                continue;
+              }
+              const attributes = /* @__PURE__ */ new Map();
+              for (const name of Object.keys(attrs)) {
+                const accessorIdx = attrs[name];
+                const accessor = gltf.accessors[accessorIdx];
+                if (gltf.bufferViews?.[accessor.bufferView]?.byteStride !== void 0) {
+                  attributes.set(name, readStridedFloat(gltf, binChunk, accessorIdx));
+                }
+              }
+              const posAcc = gltf.accessors[attrs.POSITION];
+              const idx = primitive.indices === void 0 ? new U32(0) : new U32(resolveAccessor(gltf, binChunk, primitive.indices)._data);
+              decoded.set(primitive, {
+                _attributes: attributes,
+                _indices: idx,
+                _vertexCount: posAcc.count,
+                _indexCount: idx.length
+              });
+            }
+          }
+          return decoded;
+        },
+        async applyMaterial(mat, ctx) {
+          const data = mat._rawMatDef?.[BASISU_MATERIAL_DATA];
+          if (!data) {
+            return null;
+          }
+          const [baseColorTexture, ormTexture, normalTexture, emissiveTexture, specularTexture, specularColorTexture] = await Promise.all([
+            uploadBasisuTexture(data, ctx, data.baseColorTexture, true),
+            uploadOrmTexture(data, ctx),
+            uploadBasisuTexture(data, ctx, data.normalTexture, false),
+            uploadBasisuTexture(data, ctx, data.emissiveTexture, true),
+            uploadBasisuTexture(data, ctx, data.specularTexture, false),
+            uploadBasisuTexture(data, ctx, data.specularColorTexture, true)
+          ]);
+          const out = {
+            ...baseColorTexture ? { baseColorTexture } : void 0,
+            ...ormTexture ? {
+              ormTexture,
+              ...data.metallicRoughnessTexture ? { metallicFactor: mat._metallicFactor, roughnessFactor: mat._roughnessFactor } : void 0,
+              ...data.occlusionTexture ? { occlusionStrength: 1, occlusionTexCoord: data.occlusionTexture.texCoord ?? 0 } : void 0
+            } : void 0,
+            ...normalTexture ? { normalTexture, normalTextureScale: data.normalTexture?.scale ?? 1 } : void 0,
+            ...emissiveTexture ? { emissiveTexture } : void 0,
+            ...specularTexture ? { metallicReflectanceTexture: specularTexture, useOnlyMetallicFromMetallicReflectanceTexture: true } : void 0,
+            ...specularColorTexture ? { reflectanceTexture: specularColorTexture } : void 0
+          };
+          if (!out.baseColorTexture && !out.ormTexture && !out.normalTexture && !out.emissiveTexture && !out.metallicReflectanceTexture && !out.reflectanceTexture) {
+            return null;
+          }
+          return out;
+        }
+      };
+      gltf_ext_basisu_default = ext10;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-orm.ts
+  var gltf_ext_orm_exports = {};
+  __export(gltf_ext_orm_exports, {
+    default: () => gltf_ext_orm_default
+  });
+  async function compositeOrm2(mr, occ) {
+    const w = mr.width;
+    const h = mr.height;
+    const c1 = new OffscreenCanvas(w, h);
+    const x1 = c1.getContext("2d");
+    x1.drawImage(mr, 0, 0, w, h);
+    const d1 = x1.getImageData(0, 0, w, h);
+    const c2 = new OffscreenCanvas(w, h);
+    const x2 = c2.getContext("2d");
+    x2.drawImage(occ, 0, 0, w, h);
+    const d2 = x2.getImageData(0, 0, w, h);
+    for (let j = 0; j < d1.data.length; j += 4) {
+      d1.data[j] = d2.data[j];
+    }
+    x1.putImageData(d1, 0, 0);
+    return createImageBitmap(c1);
+  }
+  var ext11, gltf_ext_orm_default;
+  var init_gltf_ext_orm = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-orm.ts"() {
+      "use strict";
+      ext11 = {
+        id: "_orm-composite",
+        async applyMaterial(mat, ctx) {
+          const mr = mat._metallicRoughnessImage;
+          const occ = mat._occlusionImage;
+          if (!mr || !occ || mr === occ) {
+            return null;
+          }
+          const bmp = await compositeOrm2(mr, occ);
+          return { ormTexture: ctx._uploadImage(bmp, false) };
+        }
+      };
+      gltf_ext_orm_default = ext11;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/skeleton/bone-control-hooks.ts
+  var _boneBuilder, _boneApplier;
+  var init_bone_control_hooks = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/skeleton/bone-control-hooks.ts"() {
+      "use strict";
+      _boneBuilder = null;
+      _boneApplier = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/animation/types.ts
+  var INTERP_LINEAR, INTERP_STEP, INTERP_CUBICSPLINE, PATH_TRANSLATION, PATH_ROTATION, PATH_SCALE, PATH_WEIGHTS, PATH_POINTER;
+  var init_types2 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/animation/types.ts"() {
+      "use strict";
+      INTERP_LINEAR = 0;
+      INTERP_STEP = 1;
+      INTERP_CUBICSPLINE = 2;
+      PATH_TRANSLATION = 0;
+      PATH_ROTATION = 1;
+      PATH_SCALE = 2;
+      PATH_WEIGHTS = 3;
+      PATH_POINTER = 4;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-animation.ts
+  var gltf_animation_exports = {};
+  __export(gltf_animation_exports, {
+    _installPointerHandlers: () => _installPointerHandlers,
+    computeBoneTextureData: () => computeBoneTextureData,
+    extractSkin: () => extractSkin,
+    parseAnimationData: () => parseAnimationData
+  });
+  function _installPointerHandlers(parser, converter) {
+    _parsePointerChannel = parser;
+    _convertSampler = converter;
+  }
+  function toSamplerFloat32(src, length, normalized) {
+    if (_convertSampler) {
+      return _convertSampler(src, length, normalized);
+    }
+    return new F32(src.buffer, src.byteOffset, length);
+  }
+  function resolveIBMs(json, binChunk, skin) {
+    const jointCount = skin.joints.length;
+    if (skin.inverseBindMatrices !== void 0) {
+      const ibmData = resolveAccessor(json, binChunk, skin.inverseBindMatrices);
+      return new F32(ibmData._data.buffer, ibmData._data.byteOffset, jointCount * 16);
+    }
+    const out = new F32(jointCount * 16);
+    for (let i = 0; i < jointCount; i++) {
+      const o = i * 16;
+      out[o] = out[o + 5] = out[o + 10] = out[o + 15] = 1;
+    }
+    return out;
+  }
+  function extractSkin(json, binChunk, skinIdx, meshWorldMatrix, parentMap, worldMatrixCache) {
+    const skin = json.skins[skinIdx];
+    const jointNodes = skin.joints;
+    const inverseBindMatrices = resolveIBMs(json, binChunk, skin);
+    const jointWorldMatrices = jointNodes.map((nodeIdx) => computeNodeWorldMatrix(json, nodeIdx, parentMap, worldMatrixCache));
+    return { jointNodes, inverseBindMatrices, jointWorldMatrices, meshWorldMatrix };
+  }
+  function computeBoneTextureData(skin) {
+    const numBones = skin.jointNodes.length;
+    const data = new F32(numBones * 16);
+    const invMeshWorld = mat4Invert(skin.meshWorldMatrix) ?? mat4Identity();
+    const tmp = getLoaderTmpAnim();
+    for (let i = 0; i < numBones; i++) {
+      mat4MultiplyInto(tmp, 0, invMeshWorld, 0, skin.jointWorldMatrices[i], 0);
+      mat4MultiplyInto(data, i * 16, tmp, 0, skin.inverseBindMatrices, i * 16);
+    }
+    return data;
+  }
+  function parseAnimationData(json, binChunk, meshes, parentMap, worldMatrixCache, nodeMap, boneOverrides) {
+    if (!json.animations || json.animations.length === 0) {
+      return null;
+    }
+    let pointerChannelCount = 0;
+    const clips = [];
+    for (const anim of json.animations) {
+      const samplers = [];
+      for (const s of anim.samplers) {
+        const inputAcc = resolveAccessor(json, binChunk, s.input);
+        const outputAcc = resolveAccessor(json, binChunk, s.output);
+        const inNorm = json.accessors[s.input]?.normalized === true;
+        const outNorm = json.accessors[s.output]?.normalized === true;
+        samplers.push({
+          input: toSamplerFloat32(inputAcc._data, inputAcc._count, inNorm),
+          output: toSamplerFloat32(outputAcc._data, outputAcc._count * outputAcc._componentCount, outNorm),
+          interpolation: INTERP_MAP[s.interpolation ?? "LINEAR"] ?? INTERP_LINEAR
+        });
+      }
+      const channels = [];
+      for (const c of anim.channels) {
+        const ptr = c.target?.extensions?.KHR_animation_pointer?.pointer;
+        if (ptr) {
+          if (!_parsePointerChannel) {
+            continue;
+          }
+          const ch = _parsePointerChannel(ptr, c, nodeMap, json, meshes);
+          if (ch) {
+            channels.push(ch);
+            pointerChannelCount++;
+          }
+          continue;
+        }
+        if (c.target.node === void 0) {
+          continue;
+        }
+        const path = PATH_MAP[c.target.path];
+        if (path === void 0) {
+          continue;
+        }
+        channels.push({ samplerIdx: c.sampler, nodeIdx: c.target.node, path });
+      }
+      let duration = 0;
+      for (const s of samplers) {
+        if (s.input.length > 0) {
+          const last = s.input[s.input.length - 1];
+          if (last > duration) {
+            duration = last;
+          }
+        }
+      }
+      clips.push({ name: anim.name ?? "", channels, samplers, duration });
+    }
+    const nodeCount = json.nodes?.length ?? 0;
+    const nodes = [];
+    for (let i = 0; i < nodeCount; i++) {
+      const n = json.nodes[i];
+      const t = n.translation ?? [0, 0, 0];
+      const r = n.rotation ?? [0, 0, 0, 1];
+      const s = n.scale ?? [1, 1, 1];
+      nodes.push({
+        parentIdx: findParent(parentMap, i),
+        _matrix: n.matrix,
+        tx: t[0],
+        ty: t[1],
+        tz: t[2],
+        rx: r[0],
+        ry: r[1],
+        rz: r[2],
+        rw: r[3],
+        sx: s[0],
+        sy: s[1],
+        sz: s[2]
+      });
+    }
+    const nodeToMeshIndices = /* @__PURE__ */ new Map();
+    let gpuIdx = 0;
+    for (let ni = 0; ni < nodeCount; ni++) {
+      const node = json.nodes[ni];
+      if (node.mesh === void 0) {
+        continue;
+      }
+      const mesh = json.meshes[node.mesh];
+      const indices = [];
+      for (let p = 0; p < mesh.primitives.length; p++) {
+        indices.push(gpuIdx++);
+      }
+      nodeToMeshIndices.set(ni, indices);
+    }
+    const skeletons = [];
+    for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+      const node = json.nodes[nodeIdx];
+      if (node.skin === void 0 || !json.skins) {
+        continue;
+      }
+      const meshIndices = nodeToMeshIndices.get(nodeIdx);
+      if (!meshIndices) {
+        continue;
+      }
+      const skin = json.skins[node.skin];
+      const jointNodes = skin.joints;
+      const inverseBindMatrices = resolveIBMs(json, binChunk, skin);
+      const meshWorldMatrix = computeNodeWorldMatrix(json, nodeIdx, parentMap, worldMatrixCache);
+      const invMeshWorld = mat4Invert(meshWorldMatrix) ?? mat4Identity();
+      for (const mi of meshIndices) {
+        const mesh = meshes[mi];
+        const skeleton = mesh?.skeleton;
+        if (!skeleton) {
+          continue;
+        }
+        skeletons.push({
+          jointNodes,
+          inverseBindMatrices,
+          invMeshWorld,
+          boneTexture: skeleton.boneTexture,
+          boneCount: jointNodes.length,
+          boneMatrices: skeleton.boneMatrices,
+          runtimeSkeleton: skeleton
+        });
+      }
+    }
+    const morphBindings = [];
+    for (let nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
+      const node = json.nodes[nodeIdx];
+      if (node.mesh === void 0) {
+        continue;
+      }
+      const gltfMesh = json.meshes[node.mesh];
+      if (!gltfMesh.primitives?.[0]?.targets?.length) {
+        continue;
+      }
+      const meshIndices = nodeToMeshIndices.get(nodeIdx);
+      if (!meshIndices) {
+        continue;
+      }
+      for (const mi of meshIndices) {
+        const mesh = meshes[mi];
+        const morphTargets = mesh?.morphTargets;
+        if (!morphTargets) {
+          continue;
+        }
+        morphBindings.push({
+          nodeIdx,
+          weightsBuffer: morphTargets.weightsBuffer,
+          weights: morphTargets.weights,
+          targetCount: morphTargets.count,
+          runtimeMorphTargets: morphTargets
+        });
+      }
+    }
+    const nodeTargets = nodeMap ?? [];
+    const excludedNodeIndices = /* @__PURE__ */ new Set();
+    for (const skin of json.skins ?? []) {
+      for (const ji of skin.joints ?? []) {
+        excludedNodeIndices.add(ji);
+      }
+    }
+    for (let ni = 0; ni < nodeCount; ni++) {
+      if (json.nodes[ni]?.skin === void 0) {
+        continue;
+      }
+      let p = ni;
+      while (p >= 0 && !excludedNodeIndices.has(p)) {
+        excludedNodeIndices.add(p);
+        p = findParent(parentMap, p);
+      }
+    }
+    if (clips.length === 0 || skeletons.length === 0 && morphBindings.length === 0 && pointerChannelCount === 0 && !hasWritableNodeChannel(clips, nodeTargets, excludedNodeIndices)) {
+      return null;
+    }
+    const nodeNames = (json.nodes ?? []).map((n) => n?.name);
+    return { clips, nodes, skeletons, morphBindings, nodeTargets, excludedNodeIndices, nodeNames, boneOverrides };
+  }
+  function hasWritableNodeChannel(clips, nodeTargets, excludedNodeIndices) {
+    for (const clip of clips) {
+      for (const ch of clip.channels) {
+        if ((ch.path === PATH_TRANSLATION || ch.path === PATH_ROTATION || ch.path === PATH_SCALE) && ch.nodeIdx >= 0 && !excludedNodeIndices.has(ch.nodeIdx) && nodeTargets[ch.nodeIdx]) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  var _parsePointerChannel, _convertSampler, INTERP_MAP, PATH_MAP;
+  var init_gltf_animation = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-animation.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_types2();
+      init_mat4_identity();
+      init_mat4_invert();
+      init_mat4_multiply_into();
+      init_gltf_parser();
+      init_loader_scratch();
+      _parsePointerChannel = null;
+      _convertSampler = null;
+      INTERP_MAP = {
+        LINEAR: INTERP_LINEAR,
+        STEP: INTERP_STEP,
+        CUBICSPLINE: INTERP_CUBICSPLINE
+      };
+      PATH_MAP = {
+        translation: PATH_TRANSLATION,
+        rotation: PATH_ROTATION,
+        scale: PATH_SCALE,
+        weights: PATH_WEIGHTS
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/skeleton/create-skeleton.ts
+  var create_skeleton_exports = {};
+  __export(create_skeleton_exports, {
+    createSkeleton: () => createSkeleton
+  });
+  function createSkeleton(engine, joints, weights, boneCount, boneData, joints1, weights1) {
+    const device = engine._device;
+    const texWidth = boneCount * 4;
+    const boneTexture = device.createTexture({
+      size: [texWidth, 1],
+      format: "rgba32float",
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST
+    });
+    device.queue.writeTexture({ texture: boneTexture }, boneData.buffer, { bytesPerRow: texWidth * 16 }, { width: texWidth, height: 1 });
+    const joints32 = new U32(joints.length);
+    for (let i = 0; i < joints.length; i++) {
+      joints32[i] = joints[i];
+    }
+    const jointsBuffer = createMappedBuffer(engine, joints32, BU.VERTEX);
+    const weightsBuffer = createMappedBuffer(engine, weights, BU.VERTEX);
+    let joints1Buffer = null;
+    let weights1Buffer = null;
+    if (joints1 && weights1) {
+      const joints132 = new U32(joints1.length);
+      for (let i = 0; i < joints1.length; i++) {
+        joints132[i] = joints1[i];
+      }
+      joints1Buffer = createMappedBuffer(engine, joints132, BU.VERTEX);
+      weights1Buffer = createMappedBuffer(engine, weights1, BU.VERTEX);
+    }
+    return {
+      boneTexture,
+      boneCount,
+      jointsBuffer,
+      weightsBuffer,
+      joints,
+      weights,
+      boneMatrices: boneData,
+      joints1Buffer,
+      weights1Buffer,
+      joints1: joints1 ?? null,
+      weights1: weights1 ?? null
+    };
+  }
+  var init_create_skeleton = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/skeleton/create-skeleton.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_gpu_buffers();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-skeleton.ts
+  var gltf_feature_skeleton_exports = {};
+  __export(gltf_feature_skeleton_exports, {
+    default: () => gltf_feature_skeleton_default
+  });
+  function resolveAttr(name, primitive, decoded, json, binChunk) {
+    if (decoded && decoded._attributes.has(name)) {
+      return decoded._attributes.get(name);
+    }
+    const idx = primitive.attributes?.[name];
+    return idx !== void 0 ? resolveAccessor(json, binChunk, idx)._data : null;
+  }
+  var feature4, gltf_feature_skeleton_default;
+  var init_gltf_feature_skeleton = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-skeleton.ts"() {
+      "use strict";
+      init_gltf_parser();
+      init_bone_control_hooks();
+      feature4 = {
+        id: "_skeleton",
+        async applyMesh(meshData, mesh, ctx) {
+          const { _json: json, _binChunk: binChunk, _parentMap: parentMap, _worldMatrixCache: worldMatrixCache } = ctx;
+          const node = json.nodes[meshData._nodeIndex];
+          if (node.skin === void 0 || !json.skins) {
+            return;
+          }
+          const primitive = meshData._primitive;
+          const decoded = meshData._decoded;
+          const joints = resolveAttr("JOINTS_0", primitive, decoded, json, binChunk);
+          const weights = resolveAttr("WEIGHTS_0", primitive, decoded, json, binChunk);
+          if (!joints || !weights) {
+            return;
+          }
+          const joints1 = resolveAttr("JOINTS_1", primitive, decoded, json, binChunk);
+          const weights1 = resolveAttr("WEIGHTS_1", primitive, decoded, json, binChunk);
+          const [{ extractSkin: extractSkin2, computeBoneTextureData: computeBoneTextureData2 }, { createSkeleton: createSkeleton2 }] = await Promise.all([Promise.resolve().then(() => (init_gltf_animation(), gltf_animation_exports)), Promise.resolve().then(() => (init_create_skeleton(), create_skeleton_exports))]);
+          const skin = extractSkin2(json, binChunk, node.skin, meshData._worldMatrix, parentMap, worldMatrixCache);
+          const boneData = computeBoneTextureData2(skin);
+          mesh.skeleton = createSkeleton2(ctx._engine, joints, weights, skin.jointNodes.length, boneData, joints1, weights1);
+          if (_boneBuilder && !ctx._boneOverrides) {
+            ctx._boneOverrides = /* @__PURE__ */ new Map();
+          }
+        },
+        async applyAsset(meshes, _root, ctx) {
+          if (!_boneBuilder || !ctx._boneOverrides) {
+            return {};
+          }
+          return _boneBuilder(ctx, meshes, ctx._boneOverrides);
+        }
+      };
+      gltf_feature_skeleton_default = feature4;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/morph/create-morph-targets.ts
+  var create_morph_targets_exports = {};
+  __export(create_morph_targets_exports, {
+    createMorphTargets: () => createMorphTargets,
+    setMorphTargetWeights: () => setMorphTargetWeights
+  });
+  function createMorphTargets(engine, targets, vertexCount, morphWeights) {
+    const device = engine._device;
+    const targetCount = Math.min(targets.length, 4);
+    const texWidth = Math.min(vertexCount, 2048);
+    const rowsPerBand = Math.ceil(vertexCount / texWidth);
+    const totalRows = targetCount * 2 * rowsPerBand;
+    const texData = new F32(texWidth * totalRows * 4);
+    for (let t = 0; t < targetCount; t++) {
+      const tgt = targets[t];
+      const posBandRow = t * 2 * rowsPerBand;
+      const normBandRow = (t * 2 + 1) * rowsPerBand;
+      for (let v = 0; v < vertexCount; v++) {
+        const col = v % texWidth;
+        const row = Math.floor(v / texWidth);
+        const posIdx = ((posBandRow + row) * texWidth + col) * 4;
+        texData[posIdx] = tgt.positions[v * 3];
+        texData[posIdx + 1] = tgt.positions[v * 3 + 1];
+        texData[posIdx + 2] = tgt.positions[v * 3 + 2];
+        if (tgt.normals) {
+          const normIdx = ((normBandRow + row) * texWidth + col) * 4;
+          texData[normIdx] = tgt.normals[v * 3];
+          texData[normIdx + 1] = tgt.normals[v * 3 + 1];
+          texData[normIdx + 2] = tgt.normals[v * 3 + 2];
+        }
+      }
+    }
+    const texture = device.createTexture({
+      size: [texWidth, totalRows],
+      format: "rgba32float",
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST
+    });
+    device.queue.writeTexture({ texture }, texData.buffer, { bytesPerRow: texWidth * 16 }, { width: texWidth, height: totalRows });
+    const uboData = new ArrayBuffer(32);
+    const weights = new F32(uboData, 0, 4);
+    const u32 = new U32(uboData, 16, 4);
+    for (let i = 0; i < targetCount; i++) {
+      weights[i] = morphWeights?.[i] ?? 0;
+    }
+    u32[0] = targetCount;
+    u32[1] = texWidth;
+    u32[2] = rowsPerBand;
+    const weightsBuffer = createMappedBuffer(engine, new U8(uboData), BU.UNIFORM);
+    return { texture, count: targetCount, weightsBuffer, targets: targets.slice(0, targetCount), weights };
+  }
+  function setMorphTargetWeights(engine, morphTargets, weights) {
+    const count = Math.min(morphTargets.count, 4, weights.length);
+    morphTargets.weights.fill(0);
+    for (let i = 0; i < count; i++) {
+      morphTargets.weights[i] = weights[i] ?? 0;
+    }
+    engine._device.queue.writeBuffer(morphTargets.weightsBuffer, 0, morphTargets.weights);
+  }
+  var init_create_morph_targets = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/morph/create-morph-targets.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_gpu_buffers();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-morph.ts
+  var gltf_feature_morph_exports = {};
+  __export(gltf_feature_morph_exports, {
+    default: () => gltf_feature_morph_default
+  });
+  var feature5, gltf_feature_morph_default;
+  var init_gltf_feature_morph = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-morph.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gltf_parser();
+      feature5 = {
+        id: "_morph",
+        async applyMesh(meshData, mesh, ctx) {
+          const primitive = meshData._primitive;
+          const targets = primitive.targets;
+          if (!targets || targets.length === 0) {
+            return;
+          }
+          const { _json: json, _binChunk: binChunk } = ctx;
+          const morphTargets = [];
+          for (const target of targets) {
+            const posAcc = target.POSITION !== void 0 ? resolveAccessor(json, binChunk, target.POSITION) : null;
+            const normAcc = target.NORMAL !== void 0 ? resolveAccessor(json, binChunk, target.NORMAL) : null;
+            morphTargets.push({
+              positions: posAcc ? posAcc._data : new F32(meshData._vertexCount * 3),
+              normals: normAcc ? normAcc._data : null
+            });
+          }
+          const parentMesh = json.meshes[json.nodes[meshData._nodeIndex].mesh];
+          const morphWeights = parentMesh.weights ?? new Array(targets.length).fill(0);
+          const { createMorphTargets: createMorphTargets2 } = await Promise.resolve().then(() => (init_create_morph_targets(), create_morph_targets_exports));
+          mesh.morphTargets = createMorphTargets2(ctx._engine, morphTargets, meshData._vertexCount, morphWeights);
+        }
+      };
+      gltf_feature_morph_default = feature5;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-lights-punctual.ts
+  var gltf_feature_lights_punctual_exports = {};
+  __export(gltf_feature_lights_punctual_exports, {
+    default: () => gltf_feature_lights_punctual_default
+  });
+  var feature6, gltf_feature_lights_punctual_default;
+  var init_gltf_feature_lights_punctual = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-lights-punctual.ts"() {
+      "use strict";
+      init_types();
+      init_gltf_parser();
+      feature6 = {
+        id: "KHR_lights_punctual",
+        async applyAsset(_meshes, _root, ctx) {
+          const defs = ctx._json.extensions?.KHR_lights_punctual?.lights;
+          if (!defs?.length) {
+            return {};
+          }
+          const lights = [];
+          const nodes = ctx._json.nodes ?? [];
+          let lightNodeCount = 0;
+          for (let i = 0; i < nodes.length; i++) {
+            if (nodes[i]?.extensions?.KHR_lights_punctual?.light !== void 0) {
+              lightNodeCount++;
+            }
+          }
+          if (lightNodeCount > MAX_LIGHTS) {
+            setMaxLights(lightNodeCount);
+          }
+          for (let nodeIdx = 0; nodeIdx < nodes.length; nodeIdx++) {
+            const lightIdx = nodes[nodeIdx]?.extensions?.KHR_lights_punctual?.light;
+            if (lightIdx === void 0) {
+              continue;
+            }
+            const def = defs[lightIdx];
+            if (!def) {
+              continue;
+            }
+            const world = computeNodeWorldMatrix(ctx._json, nodeIdx, ctx._parentMap, ctx._worldMatrixCache);
+            const px = world[12];
+            const py = world[13];
+            const pz = world[14];
+            const fx = -world[8];
+            const fy = -world[9];
+            const fz = -world[10];
+            const flen = Math.hypot(fx, fy, fz) || 1;
+            const dir = [fx / flen, fy / flen, fz / flen];
+            const color = def.color ? [def.color[0], def.color[1], def.color[2]] : [1, 1, 1];
+            const intensity = def.intensity ?? 1;
+            const range = def.range !== void 0 ? def.range : Number.MAX_VALUE;
+            if (def.type === "point") {
+              const { createPointLight: createPointLight2 } = await Promise.resolve().then(() => (init_point_light(), point_light_exports));
+              const pl = createPointLight2([px, py, pz], intensity);
+              pl.diffuse = color;
+              pl.specular = color;
+              pl.range = range;
+              lights.push(pl);
+            } else if (def.type === "directional") {
+              const { createDirectionalLight: createDirectionalLight2 } = await Promise.resolve().then(() => (init_directional_light(), directional_light_exports));
+              const dl = createDirectionalLight2(dir, intensity);
+              dl.diffuse = color;
+              dl.specular = color;
+              lights.push(dl);
+            } else if (def.type === "spot") {
+              const { createSpotLight: createSpotLight2 } = await Promise.resolve().then(() => (init_spot_light(), spot_light_exports));
+              const outer = def.spot?.outerConeAngle ?? Math.PI / 4;
+              const sl = createSpotLight2([px, py, pz], dir, outer * 2, 1, intensity);
+              sl.diffuse = color;
+              sl.specular = color;
+              sl.range = range;
+              lights.push(sl);
+            }
+          }
+          return { entities: lights };
+        }
+      };
+      gltf_feature_lights_punctual_default = feature6;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/animation/evaluate.ts
+  function findKeyframe(input, t) {
+    let lo = 0;
+    let hi = input.length - 1;
+    if (t <= input[0]) {
+      return 0;
+    }
+    if (t >= input[hi]) {
+      return hi > 0 ? hi - 1 : 0;
+    }
+    while (lo < hi - 1) {
+      const mid = lo + hi >> 1;
+      if (input[mid] <= t) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
+  function normalizeQuat4(buf, o) {
+    const x = buf[o];
+    const y = buf[o + 1];
+    const z = buf[o + 2];
+    const w = buf[o + 3];
+    const lenSq = x * x + y * y + z * z + w * w;
+    if (lenSq > 0) {
+      const inv = 1 / Math.sqrt(lenSq);
+      buf[o] = x * inv;
+      buf[o + 1] = y * inv;
+      buf[o + 2] = z * inv;
+      buf[o + 3] = w * inv;
+    }
+  }
+  function quatSlerp(out, ax, ay, az, aw, bx, by, bz, bw, t) {
+    let dot = ax * bx + ay * by + az * bz + aw * bw;
+    if (dot < 0) {
+      bx = -bx;
+      by = -by;
+      bz = -bz;
+      bw = -bw;
+      dot = -dot;
+    }
+    if (dot > 0.9995) {
+      out[0] = ax + t * (bx - ax);
+      out[1] = ay + t * (by - ay);
+      out[2] = az + t * (bz - az);
+      out[3] = aw + t * (bw - aw);
+      normalizeQuat4(out, 0);
+      return;
+    }
+    const theta = Math.acos(dot);
+    const sinTheta = Math.sin(theta);
+    const wa = Math.sin((1 - t) * theta) / sinTheta;
+    const wb = Math.sin(t * theta) / sinTheta;
+    out[0] = wa * ax + wb * bx;
+    out[1] = wa * ay + wb * by;
+    out[2] = wa * az + wb * bz;
+    out[3] = wa * aw + wb * bw;
+  }
+  function evaluateSampler(sampler, t, stride, isQuat, dst, dstOffset) {
+    const { input, output, interpolation } = sampler;
+    const keyCount = input.length;
+    if (keyCount === 0) {
+      return;
+    }
+    if (keyCount === 1 || t <= input[0]) {
+      const srcOff = interpolation === INTERP_CUBICSPLINE ? stride : 0;
+      for (let c = 0; c < stride; c++) {
+        dst[dstOffset + c] = output[srcOff + c];
+      }
+      return;
+    }
+    const idx = findKeyframe(input, t);
+    const t0 = input[idx];
+    const t1 = input[idx + 1];
+    if (interpolation === INTERP_STEP) {
+      const srcOff = (t >= t1 ? idx + 1 : idx) * stride;
+      for (let c = 0; c < stride; c++) {
+        dst[dstOffset + c] = output[srcOff + c];
+      }
+      return;
+    }
+    const dt = t1 - t0;
+    const f = t >= t1 ? 1 : dt > 0 ? (t - t0) / dt : 0;
+    if (interpolation === INTERP_CUBICSPLINE) {
+      const f2 = f * f;
+      const f3 = f2 * f;
+      const h00 = 2 * f3 - 3 * f2 + 1;
+      const h10 = f3 - 2 * f2 + f;
+      const h01 = -2 * f3 + 3 * f2;
+      const h11 = f3 - f2;
+      const k0 = idx * stride * 3;
+      const k1 = (idx + 1) * stride * 3;
+      for (let c = 0; c < stride; c++) {
+        const p0 = output[k0 + stride + c];
+        const m0 = output[k0 + 2 * stride + c] * dt;
+        const p1 = output[k1 + stride + c];
+        const m1 = output[k1 + c] * dt;
+        dst[dstOffset + c] = h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1;
+      }
+      if (isQuat) {
+        normalizeQuat4(dst, dstOffset);
+      }
+      return;
+    }
+    const s0 = idx * stride;
+    const s1 = (idx + 1) * stride;
+    if (isQuat) {
+      quatSlerp(_quat, output[s0], output[s0 + 1], output[s0 + 2], output[s0 + 3], output[s1], output[s1 + 1], output[s1 + 2], output[s1 + 3], f);
+      dst[dstOffset] = _quat[0];
+      dst[dstOffset + 1] = _quat[1];
+      dst[dstOffset + 2] = _quat[2];
+      dst[dstOffset + 3] = _quat[3];
+    } else {
+      for (let c = 0; c < stride; c++) {
+        dst[dstOffset + c] = output[s0 + c] + f * (output[s1 + c] - output[s0 + c]);
+      }
+    }
+  }
+  var _quat;
+  var init_evaluate = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/animation/evaluate.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_types2();
+      _quat = new F32([0, 0, 0, 1]);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/skeleton/skeleton-updater.ts
+  function computeTopoOrder(nodes) {
+    const n = nodes.length;
+    const order = new I32(n);
+    const visited = new U8(n);
+    let cursor = 0;
+    function visit(idx) {
+      if (visited[idx]) {
+        return;
+      }
+      visited[idx] = 1;
+      const p = nodes[idx].parentIdx;
+      if (p >= 0) {
+        visit(p);
+      }
+      order[cursor++] = idx;
+    }
+    for (let i = 0; i < n; i++) {
+      visit(i);
+    }
+    return order;
+  }
+  function createAnimationController(clip, nodes, skeletons, morphBindings, nodeTargets, excludedNodeIndices, boneOverrides, nodeNames) {
+    const requiresEngine = skeletons.length > 0 || morphBindings.length > 0;
+    const numNodes = nodes.length;
+    const nodeTrsBindings = [];
+    if (nodeTargets) {
+      const maskByNode = /* @__PURE__ */ new Map();
+      for (let ci = 0; ci < clip.channels.length; ci++) {
+        const ch = clip.channels[ci];
+        const bit = ch.path === PATH_TRANSLATION ? 1 : ch.path === PATH_ROTATION ? 2 : ch.path === PATH_SCALE ? 4 : 0;
+        if (bit === 0) {
+          continue;
+        }
+        const ni = ch.nodeIdx;
+        if (ni < 0 || excludedNodeIndices?.has(ni) || !nodeTargets[ni]) {
+          continue;
+        }
+        maskByNode.set(ni, (maskByNode.get(ni) ?? 0) | bit);
+      }
+      for (const [ni, mask] of maskByNode) {
+        nodeTrsBindings.push({ target: nodeTargets[ni], off: ni * TRS_STRIDE, mask });
+      }
+    }
+    const currentTRS = new F32(numNodes * TRS_STRIDE);
+    const localMat = new F32(numNodes * 16);
+    const worldMat = new F32(numNodes * 16);
+    const topoOrder = computeTopoOrder(nodes);
+    const boneScratch = skeletons.map((s) => s.boneMatrices);
+    const morphBindingsByNode = [];
+    for (let morphIndex = 0; morphIndex < morphBindings.length; morphIndex++) {
+      const mb = morphBindings[morphIndex];
+      let arr = morphBindingsByNode[mb.nodeIdx];
+      if (!arr) {
+        arr = [];
+        morphBindingsByNode[mb.nodeIdx] = arr;
+      }
+      arr.push(mb);
+    }
+    const morphUploadF32 = new F32(4);
+    const pointerScratch = new F32(16);
+    let cachedEngine;
+    let maskedNodes = null;
+    let maskActive = false;
+    let cMask = null;
+    let cNames = null;
+    let cLen = -1;
+    let cMode = -1;
+    let cDisabled = false;
+    const _setMask = (mask) => {
+      if (!mask || mask.disabled || !nodeNames || !_maskResolver) {
+        maskActive = false;
+        return;
+      }
+      const names = mask.names;
+      if (mask === cMask && names === cNames && names.length === cLen && mask.mode === cMode && mask.disabled === cDisabled) {
+        maskActive = true;
+        return;
+      }
+      cMask = mask;
+      cNames = names;
+      cLen = names.length;
+      cMode = mask.mode;
+      cDisabled = mask.disabled;
+      if (!maskedNodes) {
+        maskedNodes = new U8(numNodes);
+      }
+      _maskResolver(mask, nodeNames, maskedNodes, numNodes);
+      maskActive = true;
+    };
+    const ctrl = {
+      time: 0,
+      playing: true,
+      speedRatio: 1,
+      loop: true,
+      _setMask,
+      _debugWorldMat: worldMat,
+      tick: clip.duration <= 0 ? noopAnimationTick : (deltaMs, engine) => {
+        if (engine) {
+          cachedEngine = engine;
+        }
+        const activeEngine = engine ?? cachedEngine;
+        if (requiresEngine && !activeEngine) {
+          throw new Error("AnimationController.tick requires an EngineContext for skeleton or morph animation");
+        }
+        const device = requiresEngine ? activeEngine._device : null;
+        if (ctrl.playing) {
+          ctrl.time += deltaMs / 1e3 * ctrl.speedRatio;
+        }
+        if (ctrl.loop) {
+          ctrl.time %= clip.duration;
+          if (ctrl.time < 0) {
+            ctrl.time += clip.duration;
+          }
+        } else {
+          ctrl.time = Math.min(Math.max(ctrl.time, 0), clip.duration);
+        }
+        const t = ctrl.time;
+        for (let i = 0; i < numNodes; i++) {
+          const n = nodes[i];
+          const off = i * TRS_STRIDE;
+          currentTRS[off + T_OFF] = n.tx;
+          currentTRS[off + T_OFF + 1] = n.ty;
+          currentTRS[off + T_OFF + 2] = n.tz;
+          currentTRS[off + R_OFF] = n.rx;
+          currentTRS[off + R_OFF + 1] = n.ry;
+          currentTRS[off + R_OFF + 2] = n.rz;
+          currentTRS[off + R_OFF + 3] = n.rw;
+          currentTRS[off + S_OFF] = n.sx;
+          currentTRS[off + S_OFF + 1] = n.sy;
+          currentTRS[off + S_OFF + 2] = n.sz;
+        }
+        if (boneOverrides !== void 0 && boneOverrides.size > 0) {
+          _boneApplier?.(boneOverrides, currentTRS, numNodes);
+        }
+        for (let channelIndex = 0; channelIndex < clip.channels.length; channelIndex++) {
+          const ch = clip.channels[channelIndex];
+          if (_maskResolver !== null && maskActive && ch.nodeIdx >= 0 && maskedNodes[ch.nodeIdx]) {
+            continue;
+          }
+          const sampler = clip.samplers[ch.samplerIdx];
+          const base = ch.nodeIdx * TRS_STRIDE;
+          switch (ch.path) {
+            case PATH_TRANSLATION:
+              evaluateSampler(sampler, t, 3, false, currentTRS, base + T_OFF);
+              break;
+            case PATH_ROTATION:
+              evaluateSampler(sampler, t, 4, true, currentTRS, base + R_OFF);
+              break;
+            case PATH_SCALE:
+              evaluateSampler(sampler, t, 3, false, currentTRS, base + S_OFF);
+              break;
+            case PATH_WEIGHTS: {
+              const bindings = morphBindingsByNode[ch.nodeIdx];
+              if (bindings) {
+                const tc = bindings[0].targetCount;
+                morphUploadF32.fill(0);
+                evaluateSampler(sampler, t, tc, false, morphUploadF32, 0);
+                for (let bindingIndex = 0; bindingIndex < bindings.length; bindingIndex++) {
+                  const mb = bindings[bindingIndex];
+                  mb.weights.set(morphUploadF32);
+                  device.queue.writeBuffer(mb.runtimeMorphTargets?.weightsBuffer ?? mb.weightsBuffer, 0, morphUploadF32.buffer, 0, 16);
+                }
+              }
+              break;
+            }
+            case PATH_POINTER: {
+              if (ch.pointerArity && ch.pointerWriter) {
+                evaluateSampler(sampler, t, ch.pointerArity, ch.pointerQuaternion === true, pointerScratch, 0);
+                ch.pointerWriter(pointerScratch, 0);
+              }
+              break;
+            }
+          }
+        }
+        for (let bi = 0; bi < nodeTrsBindings.length; bi++) {
+          const b = nodeTrsBindings[bi];
+          const o = b.off;
+          if (b.mask & 1) {
+            b.target.position.set(currentTRS[o + T_OFF], currentTRS[o + T_OFF + 1], currentTRS[o + T_OFF + 2]);
+          }
+          if (b.mask & 2) {
+            b.target.rotationQuaternion.set(currentTRS[o + R_OFF], currentTRS[o + R_OFF + 1], currentTRS[o + R_OFF + 2], currentTRS[o + R_OFF + 3]);
+          }
+          if (b.mask & 4) {
+            b.target.scaling.set(currentTRS[o + S_OFF], currentTRS[o + S_OFF + 1], currentTRS[o + S_OFF + 2]);
+          }
+        }
+        for (let idx = 0; idx < numNodes; idx++) {
+          const nodeIdx = topoOrder[idx];
+          const node = nodes[nodeIdx];
+          const off = nodeIdx * TRS_STRIDE;
+          if (node._matrix) {
+            localMat.set(node._matrix, nodeIdx * 16);
+          } else {
+            mat4ComposeInto(
+              localMat,
+              nodeIdx * 16,
+              currentTRS[off + T_OFF],
+              currentTRS[off + T_OFF + 1],
+              currentTRS[off + T_OFF + 2],
+              currentTRS[off + R_OFF],
+              currentTRS[off + R_OFF + 1],
+              currentTRS[off + R_OFF + 2],
+              currentTRS[off + R_OFF + 3],
+              currentTRS[off + S_OFF],
+              currentTRS[off + S_OFF + 1],
+              currentTRS[off + S_OFF + 2]
+            );
+          }
+          const parentIdx = node.parentIdx;
+          if (parentIdx >= 0) {
+            mat4MultiplyInto(worldMat, nodeIdx * 16, worldMat, parentIdx * 16, localMat, nodeIdx * 16);
+          } else {
+            mat4MultiplyInto(worldMat, nodeIdx * 16, RH_TO_LH, 0, localMat, nodeIdx * 16);
+          }
+        }
+        for (let si = 0; si < skeletons.length; si++) {
+          const skel = skeletons[si];
+          const boneData = boneScratch[si];
+          for (let bi = 0; bi < skel.boneCount; bi++) {
+            const jointIdx = skel.jointNodes[bi];
+            const ibmOff = bi * 16;
+            mat4MultiplyInto(_boneTmp, 0, skel.invMeshWorld, 0, worldMat, jointIdx * 16);
+            mat4MultiplyInto(boneData, bi * 16, _boneTmp, 0, skel.inverseBindMatrices, ibmOff);
+          }
+          const texWidth = skel.boneCount * 4;
+          device.queue.writeTexture(
+            { texture: skel.runtimeSkeleton?.boneTexture ?? skel.boneTexture },
+            boneData.buffer,
+            { bytesPerRow: texWidth * 16 },
+            { width: texWidth, height: 1 }
+          );
+        }
+      }
+    };
+    return ctrl;
+  }
+  function noopAnimationTick() {
+  }
+  var _boneTmp, _maskResolver, RH_TO_LH, TRS_STRIDE, T_OFF, R_OFF, S_OFF;
+  var init_skeleton_updater = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/skeleton/skeleton-updater.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_types2();
+      init_evaluate();
+      init_mat4_compose_into();
+      init_mat4_multiply_into();
+      init_bone_control_hooks();
+      _boneTmp = new F32(16);
+      _maskResolver = null;
+      RH_TO_LH = new F32([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+      TRS_STRIDE = 12;
+      T_OFF = 0;
+      R_OFF = 3;
+      S_OFF = 7;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/animation/animation-group.ts
+  var animation_group_exports = {};
+  __export(animation_group_exports, {
+    createAnimationGroups: () => createAnimationGroups,
+    goToFrame: () => goToFrame,
+    pauseAnimation: () => pauseAnimation,
+    playAnimation: () => playAnimation,
+    stopAnimation: () => stopAnimation,
+    tickAnimation: () => tickAnimation
+  });
+  function playAnimation(group) {
+    group.isPlaying = true;
+    group._stopped = false;
+  }
+  function pauseAnimation(group) {
+    group.isPlaying = false;
+  }
+  function stopAnimation(group) {
+    group.isPlaying = false;
+    group.currentFrame = 0;
+    group._stopped = true;
+  }
+  function goToFrame(group, frame, engine) {
+    const ctrl = group._ctrl;
+    group.currentFrame = frame / (group.frameRate || DEFAULT_FRAME_RATE);
+    group.isPlaying = false;
+    if (ctrl) {
+      syncControllerFromGroup(group, ctrl);
+      if (engine || !group._stopped || !group._gltfMixer) {
+        ctrl.tick(0, engine);
+        group.currentFrame = ctrl.time;
+      }
+    }
+  }
+  function tickAnimation(group, deltaMs, engine) {
+    if (!group._stopped && group._ctrl) {
+      syncControllerFromGroup(group, group._ctrl);
+      group._ctrl.tick(deltaMs, engine);
+      group.currentFrame = group._ctrl.time;
+    }
+  }
+  function syncControllerFromGroup(group, ctrl) {
+    ctrl.time = group.currentFrame;
+    ctrl.playing = group.isPlaying;
+    ctrl.speedRatio = group.speedRatio;
+    ctrl.loop = group.loopAnimation;
+    ctrl._setMask?.(group.mask ?? null);
+  }
+  function createAnimationGroups(animData) {
+    const { clips, nodes, skeletons, morphBindings, nodeTargets, excludedNodeIndices, nodeNames, boneOverrides } = animData;
+    const hasPointer = clips.some((c) => c.channels.some((ch) => ch.path === PATH_POINTER));
+    const hasNodeWriteback = clips.some(
+      (c) => c.channels.some(
+        (ch) => (ch.path === PATH_TRANSLATION || ch.path === PATH_ROTATION || ch.path === PATH_SCALE) && ch.nodeIdx >= 0 && !excludedNodeIndices.has(ch.nodeIdx) && !!nodeTargets[ch.nodeIdx]
+      )
+    );
+    if (clips.length === 0 || skeletons.length === 0 && morphBindings.length === 0 && !hasPointer && !hasNodeWriteback) {
+      return [];
+    }
+    return clips.map((clip, clipIndex) => {
+      const ctrl = createAnimationController(clip, nodes, skeletons, morphBindings, nodeTargets, excludedNodeIndices, boneOverrides, nodeNames);
+      const group = {
+        name: clip.name || `animation_${clipIndex}`,
+        duration: clip.duration,
+        frameRate: clip.frameRate || DEFAULT_FRAME_RATE,
+        isPlaying: true,
+        currentFrame: 0,
+        speedRatio: 1,
+        loopAnimation: true,
+        weight: 1,
+        _ctrl: ctrl,
+        _stopped: false
+      };
+      if (skeletons[0]) {
+        group._gltfMixer = [clip, nodes, skeletons];
+      }
+      return group;
+    });
+  }
+  var DEFAULT_FRAME_RATE;
+  var init_animation_group = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/animation/animation-group.ts"() {
+      "use strict";
+      init_types2();
+      init_skeleton_updater();
+      DEFAULT_FRAME_RATE = 60;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-animations.ts
+  var gltf_feature_animations_exports = {};
+  __export(gltf_feature_animations_exports, {
+    default: () => gltf_feature_animations_default
+  });
+  var feature7, gltf_feature_animations_default;
+  var init_gltf_feature_animations = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-animations.ts"() {
+      "use strict";
+      feature7 = {
+        id: "_animations",
+        async applyAsset(meshes, _root, ctx) {
+          const [{ parseAnimationData: parseAnimationData2 }, { createAnimationGroups: createAnimationGroups2 }] = await Promise.all([Promise.resolve().then(() => (init_gltf_animation(), gltf_animation_exports)), Promise.resolve().then(() => (init_animation_group(), animation_group_exports))]);
+          const animData = parseAnimationData2(ctx._json, ctx._binChunk, meshes, ctx._parentMap, ctx._worldMatrixCache, ctx._nodeMap, ctx._boneOverrides);
+          if (!animData) {
+            return {};
+          }
+          return { animationGroups: createAnimationGroups2(animData) };
+        }
+      };
+      gltf_feature_animations_default = feature7;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-pbr-builder-ext.ts
+  var gltf_pbr_builder_ext_exports = {};
+  __export(gltf_pbr_builder_ext_exports, {
+    assemblePbrPropsExt: () => assemblePbrPropsExt,
+    buildDefaultPbrTexturesExt: () => buildDefaultPbrTexturesExt
+  });
+  function wrapTexCoord(tex, texInfo) {
+    if (!texInfo) {
+      return tex;
+    }
+    if (tex._texCoord === 1) {
+      return tex;
+    }
+    const ti = texInfo;
+    const tc = ti.extensions?.KHR_texture_transform?.texCoord ?? ti.texCoord;
+    return tc === 1 ? cloneTexture2D(tex, { _texCoord: 1 }) : tex;
+  }
+  function buildDefaultPbrTexturesExt(engine, mat, sampler, generateMipmaps2, getCachedTex, wrapTex) {
+    const wrap = (tex, ti) => wrapTexCoord(wrapTex(tex, ti), ti);
+    const raw = mat._rawMatDef ?? {};
+    const pbr = raw.pbrMetallicRoughness ?? {};
+    const baseColorTexture = mat._baseColorImage ? wrap(getCachedTex(mat._baseColorImage, true), pbr.baseColorTexture) : (() => {
+      const f = mat._baseColorFactor;
+      return uploadTex(
+        engine,
+        null,
+        true,
+        sampler,
+        generateMipmaps2,
+        new U8([linearToSrgbByte(f[0]), linearToSrgbByte(f[1]), linearToSrgbByte(f[2]), Math.round(Math.max(0, Math.min(1, f[3])) * 255)])
+      );
+    })();
+    const normalTexture = mat._normalImage ? wrap(getCachedTex(mat._normalImage, false), raw.normalTexture) : void 0;
+    const emissiveTexture = mat._emissiveImage ? wrap(getCachedTex(mat._emissiveImage, true), raw.emissiveTexture) : void 0;
+    const occlusionOnUv2 = mat._occlusionTexCoord !== 0 && mat._occlusionImage && !mat._metallicRoughnessImage;
+    let occlusionTexture;
+    const single = mat._metallicRoughnessImage ?? (occlusionOnUv2 ? null : mat._occlusionImage);
+    let ormTexture;
+    if (occlusionOnUv2) {
+      const clamp = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255);
+      ormTexture = uploadTex(engine, null, false, sampler, generateMipmaps2, new U8([255, clamp(mat._roughnessFactor), clamp(mat._metallicFactor), 255]));
+      occlusionTexture = wrap(getCachedTex(mat._occlusionImage, false), raw.occlusionTexture);
+    } else if (single && (!mat._metallicRoughnessImage || !mat._occlusionImage || mat._metallicRoughnessImage === mat._occlusionImage)) {
+      const ormTi = mat._metallicRoughnessImage ? pbr.metallicRoughnessTexture : raw.occlusionTexture;
+      ormTexture = wrap(getCachedTex(single, false), ormTi);
+    } else if (!single) {
+      const clamp = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255);
+      ormTexture = uploadTex(engine, null, false, sampler, generateMipmaps2, new U8([255, clamp(mat._roughnessFactor), clamp(mat._metallicFactor), 255]));
+    } else {
+      ormTexture = wrap(getCachedTex(mat._metallicRoughnessImage, false), pbr.metallicRoughnessTexture);
+    }
+    return { baseColorTexture, ormTexture, normalTexture, emissiveTexture, occlusionTexture };
+  }
+  function assemblePbrPropsExt(mat, tex, extLayers) {
+    const ef = mat._emissiveFactor;
+    const defaultFactor = ef[0] === 1 && ef[1] === 1 && ef[2] === 1 || ef[0] === 0 && ef[1] === 0 && ef[2] === 0;
+    const hasAnyUvTx = !!tex.baseColorTexture._hasTx || !!tex.normalTexture?._hasTx || !!tex.ormTexture._hasTx || !!tex.emissiveTexture?._hasTx || !!tex.occlusionTexture?._hasTx;
+    return {
+      baseColorTexture: tex.baseColorTexture,
+      normalTexture: tex.normalTexture,
+      ormTexture: tex.ormTexture,
+      emissiveTexture: tex.emissiveTexture,
+      ...mat._baseColorImage && !isDefaultBaseColorFactor2(mat._baseColorFactor) ? { baseColorFactor: mat._baseColorFactor } : void 0,
+      doubleSided: mat._doubleSided,
+      occlusionStrength: mat._occlusionImage ? 1 : 0,
+      ...mat._occlusionTexCoord ? { occlusionTexCoord: mat._occlusionTexCoord } : void 0,
+      ...tex.occlusionTexture ? { occlusionTexture: tex.occlusionTexture } : void 0,
+      ...mat._normalScale !== 1 ? { normalTextureScale: mat._normalScale } : void 0,
+      ...mat._metallicRoughnessImage ? { metallicFactor: mat._metallicFactor, roughnessFactor: mat._roughnessFactor } : void 0,
+      ...!defaultFactor ? { emissiveColor: [ef[0], ef[1], ef[2]] } : void 0,
+      enableSpecularAA: true,
+      ...mat._alphaMode === "BLEND" ? { alphaBlend: true, alpha: mat._baseColorFactor[3] } : void 0,
+      ...mat._alphaMode === "MASK" ? { alpha: mat._baseColorFactor[3], alphaCutOff: mat._alphaCutoff } : void 0,
+      ...hasAnyUvTx ? { _hasUvTx: true } : void 0,
+      ...mat._rawMatDef?.name ? { name: mat._rawMatDef.name } : void 0,
+      ...extLayers,
+      _buildGroup: pbrGroupBuilder,
+      _uboVersion: 0
+    };
+  }
+  function isDefaultBaseColorFactor2(f) {
+    return f[0] === 1 && f[1] === 1 && f[2] === 1 && f[3] === 1;
+  }
+  var init_gltf_pbr_builder_ext = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-pbr-builder-ext.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_texture_2d();
+      init_pbr_material();
+      init_color();
+      init_gltf_pbr_builder();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-variants.ts
+  var gltf_variants_exports = {};
+  __export(gltf_variants_exports, {
+    loadVariantMaterials: () => loadVariantMaterials
+  });
+  async function loadVariantMaterials(json, binChunk, baseUrl, variantNames, meshes, engine, exts, wrapTex = identityTexWrap) {
+    const generateMipmaps2 = (await Promise.resolve().then(() => (init_generate_mipmaps(), generate_mipmaps_exports))).generateMipmaps;
+    const sampler = getOrCreateSampler(engine, {
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "repeat",
+      addressModeV: "repeat",
+      maxAnisotropy: 4
+    });
+    const matCache = /* @__PURE__ */ new Map();
+    const imageCache = /* @__PURE__ */ new Map();
+    const fetchImg = makeImageFetcher(json, binChunk, baseUrl, imageCache);
+    const getCachedTex = (bitmap, srgb) => uploadTex(engine, bitmap, srgb, sampler, generateMipmaps2);
+    const extCtx = {
+      _engine: engine,
+      async _texture(texInfo, sRGB) {
+        if (!texInfo) {
+          return void 0;
+        }
+        const img = await fetchImg(texInfo);
+        return img ? wrapTex(uploadTex(engine, img, sRGB, sampler, generateMipmaps2), texInfo) : void 0;
+      },
+      _uploadImage(bitmap, sRGB) {
+        return uploadTex(engine, bitmap, sRGB, sampler, generateMipmaps2);
+      }
+    };
+    const getMat = (matIdx) => {
+      let p = matCache.get(matIdx);
+      if (!p) {
+        p = assembleMaterial(json, binChunk, matIdx, baseUrl, imageCache);
+        matCache.set(matIdx, p);
+      }
+      return p;
+    };
+    const pbrCache = /* @__PURE__ */ new Map();
+    const getPbr = (gltfMat) => {
+      let p = pbrCache.get(gltfMat);
+      if (!p) {
+        p = (async () => {
+          const tex = buildDefaultPbrTexturesExt(engine, gltfMat, sampler, generateMipmaps2, getCachedTex, wrapTex);
+          const layers = await runMatExts(gltfMat, exts, extCtx);
+          return assemblePbrPropsExt(gltfMat, tex, layers);
+        })();
+        pbrCache.set(gltfMat, p);
+      }
+      return p;
+    };
+    const originals = [];
+    const variants = {};
+    for (const name of variantNames) {
+      variants[name] = [];
+    }
+    let meshIdx = 0;
+    for (let nodeIdx = 0; nodeIdx < json.nodes.length; nodeIdx++) {
+      const node = json.nodes[nodeIdx];
+      if (node.mesh === void 0) {
+        continue;
+      }
+      const gltfMesh = json.meshes[node.mesh];
+      for (const primitive of gltfMesh.primitives) {
+        const mesh = meshes[meshIdx];
+        const variantExt = primitive.extensions?.KHR_materials_variants;
+        if (variantExt?.mappings) {
+          originals.push({ mesh, material: mesh.material });
+          for (const mapping of variantExt.mappings) {
+            const gltfMat = await getMat(mapping.material);
+            const pbrMat = await getPbr(gltfMat);
+            for (const vi of mapping.variants) {
+              const name = variantNames[vi];
+              if (name) {
+                variants[name].push({ mesh, material: pbrMat });
+              }
+            }
+          }
+        }
+        meshIdx++;
+      }
+    }
+    return { names: variantNames, variants, originals };
+  }
+  var init_gltf_variants = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-variants.ts"() {
+      "use strict";
+      init_gltf_material();
+      init_gpu_pool();
+      init_gltf_pbr_builder();
+      init_gltf_pbr_builder_ext();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-variants.ts
+  var gltf_feature_variants_exports = {};
+  __export(gltf_feature_variants_exports, {
+    default: () => gltf_feature_variants_default
+  });
+  var feature8, gltf_feature_variants_default;
+  var init_gltf_feature_variants = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-variants.ts"() {
+      "use strict";
+      feature8 = {
+        id: "KHR_materials_variants",
+        async applyAsset(meshes, _root, ctx) {
+          const variantNames = ctx._json.extensions?.KHR_materials_variants?.variants?.map((v) => v.name);
+          if (!variantNames?.length) {
+            return {};
+          }
+          const { loadVariantMaterials: loadVariantMaterials2 } = await Promise.resolve().then(() => (init_gltf_variants(), gltf_variants_exports));
+          const materialVariants = await loadVariantMaterials2(ctx._json, ctx._binChunk, ctx._baseUrl, variantNames, meshes, ctx._engine, ctx._matExts, ctx._wrapTex);
+          return { materialVariants };
+        }
+      };
+      gltf_feature_variants_default = feature8;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-node-visibility.ts
+  var gltf_ext_node_visibility_exports = {};
+  __export(gltf_ext_node_visibility_exports, {
+    default: () => gltf_ext_node_visibility_default
+  });
+  function applyVisibility(json, nodeMap) {
+    const nodes = json.nodes ?? [];
+    for (let i = 0; i < nodes.length; i++) {
+      const vis = nodes[i]?.extensions?.KHR_node_visibility?.visible;
+      const sn = nodeMap[i];
+      if (vis === false && sn) {
+        setSubtreeVisible(sn, false);
+      }
+    }
+  }
+  var ext12, gltf_ext_node_visibility_default;
+  var init_gltf_ext_node_visibility = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-ext-node-visibility.ts"() {
+      "use strict";
+      init_visibility();
+      ext12 = {
+        id: "KHR_node_visibility",
+        async applyAsset(_meshes, _root, ctx) {
+          if (ctx._nodeMap) {
+            applyVisibility(ctx._json, ctx._nodeMap);
+          }
+          return {};
+        }
+      };
+      gltf_ext_node_visibility_default = ext12;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/animation-pointer.ts
+  function resolveAnimationPointer(pointer, ctx) {
+    for (const [rx, make] of _registry) {
+      const m = rx.exec(pointer);
+      if (m) {
+        return make(m, ctx);
+      }
+    }
+    if (!_warned.has(pointer)) {
+      _warned.add(pointer);
+      console.warn(`[babylon-lite] KHR_animation_pointer: no handler for "${pointer}"`);
+    }
+    return null;
+  }
+  var TX_SLOT, _registry, _warned;
+  var init_animation_pointer = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/animation-pointer.ts"() {
+      "use strict";
+      init_visibility();
+      TX_SLOT = {
+        "pbrMetallicRoughness/baseColorTexture": "baseColorTexture",
+        emissiveTexture: "emissiveTexture",
+        normalTexture: "normalTexture",
+        occlusionTexture: "ormTexture",
+        "pbrMetallicRoughness/metallicRoughnessTexture": "ormTexture"
+      };
+      _registry = [
+        // /nodes/{n}/extensions/KHR_node_visibility/visible — scalar (0 = hidden).
+        // The setter cascade handles descendants per the KHR_node_visibility spec
+        // and bumps the module-scoped visibility epoch so the engine invalidates
+        // its cached render bundle.
+        [
+          /^\/nodes\/(\d+)\/extensions\/KHR_node_visibility\/visible$/,
+          (m, ctx) => {
+            const n = ctx.nodes[+m[1]];
+            if (!n) {
+              return null;
+            }
+            return {
+              arity: 1,
+              writer: (out, off) => {
+                setSubtreeVisible(n, out[off] !== 0);
+              }
+            };
+          }
+        ],
+        // /materials/{m}/.../KHR_texture_transform/{offset|scale} — animated UV scroll
+        // (vec2). Mutates the slot texture's uOffset/vOffset (or uScale/vScale) and
+        // bumps the material's UBO version so the renderable re-uploads the UV matrix.
+        [
+          /^\/materials\/(\d+)\/(pbrMetallicRoughness\/baseColorTexture|pbrMetallicRoughness\/metallicRoughnessTexture|emissiveTexture|normalTexture|occlusionTexture)\/extensions\/KHR_texture_transform\/(offset|scale)$/,
+          (m, ctx) => {
+            const mat = ctx.materials?.[+m[1]];
+            const tex = mat?.[TX_SLOT[m[2]]];
+            if (!mat || !tex) {
+              return null;
+            }
+            const isScale = m[3] === "scale";
+            return {
+              arity: 2,
+              writer: (out, off) => {
+                if (isScale) {
+                  tex.uScale = out[off];
+                  tex.vScale = out[off + 1];
+                } else {
+                  tex.uOffset = out[off];
+                  tex.vOffset = out[off + 1];
+                }
+                mat._uboVersion++;
+              }
+            };
+          }
+        ]
+      ];
+      _warned = /* @__PURE__ */ new Set();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-animation-pointer.ts
+  var gltf_feature_animation_pointer_exports = {};
+  __export(gltf_feature_animation_pointer_exports, {
+    default: () => gltf_feature_animation_pointer_default
+  });
+  function materialMap(json, meshes) {
+    if (meshes === _matMapKey) {
+      return _matMap;
+    }
+    _matMapKey = meshes;
+    const map = [];
+    const nodes = json.nodes ?? [];
+    let gpuIdx = 0;
+    for (let ni = 0; ni < nodes.length; ni++) {
+      const meshRef = nodes[ni]?.mesh;
+      if (meshRef === void 0) {
+        continue;
+      }
+      const prims = json.meshes?.[meshRef]?.primitives ?? [];
+      for (let p = 0; p < prims.length; p++) {
+        const matIdx = prims[p]?.material;
+        const mesh = meshes[gpuIdx++];
+        if (matIdx !== void 0 && mesh) {
+          map[matIdx] = mesh.material;
+        }
+      }
+    }
+    _matMap = map;
+    return map;
+  }
+  var NODE_TRS_PATH, _matMapKey, _matMap, feature9, gltf_feature_animation_pointer_default;
+  var init_gltf_feature_animation_pointer = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-animation-pointer.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_types2();
+      init_animation_pointer();
+      init_gltf_animation();
+      NODE_TRS_PATH = {
+        translation: PATH_TRANSLATION,
+        rotation: PATH_ROTATION,
+        scale: PATH_SCALE,
+        weights: PATH_WEIGHTS
+      };
+      _matMapKey = null;
+      _matMap = [];
+      _installPointerHandlers(
+        (ptr, c, nodeMap, json, meshes) => {
+          if (!nodeMap) {
+            return null;
+          }
+          const trs = /^\/nodes\/(\d+)\/(translation|rotation|scale|weights)$/.exec(ptr);
+          if (trs) {
+            return { samplerIdx: c.sampler, nodeIdx: +trs[1], path: NODE_TRS_PATH[trs[2]] };
+          }
+          const resolved = resolveAnimationPointer(ptr, { nodes: nodeMap, materials: materialMap(json, meshes) });
+          if (!resolved) {
+            return null;
+          }
+          const ch = {
+            samplerIdx: c.sampler,
+            nodeIdx: -1,
+            path: PATH_POINTER,
+            pointerWriter: resolved.writer,
+            pointerArity: resolved.arity
+          };
+          return ch;
+        },
+        (src, length, normalized) => {
+          const out = new F32(length);
+          if (src instanceof F32) {
+            for (let i = 0; i < length; i++) {
+              out[i] = src[i];
+            }
+          } else if (src instanceof U8) {
+            const k = normalized ? 1 / 255 : 1;
+            for (let i = 0; i < length; i++) {
+              out[i] = src[i] * k;
+            }
+          } else if (src instanceof U16) {
+            const k = normalized ? 1 / 65535 : 1;
+            for (let i = 0; i < length; i++) {
+              out[i] = src[i] * k;
+            }
+          } else if (src instanceof I8) {
+            for (let i = 0; i < length; i++) {
+              out[i] = normalized ? Math.max(src[i] / 127, -1) : src[i];
+            }
+          } else if (src instanceof I16) {
+            for (let i = 0; i < length; i++) {
+              out[i] = normalized ? Math.max(src[i] / 32767, -1) : src[i];
+            }
+          }
+          return out;
+        }
+      );
+      feature9 = { id: "KHR_animation_pointer" };
+      gltf_feature_animation_pointer_default = feature9;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply.ts
+  function mat4Multiply(a, b) {
+    const out = new F32(16);
+    mat4MultiplyInto(out, 0, a, 0, b, 0);
+    return out;
+  }
+  var init_mat4_multiply = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_mat4_multiply_into();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance.ts
+  function setThinInstances(mesh, matrices, count) {
+    if (!mesh.thinInstances) {
+      mesh.thinInstances = {
+        matrices,
+        count,
+        _capacity: count,
+        _version: 1,
+        _gpuBuffer: null,
+        _gpuBufferStorage: false,
+        _gpuVersion: 0,
+        _dirtyMin: 0,
+        _dirtyMax: count,
+        _colorVersion: 0,
+        _colorDirtyMin: 0,
+        _colorDirtyMax: 0,
+        _colorGpuBuffer: null,
+        _colorGpuBufferStorage: false,
+        _colorGpuVersion: 0,
+        _gpuCullingEnabled: false
+      };
+    } else {
+      mesh.thinInstances.matrices = matrices;
+      mesh.thinInstances.count = count;
+      mesh.thinInstances._capacity = count;
+      mesh.thinInstances._version++;
+      mesh.thinInstances._dirtyMin = 0;
+      mesh.thinInstances._dirtyMax = count;
+    }
+  }
+  var init_thin_instance = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/mesh/thin-instance.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-gpu-instancing.ts
+  var gltf_feature_gpu_instancing_exports = {};
+  __export(gltf_feature_gpu_instancing_exports, {
+    default: () => gltf_feature_gpu_instancing_default
+  });
+  function collectMeshesUnderNode(tn) {
+    const out = [];
+    for (const c of tn?.children ?? []) {
+      if (c && typeof c === "object" && "material" in c) {
+        out.push(c);
+      }
+    }
+    return out;
+  }
+  function buildInstanceMatrices(translation, rotation, scale, count) {
+    const matrices = new F32(count * 16);
+    for (let i = 0; i < count; i++) {
+      const tx = translation ? translation[i * 3] : 0;
+      const ty = translation ? translation[i * 3 + 1] : 0;
+      const tz = translation ? translation[i * 3 + 2] : 0;
+      const qx = rotation ? rotation[i * 4] : 0;
+      const qy = rotation ? rotation[i * 4 + 1] : 0;
+      const qz = rotation ? rotation[i * 4 + 2] : 0;
+      const qw = rotation ? rotation[i * 4 + 3] : 1;
+      const sx = scale ? scale[i * 3] : 1;
+      const sy = scale ? scale[i * 3 + 1] : 1;
+      const sz = scale ? scale[i * 3 + 2] : 1;
+      mat4ComposeInto(matrices, i * 16, tx, ty, tz, qx, qy, qz, qw, sx, sy, sz);
+    }
+    return matrices;
+  }
+  function expandMeshAabbForInstances(mesh, matrices, count, nodeWorld) {
+    const positions = mesh._cpuPositions;
+    if (!positions || !nodeWorld || count === 0) {
+      return;
+    }
+    const [lmin, lmax] = computeAabb(positions);
+    if (!isFinite(lmin[0])) {
+      return;
+    }
+    const corners = new F32([
+      lmin[0],
+      lmin[1],
+      lmin[2],
+      lmax[0],
+      lmin[1],
+      lmin[2],
+      lmin[0],
+      lmax[1],
+      lmin[2],
+      lmax[0],
+      lmax[1],
+      lmin[2],
+      lmin[0],
+      lmin[1],
+      lmax[2],
+      lmax[0],
+      lmin[1],
+      lmax[2],
+      lmin[0],
+      lmax[1],
+      lmax[2],
+      lmax[0],
+      lmax[1],
+      lmax[2]
+    ]);
+    let wMinX = Infinity, wMinY = Infinity, wMinZ = Infinity;
+    let wMaxX = -Infinity, wMaxY = -Infinity, wMaxZ = -Infinity;
+    const instWorld = getLoaderTmpInstance();
+    const instBuf = instWorld;
+    for (let i = 0; i < count; i++) {
+      for (let k = 0; k < 16; k++) {
+        instBuf[k] = matrices[i * 16 + k];
+      }
+      const combined = mat4Multiply(nodeWorld, instWorld);
+      const [imin, imax] = computeAabb(corners, combined);
+      if (imin[0] < wMinX) {
+        wMinX = imin[0];
+      }
+      if (imin[1] < wMinY) {
+        wMinY = imin[1];
+      }
+      if (imin[2] < wMinZ) {
+        wMinZ = imin[2];
+      }
+      if (imax[0] > wMaxX) {
+        wMaxX = imax[0];
+      }
+      if (imax[1] > wMaxY) {
+        wMaxY = imax[1];
+      }
+      if (imax[2] > wMaxZ) {
+        wMaxZ = imax[2];
+      }
+    }
+    mesh.boundMin = [wMinX, wMinY, wMinZ];
+    mesh.boundMax = [wMaxX, wMaxY, wMaxZ];
+  }
+  var ext13, gltf_feature_gpu_instancing_default;
+  var init_gltf_feature_gpu_instancing = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-gpu-instancing.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gltf_parser();
+      init_compute_aabb();
+      init_mat4_compose_into();
+      init_mat4_multiply();
+      init_thin_instance();
+      init_loader_scratch();
+      ext13 = {
+        id: "EXT_mesh_gpu_instancing",
+        async applyAsset(_meshes, _root, ctx) {
+          const { _json: json, _binChunk: binChunk, _nodeMap: nodeMap } = ctx;
+          if (!nodeMap) {
+            return {};
+          }
+          const nodes = json.nodes ?? [];
+          for (let nodeIdx = 0; nodeIdx < nodes.length; nodeIdx++) {
+            const attrs = nodes[nodeIdx]?.extensions?.EXT_mesh_gpu_instancing?.attributes;
+            if (!attrs) {
+              continue;
+            }
+            const tn = nodeMap[nodeIdx];
+            if (!tn) {
+              continue;
+            }
+            const meshesForNode = collectMeshesUnderNode(tn);
+            if (meshesForNode.length === 0) {
+              continue;
+            }
+            const tAcc = attrs.TRANSLATION !== void 0 ? resolveAccessor(json, binChunk, attrs.TRANSLATION) : null;
+            const rAcc = attrs.ROTATION !== void 0 ? resolveAccessor(json, binChunk, attrs.ROTATION) : null;
+            const sAcc = attrs.SCALE !== void 0 ? resolveAccessor(json, binChunk, attrs.SCALE) : null;
+            let count = 0;
+            for (const acc of [tAcc, rAcc, sAcc]) {
+              if (!acc) {
+                continue;
+              }
+              if (count === 0) {
+                count = acc._count;
+              } else if (acc._count !== count) {
+                throw new Error(`EXT_mesh_gpu_instancing: accessor count mismatch on node ${nodeIdx}`);
+              }
+            }
+            if (count === 0) {
+              continue;
+            }
+            const matrices = buildInstanceMatrices(
+              tAcc ? tAcc._data : null,
+              rAcc ? rAcc._data : null,
+              sAcc ? sAcc._data : null,
+              count
+            );
+            const nodeWorld = ctx._worldMatrixCache.get(nodeIdx);
+            for (const mesh of meshesForNode) {
+              setThinInstances(mesh, matrices, count);
+              expandMeshAabbForInstances(mesh, matrices, count, nodeWorld);
+            }
+          }
+          return {};
+        }
+      };
+      gltf_feature_gpu_instancing_default = ext13;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-xmp.ts
+  var gltf_feature_xmp_exports = {};
+  __export(gltf_feature_xmp_exports, {
+    default: () => gltf_feature_xmp_default
+  });
+  var feature10, gltf_feature_xmp_default;
+  var init_gltf_feature_xmp = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-xmp.ts"() {
+      "use strict";
+      feature10 = {
+        id: "KHR_xmp_json_ld",
+        async applyAsset(_meshes, _root, ctx) {
+          const json = ctx._json;
+          const packets = json.extensions?.KHR_xmp_json_ld?.packets ?? [];
+          const assetPacketIndex = json.asset?.extensions?.KHR_xmp_json_ld?.packet;
+          const assetPacket = assetPacketIndex !== void 0 ? packets[assetPacketIndex] : void 0;
+          return { xmpMetadata: { packets, assetPacket } };
+        }
+      };
+      gltf_feature_xmp_default = feature10;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-registry.ts
+  var gltf_feature_registry_exports = {};
+  __export(gltf_feature_registry_exports, {
+    loadGltfFeatures: () => loadGltfFeatures
+  });
+  async function loadGltfFeatures(json) {
+    const used = json.extensionsUsed ?? [];
+    const mods = await Promise.all(_features.flatMap(([t, load]) => (typeof t === "string" ? used.includes(t) : t(json)) ? [load()] : []));
+    return mods.map((m) => m.default);
+  }
+  var M, _features;
+  var init_gltf_feature_registry = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-feature-registry.ts"() {
+      "use strict";
+      init_gltf_parser();
+      M = "KHR_materials_";
+      _features = [
+        // Pre-parse features (buffer-level): order matters — meshopt decompresses
+        // bufferViews first, then quantization dequantizes the resulting accessors.
+        ["EXT_meshopt_compression", () => Promise.resolve().then(() => (init_gltf_feature_meshopt(), gltf_feature_meshopt_exports))],
+        ["KHR_mesh_quantization", () => Promise.resolve().then(() => (init_gltf_ext_quantization(), gltf_ext_quantization_exports))],
+        // Pre-mesh features (geometry decompression)
+        ["KHR_draco_mesh_compression", () => Promise.resolve().then(() => (init_gltf_feature_draco(), gltf_feature_draco_exports))],
+        // Material extensions
+        [M + "clearcoat", () => Promise.resolve().then(() => (init_gltf_ext_clearcoat(), gltf_ext_clearcoat_exports))],
+        [M + "iridescence", () => Promise.resolve().then(() => (init_gltf_ext_iridescence(), gltf_ext_iridescence_exports))],
+        [M + "emissive_strength", () => Promise.resolve().then(() => (init_gltf_ext_emissive_strength(), gltf_ext_emissive_strength_exports))],
+        [M + "sheen", () => Promise.resolve().then(() => (init_gltf_ext_sheen(), gltf_ext_sheen_exports))],
+        [M + "anisotropy", () => Promise.resolve().then(() => (init_gltf_ext_anisotropy(), gltf_ext_anisotropy_exports))],
+        [M + "unlit", () => Promise.resolve().then(() => (init_gltf_ext_unlit(), gltf_ext_unlit_exports))],
+        [M + "pbrSpecularGlossiness", () => Promise.resolve().then(() => (init_gltf_ext_spec_gloss(), gltf_ext_spec_gloss_exports))],
+        // Dielectric cluster (ior/specular/transmission/volume/dispersion) — any of the five triggers the
+        // loader; transmission refraction is wired dynamically by the PBR material path when needed.
+        [(j) => ["transmission", "volume", "ior", "specular", "dispersion"].some((e) => j.extensionsUsed?.includes(M + e)), () => Promise.resolve().then(() => (init_gltf_ext_dielectric(), gltf_ext_dielectric_exports))],
+        ["KHR_texture_transform", () => Promise.resolve().then(() => (init_gltf_ext_uv_transform(), gltf_ext_uv_transform_exports))],
+        ["KHR_texture_basisu", () => Promise.resolve().then(() => (init_gltf_ext_basisu(), gltf_ext_basisu_exports))],
+        [needsOrmComposite, () => Promise.resolve().then(() => (init_gltf_ext_orm(), gltf_ext_orm_exports))],
+        // Per-mesh features (predicates inlined to avoid eager imports)
+        [(j) => !!j.skins?.length && anyPrimitive(j, (p) => p.attributes?.JOINTS_0 !== void 0), () => Promise.resolve().then(() => (init_gltf_feature_skeleton(), gltf_feature_skeleton_exports))],
+        [(j) => anyPrimitive(j, (p) => !!p.targets?.length), () => Promise.resolve().then(() => (init_gltf_feature_morph(), gltf_feature_morph_exports))],
+        // Per-asset features
+        ["KHR_lights_punctual", () => Promise.resolve().then(() => (init_gltf_feature_lights_punctual(), gltf_feature_lights_punctual_exports))],
+        [(j) => !!j.animations?.length, () => Promise.resolve().then(() => (init_gltf_feature_animations(), gltf_feature_animations_exports))],
+        [M + "variants", () => Promise.resolve().then(() => (init_gltf_feature_variants(), gltf_feature_variants_exports))],
+        ["KHR_node_visibility", () => Promise.resolve().then(() => (init_gltf_ext_node_visibility(), gltf_ext_node_visibility_exports))],
+        ["KHR_animation_pointer", () => Promise.resolve().then(() => (init_gltf_feature_animation_pointer(), gltf_feature_animation_pointer_exports))],
+        ["EXT_mesh_gpu_instancing", () => Promise.resolve().then(() => (init_gltf_feature_gpu_instancing(), gltf_feature_gpu_instancing_exports))],
+        ["KHR_xmp_json_ld", () => Promise.resolve().then(() => (init_gltf_feature_xmp(), gltf_feature_xmp_exports))]
+      ];
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-glb-parser.ts
+  var gltf_glb_parser_exports = {};
+  __export(gltf_glb_parser_exports, {
+    parseGlbContainer: () => parseGlbContainer
+  });
+  function parseGlbContainer(buffer) {
+    const view = new DV(buffer);
+    const magic = view.getUint32(0, true);
+    if (magic !== 1179937895) {
+      throw new Error("Not a valid GLB file");
+    }
+    let offset = 12;
+    const jsonLength = view.getUint32(offset, true);
+    const jsonType = view.getUint32(offset + 4, true);
+    if (jsonType !== 1313821514) {
+      throw new Error("First GLB chunk is not JSON");
+    }
+    const jsonStr = new TextDecoder().decode(new U8(buffer, offset + 8, jsonLength));
+    const json = JSON.parse(jsonStr);
+    offset += 8 + jsonLength;
+    const binLength = view.getUint32(offset, true);
+    const binType = view.getUint32(offset + 4, true);
+    if (binType !== 5130562) {
+      throw new Error("Second GLB chunk is not BIN");
+    }
+    const binChunk = new DV(buffer, offset + 8, binLength);
+    return { json, binChunk };
+  }
+  var init_gltf_glb_parser = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-glb-parser.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-normals.ts
+  var gltf_normals_exports = {};
+  __export(gltf_normals_exports, {
+    computeSmoothNormals: () => computeSmoothNormals,
+    createSequentialIndices: () => createSequentialIndices2
+  });
+  function createSequentialIndices2(vertexCount) {
+    const indices = vertexCount > 65535 ? new Uint32Array(vertexCount) : new Uint16Array(vertexCount);
+    for (let i = 0; i < vertexCount; i++) {
+      indices[i] = i;
+    }
+    return indices;
+  }
+  function computeSmoothNormals(positions, indices, vertexCount) {
+    const normals = new Float32Array(vertexCount * 3);
+    const indexed = indices.length > 0;
+    const triCount = indexed ? indices.length / 3 | 0 : vertexCount / 3 | 0;
+    for (let f = 0; f < triCount; f++) {
+      const ia = indexed ? indices[f * 3] : f * 3;
+      const ib = indexed ? indices[f * 3 + 1] : f * 3 + 1;
+      const ic = indexed ? indices[f * 3 + 2] : f * 3 + 2;
+      const ax = positions[ia * 3], ay = positions[ia * 3 + 1], az = positions[ia * 3 + 2];
+      const bx = positions[ib * 3], by = positions[ib * 3 + 1], bz = positions[ib * 3 + 2];
+      const cx = positions[ic * 3], cy = positions[ic * 3 + 1], cz = positions[ic * 3 + 2];
+      const e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+      const e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+      const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+      normals[ia * 3] += nx;
+      normals[ia * 3 + 1] += ny;
+      normals[ia * 3 + 2] += nz;
+      normals[ib * 3] += nx;
+      normals[ib * 3 + 1] += ny;
+      normals[ib * 3 + 2] += nz;
+      normals[ic * 3] += nx;
+      normals[ic * 3 + 1] += ny;
+      normals[ic * 3 + 2] += nz;
+    }
+    for (let i = 0; i < vertexCount; i++) {
+      const x = normals[i * 3], y = normals[i * 3 + 1], z = normals[i * 3 + 2];
+      const len = Math.hypot(x, y, z) || 1;
+      normals[i * 3] = x / len;
+      normals[i * 3 + 1] = y / len;
+      normals[i * 3 + 2] = z / len;
+    }
+    return normals;
+  }
+  var init_gltf_normals = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-normals.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-color-normalize.ts
+  var gltf_color_normalize_exports = {};
+  __export(gltf_color_normalize_exports, {
+    normalizeColorToVec3: () => normalizeColorToVec3
+  });
+  function normalizeColorToVec3(data, count, comps) {
+    const out = new Float32Array(count * 3);
+    if (data instanceof Float32Array) {
+      for (let v = 0; v < count; v++) {
+        out[v * 3] = data[v * comps];
+        out[v * 3 + 1] = data[v * comps + 1];
+        out[v * 3 + 2] = data[v * comps + 2];
+      }
+    } else if (data instanceof Uint16Array) {
+      const inv = 1 / 65535;
+      for (let v = 0; v < count; v++) {
+        out[v * 3] = data[v * comps] * inv;
+        out[v * 3 + 1] = data[v * comps + 1] * inv;
+        out[v * 3 + 2] = data[v * comps + 2] * inv;
+      }
+    } else if (data instanceof Uint8Array) {
+      const inv = 1 / 255;
+      for (let v = 0; v < count; v++) {
+        out[v * 3] = data[v * comps] * inv;
+        out[v * 3 + 1] = data[v * comps + 1] * inv;
+        out[v * 3 + 2] = data[v * comps + 2] * inv;
+      }
+    }
+    return out;
+  }
+  var init_gltf_color_normalize = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/gltf-color-normalize.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/scene-size.ts
+  function computeSceneSize(scene, userSkyboxSize) {
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (const m of scene.meshes) {
+      if (!m.boundMin || !m.boundMax) {
+        continue;
+      }
+      const w = m.worldMatrix;
+      const tx = w[12], ty = w[13], tz = w[14];
+      const wMinX = m.boundMin[0] + tx;
+      const wMinY = m.boundMin[1] + ty;
+      const wMinZ = m.boundMin[2] + tz;
+      const wMaxX = m.boundMax[0] + tx;
+      const wMaxY = m.boundMax[1] + ty;
+      const wMaxZ = m.boundMax[2] + tz;
+      if (wMinX < minX) {
+        minX = wMinX;
+      }
+      if (wMinY < minY) {
+        minY = wMinY;
+      }
+      if (wMinZ < minZ) {
+        minZ = wMinZ;
+      }
+      if (wMaxX > maxX) {
+        maxX = wMaxX;
+      }
+      if (wMaxY > maxY) {
+        maxY = wMaxY;
+      }
+      if (wMaxZ > maxZ) {
+        maxZ = wMaxZ;
+      }
+    }
+    if (!isFinite(minX)) {
+      return { groundSize: 15, skyboxSize: userSkyboxSize ?? 20, rootPosition: [0, 0, 0] };
+    }
+    const dx = maxX - minX, dy = maxY - minY, dz = maxZ - minZ;
+    const sceneDiagonalLength = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    let groundSize = 15;
+    let skyboxSize = userSkyboxSize ?? 20;
+    const cam = scene.camera;
+    if (cam && "upperRadiusLimit" in cam && cam.upperRadiusLimit) {
+      groundSize = cam.upperRadiusLimit * 2;
+      skyboxSize = groundSize;
+    }
+    if (sceneDiagonalLength > groundSize) {
+      groundSize = sceneDiagonalLength * 2;
+      skyboxSize = groundSize;
+    }
+    groundSize *= 1.1;
+    skyboxSize *= 1.5;
+    const rootPosition = [minX + dx * 0.5, minY - 1e-5, minZ + dz * 0.5];
+    return { groundSize, skyboxSize, rootPosition };
+  }
+  var init_scene_size = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/scene-size.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-env/rgbd-decode.ts
+  var rgbd_decode_exports = {};
+  __export(rgbd_decode_exports, {
+    decodeBrdfPng: () => decodeBrdfPng,
+    uploadCubemapRGBD: () => uploadCubemapRGBD
+  });
+  function getPipeline2(device, flipY) {
+    if (device !== _device) {
+      _device = device;
+      _module = device.createShaderModule({ code: WGSL2 });
+      _noFlip = null;
+      _flip = null;
+    }
+    const slot = flipY ? _flip : _noFlip;
+    if (slot) {
+      return slot;
+    }
+    const p = device.createComputePipeline({
+      layout: "auto",
+      compute: { module: _module, entryPoint: "main", constants: { f: flipY ? 1 : 0 } }
+    });
+    if (flipY) {
+      _flip = p;
+    } else {
+      _noFlip = p;
+    }
+    return p;
+  }
+  function makeBindGroup(device, pipeline, inView, outView) {
+    return device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: inView },
+        { binding: 1, resource: outView }
+      ]
+    });
+  }
+  function encodeDispatch(encoder, pipeline, bg, w, h) {
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bg);
+    pass.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8));
+    pass.end();
+  }
+  function decodeBrdfPng(engine, image) {
+    const device = engine._device;
+    const pipeline = getPipeline2(device, false);
+    const w = image.width;
+    const h = image.height;
+    const inputTex = device.createTexture({
+      size: { width: w, height: h },
+      format: "rgba8unorm",
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT
+    });
+    device.queue.copyExternalImageToTexture({ source: image, flipY: false }, { texture: inputTex, premultipliedAlpha: false }, { width: w, height: h });
+    const texture = device.createTexture({
+      size: { width: w, height: h },
+      format: "rgba16float",
+      usage: TU.TEXTURE_BINDING | TU.STORAGE_BINDING
+    });
+    const bg = makeBindGroup(device, pipeline, inputTex.createView(), texture.createView());
+    const enc = device.createCommandEncoder();
+    encodeDispatch(enc, pipeline, bg, w, h);
+    device.queue.submit([enc.finish()]);
+    inputTex.destroy();
+    return texture;
+  }
+  function uploadCubemapRGBD(engine, images, width, mipCount) {
+    const device = engine._device;
+    const pipeline = getPipeline2(device, true);
+    const texture = device.createTexture({
+      size: { width, height: width, depthOrArrayLayers: 6 },
+      format: "rgba16float",
+      mipLevelCount: mipCount,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.COPY_SRC | TU.RENDER_ATTACHMENT,
+      dimension: "2d"
+    });
+    for (let mip = 0; mip < mipCount; mip++) {
+      const mipSize = Math.max(1, width >> mip);
+      const inputTex = device.createTexture({
+        size: { width: mipSize, height: mipSize },
+        format: "rgba8unorm",
+        usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT
+      });
+      const outputTex = device.createTexture({
+        size: { width: mipSize, height: mipSize },
+        format: "rgba16float",
+        usage: TU.STORAGE_BINDING | TU.COPY_SRC
+      });
+      const bindGroup = makeBindGroup(device, pipeline, inputTex.createView(), outputTex.createView());
+      for (let face = 0; face < 6; face++) {
+        const idx = mip * 6 + face;
+        if (idx >= images.length) {
+          break;
+        }
+        device.queue.copyExternalImageToTexture({ source: images[idx], flipY: false }, { texture: inputTex, premultipliedAlpha: false }, { width: mipSize, height: mipSize });
+        const encoder = device.createCommandEncoder();
+        encodeDispatch(encoder, pipeline, bindGroup, mipSize, mipSize);
+        encoder.copyTextureToTexture({ texture: outputTex }, { texture, origin: { x: 0, y: 0, z: face }, mipLevel: mip }, { width: mipSize, height: mipSize });
+        device.queue.submit([encoder.finish()]);
+      }
+      inputTex.destroy();
+      outputTex.destroy();
+    }
+    return texture;
+  }
+  var WGSL2, _device, _module, _noFlip, _flip;
+  var init_rgbd_decode = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/loader-env/rgbd-decode.ts"() {
+      "use strict";
+      init_gpu_flags();
+      WGSL2 = `override f:bool=false;@group(0)@binding(0)var t:texture_2d<f32>;@group(0)@binding(1)var o:texture_storage_2d<rgba16float,write>;@compute @workgroup_size(8,8)fn main(@builtin(global_invocation_id)g:vec3u){let d=textureDimensions(t);if(any(g.xy>=d)){return;}let c=textureLoad(t,vec2u(g.x,select(g.y,d.y-1u-g.y,f)),0);textureStore(o,g.xy,vec4f(pow(c.rgb,vec3f(2.2))/max(c.a,1.0/255.0),1));}`;
+      _device = null;
+      _module = null;
+      _noFlip = null;
+      _flip = null;
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\skybox.vertex.wgsl
+  var skybox_vertex_default;
+  var init_skybox_vertex = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\skybox.vertex.wgsl"() {
+      skybox_vertex_default = "// Skybox Vertex Shader \u2014 matches Babylon BackgroundMaterial (REFLECTIONMAP_SKYBOX)\r\n// Outputs local position as cubemap direction (vPositionUVW) + world position for dithering\r\n\r\nstruct MeshUniforms {\r\n  world: mat4x4<f32>,\r\n};\r\n\r\n@group(1) @binding(0) var<uniform> mesh: MeshUniforms;\r\n\r\nstruct VertexOutput {\r\n  @builtin(position) clipPos: vec4<f32>,\r\n  @location(0) positionUVW: vec3<f32>,\r\n  @location(1) positionW: vec3<f32>,\r\n};\r\n\r\n@vertex\r\nfn main(@location(0) position: vec3<f32>) -> VertexOutput {\r\n  var output: VertexOutput;\r\n  output.positionUVW = position;\r\n  // Infinite distance: strip translation (w=0), center at camera.\r\n  // Matches BJS skybox.infiniteDistance = true.\r\n  let worldPos = (mesh.world * vec4<f32>(position, 0.0)).xyz + scene.vEyePosition.xyz;\r\n  output.positionW = worldPos;\r\n  output.clipPos = scene.viewProjection * vec4<f32>(worldPos, 1.0);\r\n  return output;\r\n}\r\n";
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\skybox.fragment.wgsl
+  var skybox_fragment_default;
+  var init_skybox_fragment = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\skybox.fragment.wgsl"() {
+      skybox_fragment_default = "// Skybox Fragment Shader \u2014 matches Babylon BackgroundMaterial\r\n// BJS loads a separate CDN skybox texture (backgroundSkybox.dds) that produces\r\n// exactly scene.clearColor when rendered through the BackgroundMaterial pipeline.\r\n// We replicate this by outputting the pre-computed clearColor directly from a UBO.\r\n\r\nstruct MeshUniforms {\r\n  world: mat4x4<f32>,\r\n  primaryColor: vec3<f32>,\r\n  _pad: f32,\r\n  // Pre-computed sRGB output color for the sky background (= scene.clearColor).\r\n  skyOutputColor: vec3<f32>,\r\n  _pad2: f32,\r\n};\r\n@group(1) @binding(0) var<uniform> mesh: MeshUniforms;\r\n\r\nstruct FragmentInput {\r\n  @location(0) positionUVW: vec3<f32>,\r\n  @location(1) positionW: vec3<f32>,\r\n};\r\n\r\n@fragment\r\nfn main(input: FragmentInput) -> @location(0) vec4<f32> {\r\n  var result = vec4<f32>(mesh.skyOutputColor, 1.0);\r\n\r\n  // Dithering (enableNoise=true, variance=0.5)\r\n  result = vec4<f32>(result.rgb + vec3<f32>(dither(input.positionW.xy, 0.5)), result.a);\r\n  result = max(result, vec4<f32>(0.0));\r\n\r\n  return result;\r\n}\r\n";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/bgl-helpers.ts
+  function createSingleUniformBGL(engine, label, visibility) {
+    return engine._device.createBindGroupLayout({
+      label,
+      entries: [{ binding: 0, visibility, buffer: { type: "uniform" } }]
+    });
+  }
+  var init_bgl_helpers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/bgl-helpers.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-solid-skybox.ts
+  var background_solid_skybox_exports = {};
+  __export(background_solid_skybox_exports, {
+    buildSolidSkyboxRenderable: () => buildSolidSkyboxRenderable
+  });
+  function createSkyboxBuffers(engine, S) {
+    const positions = new F32([
+      S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S
+    ]);
+    const indices = new U16([
+      2,
+      1,
+      0,
+      3,
+      2,
+      0,
+      6,
+      5,
+      4,
+      7,
+      6,
+      4,
+      10,
+      9,
+      8,
+      11,
+      10,
+      8,
+      14,
+      13,
+      12,
+      15,
+      14,
+      12,
+      18,
+      17,
+      16,
+      19,
+      18,
+      16,
+      22,
+      21,
+      20,
+      23,
+      22,
+      20
+    ]);
+    return {
+      posBuffer: createMappedBuffer(engine, positions, BU.VERTEX),
+      idxBuffer: createMappedBuffer(engine, indices, BU.INDEX),
+      idxCount: 36
+    };
+  }
+  function buildSkyboxWorldMatrix(rootPosition) {
+    const world = new F32(16);
+    world[0] = 1;
+    world[5] = 1;
+    world[10] = 1;
+    world[15] = 1;
+    world[12] = rootPosition[0];
+    world[13] = rootPosition[1];
+    world[14] = rootPosition[2];
+    return world;
+  }
+  function createSkyboxMaterial() {
+    function getLayout(engine) {
+      const device = engine._device;
+      if (_skyLayout && _skyCachedDevice === device) {
+        return _skyLayout;
+      }
+      _skyLayout = createSingleUniformBGL(engine, "skybox-material", SS.VERTEX | SS.FRAGMENT);
+      return _skyLayout;
+    }
+    return {
+      getPipeline(_engine, sig) {
+        const device = _engine._device;
+        if (_skyCachedDevice !== device) {
+          _skyPipelines.clear();
+          _skyLayout = null;
+          _skyCachedDevice = device;
+        }
+        const key = targetSignatureKey(sig);
+        const cached = _skyPipelines.get(key);
+        if (cached) {
+          return cached;
+        }
+        const _vertModule = device.createShaderModule({ code: SCENE_UBO_WGSL + skybox_vertex_default, label: "skybox-vert" });
+        const _fragModule = device.createShaderModule({ code: WGSL_DITHER + skybox_fragment_default, label: "skybox-frag" });
+        const pipeline = device.createRenderPipeline(
+          createDefaultPipelineDescriptor({
+            _label: "skybox-pipeline",
+            _engine,
+            _bgls: [getSceneBindGroupLayout(_engine), getLayout(_engine)],
+            _vertModule,
+            _fragModule,
+            _vertexBuffers: SKYBOX_POS_BUFFER,
+            _format: sig._colorFormat,
+            _depthStencilFormat: sig._depthStencilFormat,
+            _depthCompare: sig._depthCompare,
+            _msaaSamples: sig._sampleCount,
+            _depthWriteEnabled: false
+          })
+        );
+        _skyPipelines.set(key, pipeline);
+        return pipeline;
+      },
+      createBindGroup(engine, meshUBO, _env) {
+        const device = engine._device;
+        return device.createBindGroup({
+          layout: getLayout(engine),
+          entries: [{ binding: 0, resource: { buffer: meshUBO } }]
+        });
+      }
+    };
+  }
+  function buildSolidSkyboxRenderable(scene, envTextures, skyHalfSize, rootPosition, primaryColor) {
+    const engine = scene.surface.engine;
+    const skyboxWorld = buildSkyboxWorldMatrix(rootPosition);
+    const cc = scene.clearColor;
+    const skyBufs = createSkyboxBuffers(engine, skyHalfSize);
+    const skyMat = createSkyboxMaterial();
+    const skyOutputColor = [cc.r, cc.g, cc.b];
+    const skyUBO = createSkyMeshUBO(engine, skyboxWorld, primaryColor, skyOutputColor);
+    const skyBG = skyMat.createBindGroup(engine, skyUBO, envTextures);
+    const r = {
+      order: 0,
+      // skybox renders first (behind everything)
+      isTransparent: false,
+      bind(eng, sig) {
+        return {
+          renderable: r,
+          pipeline: skyMat.getPipeline(eng, sig),
+          draw(pass) {
+            pass.setBindGroup(1, skyBG);
+            pass.setVertexBuffer(0, skyBufs.posBuffer);
+            pass.setIndexBuffer(skyBufs.idxBuffer, "uint16");
+            pass.drawIndexed(skyBufs.idxCount);
+            return 1;
+          }
+        };
+      }
+    };
+    return r;
+  }
+  function createSkyMeshUBO(engine, world, primaryColor, skyOutputColor) {
+    const data = new F32(SKY_MESH_UNIFORM_SIZE / 4);
+    data.set(world, 0);
+    data[16] = primaryColor[0];
+    data[17] = primaryColor[1];
+    data[18] = primaryColor[2];
+    data[20] = skyOutputColor[0];
+    data[21] = skyOutputColor[1];
+    data[22] = skyOutputColor[2];
+    return createUniformBuffer(engine, data);
+  }
+  var SKY_MESH_UNIFORM_SIZE, SKYBOX_POS_BUFFER, _skyPipelines, _skyLayout, _skyCachedDevice;
+  var init_background_solid_skybox = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-solid-skybox.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_skybox_vertex();
+      init_skybox_fragment();
+      init_scene_helpers();
+      init_render_target();
+      init_wgsl_helpers();
+      init_scene_uniforms2();
+      init_gpu_buffers();
+      init_bgl_helpers();
+      SKY_MESH_UNIFORM_SIZE = 96;
+      SKYBOX_POS_BUFFER = [{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] }];
+      _skyPipelines = /* @__PURE__ */ new Map();
+      _skyLayout = null;
+      _skyCachedDevice = null;
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\background.vertex.wgsl
+  var background_vertex_default;
+  var init_background_vertex = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\background.vertex.wgsl"() {
+      background_vertex_default = "// Background Ground Vertex Shader\r\n// Matches BJS shd_15: DIFFUSE, OPACITYFRESNEL, PREMULTIPLYALPHA (no REFLECTION)\r\n\r\nstruct MeshUniforms {\r\n  world: mat4x4<f32>,\r\n};\r\n\r\n@group(1) @binding(0) var<uniform> mesh: MeshUniforms;\r\n\r\nstruct VertexInput {\r\n  @location(0) position: vec3<f32>,\r\n  @location(1) normal: vec3<f32>,\r\n  @location(2) uv: vec2<f32>,\r\n};\r\n\r\nstruct VertexOutput {\r\n  @builtin(position) clipPos: vec4<f32>,\r\n  @location(0) vPositionW: vec3<f32>,\r\n  @location(1) vNormalW: vec3<f32>,\r\n  @location(2) vUV: vec2<f32>,\r\n};\r\n\r\n@vertex\r\nfn main(input: VertexInput) -> VertexOutput {\r\n  var output: VertexOutput;\r\n  let finalWorld = mesh.world;\r\n  let worldPos4 = finalWorld * vec4<f32>(input.position, 1.0);\r\n  output.vPositionW = worldPos4.xyz;\r\n  output.clipPos = scene.viewProjection * worldPos4;\r\n  let normalWorld = mat3x3<f32>(finalWorld[0].xyz, finalWorld[1].xyz, finalWorld[2].xyz);\r\n  output.vNormalW = normalize(normalWorld * input.normal);\r\n  output.vUV = input.uv;\r\n  return output;\r\n}\r\n";
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\background.ground.fragment.wgsl
+  var background_ground_fragment_default;
+  var init_background_ground_fragment = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\background.ground.fragment.wgsl"() {
+      background_ground_fragment_default = "// Background Ground Fragment Shader\r\n// Matches BJS shd_16: DIFFUSE, OPACITYFRESNEL, PREMULTIPLYALPHA (no REFLECTION)\r\n// Verified via Spector.GPU capture of BJS scene 1\r\n\r\nstruct MeshUniforms {\r\n  world: mat4x4<f32>,\r\n  primaryColor: vec3<f32>,\r\n  alpha: f32,\r\n  backgroundCenter: vec3<f32>,\r\n  _pad: f32,\r\n};\r\n@group(1) @binding(0) var<uniform> mesh: MeshUniforms;\r\n\r\n@group(1) @binding(1) var groundTexture: texture_2d<f32>;\r\n@group(1) @binding(2) var groundSampler: sampler;\r\n\r\nstruct FragmentInput {\r\n  @location(0) vPositionW: vec3<f32>,\r\n  @location(1) vNormalW: vec3<f32>,\r\n  @location(2) vUV: vec2<f32>,\r\n};\r\n\r\n@fragment\r\nfn main(input: FragmentInput) -> @location(0) vec4<f32> {\r\n  let normalW = normalize(input.vNormalW);\r\n\r\n  // Sample diffuse texture (BJS backgroundGround.png: white RGB, radial alpha gradient)\r\n  let diffuseMap = textureSample(groundTexture, groundSampler, input.vUV);\r\n\r\n  // BJS: reflectionColor = vec4(1) (no REFLECTION define)\r\n  let diffuseColor = diffuseMap.rgb;\r\n  let colorBase = max(diffuseColor, vec3<f32>(0.0));\r\n  let mainColor = mesh.primaryColor;\r\n  let finalColor = colorBase * mainColor;\r\n\r\n  // Alpha starts from material alpha, multiplied by texture alpha\r\n  var finalAlpha = mesh.alpha * diffuseMap.a;\r\n\r\n  // OPACITYFRESNEL \u2014 BJS shd_16 lines 367-370\r\n  let viewAngleToFloor = dot(normalW, normalize(scene.vEyePosition.xyz - mesh.backgroundCenter));\r\n  const startAngle: f32 = 0.1;\r\n  let fadeFactor = clamp(viewAngleToFloor / startAngle, 0.0, 1.0);\r\n  finalAlpha *= fadeFactor * fadeFactor;\r\n\r\n  // Image processing (preserves alpha)\r\n  var color = vec4<f32>(finalColor, finalAlpha);\r\n  if (scene.vImageInfos.w >= 0.0) {\r\n    color = applyImageProcessing(color);\r\n  }\r\n\r\n  // PREMULTIPLYALPHA \u2014 BJS shd_16 line 373\r\n  color = vec4<f32>(color.rgb * color.a, color.a);\r\n\r\n  // Dithering\r\n  color = vec4<f32>(color.rgb + vec3<f32>(dither(input.vPositionW.xy, 0.5)), color.a);\r\n  color = max(color, vec4<f32>(0.0));\r\n\r\n  return color;\r\n}\r\n";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-ground.ts
+  var background_ground_exports = {};
+  __export(background_ground_exports, {
+    buildGroundRenderable: () => buildGroundRenderable
+  });
+  async function buildGroundRenderable(engine, groundSize, rootPosition, primaryColor, groundTextureUrl, groundImagePromise, enableNoise = true) {
+    const fragCode = SCENE_UBO_WGSL + WGSL_IMAGE_PROCESSING + (enableNoise ? WGSL_DITHER : WGSL_NO_DITHER) + background_ground_fragment_default;
+    const gndMat = createGroundMaterial(enableNoise, fragCode);
+    const eps = 2220446049250313e-31;
+    const groundWorld = new F32(16);
+    groundWorld[0] = 1;
+    groundWorld[5] = eps;
+    groundWorld[6] = -1;
+    groundWorld[9] = 1;
+    groundWorld[10] = eps;
+    groundWorld[12] = rootPosition[0];
+    groundWorld[13] = rootPosition[1];
+    groundWorld[14] = rootPosition[2];
+    groundWorld[15] = 1;
+    const gndBufs = createGroundBuffers(engine, groundSize);
+    const gndUBO = createBgMeshUBO(engine, groundWorld, primaryColor);
+    const groundTex = await loadGroundTexture(engine, groundTextureUrl, groundImagePromise);
+    const groundTexView = groundTex.createView();
+    const groundSamp = getBilinearSampler(engine);
+    const gndBG = gndMat.createBindGroup(engine, gndUBO, groundTexView, groundSamp);
+    const r = {
+      order: 200,
+      // ground renders last (transparent)
+      isTransparent: true,
+      bind(eng, sig) {
+        return {
+          renderable: r,
+          pipeline: gndMat.getPipeline(eng, sig),
+          draw(pass) {
+            pass.setBindGroup(1, gndBG);
+            pass.setVertexBuffer(0, gndBufs.posBuffer);
+            pass.setVertexBuffer(1, gndBufs.normBuffer);
+            pass.setVertexBuffer(2, gndBufs.uvBuffer);
+            pass.setIndexBuffer(gndBufs.idxBuffer, "uint16");
+            pass.drawIndexed(gndBufs.idxCount);
+            return 1;
+          }
+        };
+      }
+    };
+    return r;
+  }
+  function createGroundMaterial(enableNoise, fragCode) {
+    function getLayout(engine) {
+      const device = engine._device;
+      if (_gndLayout && _gndCachedDevice === device) {
+        return _gndLayout;
+      }
+      _gndLayout = device.createBindGroupLayout({
+        label: "ground-material",
+        entries: [
+          { binding: 0, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } },
+          { binding: 1, visibility: SS.FRAGMENT, texture: { sampleType: "float", viewDimension: "2d" } },
+          { binding: 2, visibility: SS.FRAGMENT, sampler: { type: "filtering" } }
+        ]
+      });
+      _gndCachedDevice = device;
+      return _gndLayout;
+    }
+    return {
+      getPipeline(engine, sig) {
+        const device = engine._device;
+        if (_gndCachedDevice !== device) {
+          _gndPipelines.clear();
+          _gndLayout = null;
+          _gndCachedDevice = device;
+        }
+        const key = `${+enableNoise}|${targetSignatureKey(sig)}`;
+        const cached = _gndPipelines.get(key);
+        if (cached) {
+          return cached;
+        }
+        const vertModule = device.createShaderModule({ code: SCENE_UBO_WGSL + background_vertex_default, label: "ground-vert" });
+        const fragModule = device.createShaderModule({ code: fragCode, label: "ground-frag" });
+        const pipeline = device.createRenderPipeline({
+          label: "ground-pipeline",
+          layout: device.createPipelineLayout({ bindGroupLayouts: [getSceneBindGroupLayout(engine), getLayout(engine)] }),
+          vertex: {
+            module: vertModule,
+            entryPoint: "main",
+            buffers: [
+              { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
+              { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
+              { arrayStride: 8, attributes: [{ shaderLocation: 2, offset: 0, format: "float32x2" }] }
+            ]
+          },
+          fragment: {
+            module: fragModule,
+            entryPoint: "main",
+            targets: [
+              {
+                format: sig._colorFormat,
+                blend: {
+                  color: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
+                  alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+                }
+              }
+            ]
+          },
+          depthStencil: {
+            format: sig._depthStencilFormat ?? "depth24plus-stencil8",
+            depthCompare: sig._depthCompare ?? "greater-equal",
+            depthWriteEnabled: false
+          },
+          multisample: { count: sig._sampleCount },
+          primitive: { topology: "triangle-list", cullMode: "back", frontFace: "ccw" }
+        });
+        _gndPipelines.set(key, pipeline);
+        return pipeline;
+      },
+      createBindGroup(engine, meshUBO, groundTextureView, groundSampler) {
+        const device = engine._device;
+        return device.createBindGroup({
+          layout: getLayout(engine),
+          entries: [
+            { binding: 0, resource: { buffer: meshUBO } },
+            { binding: 1, resource: groundTextureView },
+            { binding: 2, resource: groundSampler }
+          ]
+        });
+      }
+    };
+  }
+  function createGroundBuffers(engine, groundSize) {
+    const h = groundSize / 2;
+    const positions = new F32([
+      -h,
+      -h,
+      0,
+      h,
+      -h,
+      0,
+      h,
+      h,
+      0,
+      -h,
+      h,
+      0
+    ]);
+    const normals = new F32([
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1
+    ]);
+    const uvs = new F32([
+      0,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1
+    ]);
+    const indices = new U16([0, 2, 1, 0, 3, 2]);
+    return {
+      posBuffer: createMappedBuffer(engine, positions, BU.VERTEX),
+      normBuffer: createMappedBuffer(engine, normals, BU.VERTEX),
+      uvBuffer: createMappedBuffer(engine, uvs, BU.VERTEX),
+      idxBuffer: createMappedBuffer(engine, indices, BU.INDEX),
+      idxCount: 6
+    };
+  }
+  function createBgMeshUBO(engine, world, primaryColor) {
+    const data = new F32(BG_MESH_UNIFORM_SIZE / 4);
+    data.set(world, 0);
+    data[16] = primaryColor[0];
+    data[17] = primaryColor[1];
+    data[18] = primaryColor[2];
+    data[19] = 0.9;
+    data[20] = 0;
+    data[21] = 0;
+    data[22] = 0;
+    return createUniformBuffer(engine, data);
+  }
+  async function loadGroundTexture(engine, url, preloadedImage) {
+    const device = engine._device;
+    if (!url) {
+      const tex2 = device.createTexture({
+        size: [1, 1],
+        format: "rgba8unorm",
+        usage: TU.TEXTURE_BINDING | TU.COPY_DST
+      });
+      device.queue.writeTexture({ texture: tex2 }, new U8([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1]);
+      return tex2;
+    }
+    const bmp = preloadedImage ? await preloadedImage : await fetch(url).then((r) => r.blob()).then((b) => createImageBitmap(b, { premultiplyAlpha: "none" }));
+    const tex = device.createTexture({
+      size: [bmp.width, bmp.height],
+      format: "rgba8unorm",
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT
+    });
+    device.queue.copyExternalImageToTexture({ source: bmp }, { texture: tex }, [bmp.width, bmp.height]);
+    bmp.close();
+    return tex;
+  }
+  var WGSL_IMAGE_PROCESSING, BG_MESH_UNIFORM_SIZE, _gndPipelines, _gndLayout, _gndCachedDevice;
+  var init_background_ground = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-ground.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_samplers();
+      init_gpu_buffers();
+      init_scene_helpers();
+      init_render_target();
+      init_background_vertex();
+      init_background_ground_fragment();
+      init_gpu_buffers();
+      init_scene_uniforms2();
+      init_wgsl_helpers();
+      WGSL_IMAGE_PROCESSING = `
+fn applyImageProcessing(result: vec4<f32>) -> vec4<f32> {
+var rgb = result.rgb;
+rgb *= scene.vImageInfos.x;
+const tonemappingCalibration: f32 = 1.590579;
+rgb = 1.0 - exp2(-tonemappingCalibration * rgb);
+rgb = pow(rgb, vec3<f32>(1.0 / 2.2));
+rgb = clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+let highContrast = rgb * rgb * (3.0 - 2.0 * rgb);
+if (scene.vImageInfos.y < 1.0) {
+rgb = mix(vec3<f32>(0.5), rgb, scene.vImageInfos.y);
+} else {
+rgb = mix(rgb, highContrast, scene.vImageInfos.y - 1.0);
+}
+rgb = max(rgb, vec3<f32>(0.0));
+return vec4<f32>(rgb, result.a);
+}
+`;
+      BG_MESH_UNIFORM_SIZE = 96;
+      _gndPipelines = /* @__PURE__ */ new Map();
+      _gndLayout = null;
+      _gndCachedDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/cubemap-skybox-material.ts
+  function createCubemapSkyboxMaterial(label, vertCode, fragCode) {
+    function getLayout(engine) {
+      const device = engine._device;
+      if (_cmCachedDevice !== device) {
+        _cmPipelines.clear();
+        _cmLayouts.clear();
+        _cmCachedDevice = device;
+      }
+      const cached = _cmLayouts.get(label);
+      if (cached) {
+        return cached;
+      }
+      const layout = device.createBindGroupLayout({
+        label: `${label}-material`,
+        entries: [
+          { binding: 0, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } },
+          { binding: 1, visibility: SS.FRAGMENT, texture: { sampleType: "float", viewDimension: "cube" } },
+          { binding: 2, visibility: SS.FRAGMENT, sampler: { type: "filtering" } }
+        ]
+      });
+      _cmLayouts.set(label, layout);
+      return layout;
+    }
+    return {
+      getPipeline(_engine, sig) {
+        const device = _engine._device;
+        if (_cmCachedDevice !== device) {
+          _cmPipelines.clear();
+          _cmLayouts.clear();
+          _cmCachedDevice = device;
+        }
+        const key = `${label}|${targetSignatureKey(sig)}`;
+        const cached = _cmPipelines.get(key);
+        if (cached) {
+          return cached;
+        }
+        const _vertModule = device.createShaderModule({ code: vertCode, label: `${label}-vert` });
+        const _fragModule = device.createShaderModule({ code: fragCode, label: `${label}-frag` });
+        const pipeline = device.createRenderPipeline(
+          createDefaultPipelineDescriptor({
+            _label: `${label}-pipeline`,
+            _engine,
+            _bgls: [getSceneBindGroupLayout(_engine), getLayout(_engine)],
+            _vertModule,
+            _fragModule,
+            _vertexBuffers: SKYBOX_POS_BUFFER2,
+            _format: sig._colorFormat,
+            _depthStencilFormat: sig._depthStencilFormat,
+            _depthCompare: sig._depthCompare,
+            _msaaSamples: sig._sampleCount,
+            _depthWriteEnabled: false
+          })
+        );
+        _cmPipelines.set(key, pipeline);
+        return pipeline;
+      },
+      createBindGroup(engine, meshUBO, cubeView, cubeSampler) {
+        const device = engine._device;
+        return device.createBindGroup({
+          layout: getLayout(engine),
+          entries: [
+            { binding: 0, resource: { buffer: meshUBO } },
+            { binding: 1, resource: cubeView },
+            { binding: 2, resource: cubeSampler }
+          ]
+        });
+      }
+    };
+  }
+  var SKYBOX_POS_BUFFER2, _cmPipelines, _cmLayouts, _cmCachedDevice;
+  var init_cubemap_skybox_material = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/cubemap-skybox-material.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_scene_helpers();
+      init_render_target();
+      SKYBOX_POS_BUFFER2 = [{ arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] }];
+      _cmPipelines = /* @__PURE__ */ new Map();
+      _cmLayouts = /* @__PURE__ */ new Map();
+      _cmCachedDevice = null;
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\skybox-dds.vertex.wgsl
+  var skybox_dds_vertex_default;
+  var init_skybox_dds_vertex = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\skybox-dds.vertex.wgsl"() {
+      skybox_dds_vertex_default = "// DDS Skybox Vertex Shader \u2014 standard world transform.\r\n// positionUVW uses local position for cube direction lookup.\r\n\r\nstruct MeshUniforms {\r\n  world: mat4x4<f32>,\r\n};\r\n\r\n@group(1) @binding(0) var<uniform> mesh: MeshUniforms;\r\n\r\nstruct VertexOutput {\r\n  @builtin(position) clipPos: vec4<f32>,\r\n  @location(0) positionUVW: vec3<f32>,\r\n  @location(1) positionW: vec3<f32>,\r\n};\r\n\r\n@vertex\r\nfn main(@location(0) position: vec3<f32>) -> VertexOutput {\r\n  var output: VertexOutput;\r\n  output.positionUVW = position;\r\n  let worldPos = (mesh.world * vec4<f32>(position, 1.0)).xyz;\r\n  output.positionW = worldPos;\r\n  output.clipPos = scene.viewProjection * vec4<f32>(worldPos, 1.0);\r\n  return output;\r\n}\r\n";
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\skybox-dds.fragment.wgsl
+  var skybox_dds_fragment_default;
+  var init_skybox_dds_fragment = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\skybox-dds.fragment.wgsl"() {
+      skybox_dds_fragment_default = "// DDS Cube Skybox Fragment Shader \u2014 samples DDS cube texture with BJS image processing.\r\n// Used by scenes that load backgroundSkybox.dds (createDefaultEnvironment).\r\n// Pipeline: exposure \u2192 Reinhard tonemap \u2192 gamma \u2192 contrast \u2192 dither.\r\n\r\nstruct MeshUniforms {\r\n  world: mat4x4<f32>,\r\n  primaryColor: vec3<f32>,\r\n  exposureLinear: f32,\r\n  contrast: f32,\r\n  _pad1: f32,\r\n  _pad2: f32,\r\n  _pad3: f32,\r\n};\r\n\r\n@group(1) @binding(0) var<uniform> mesh: MeshUniforms;\r\n@group(1) @binding(1) var envCubemap: texture_cube<f32>;\r\n@group(1) @binding(2) var envSampler: sampler;\r\n\r\nstruct FragmentInput {\r\n  @location(0) positionUVW: vec3<f32>,\r\n  @location(1) positionW: vec3<f32>,\r\n};\r\n\r\n@fragment\r\nfn main(input: FragmentInput) -> @location(0) vec4<f32> {\r\n  let dir = normalize(input.positionUVW);\r\n  var color = textureSampleLevel(envCubemap, envSampler, dir, 0.0).rgb;\r\n\r\n  // BJS BackgroundMaterial: colorBase = reflectionColor.rgb * primaryColor.rgb\r\n  color *= mesh.primaryColor;\r\n\r\n  if (scene.vImageInfos.w >= 0.0) {\r\n    // Exposure\r\n    color *= mesh.exposureLinear;\r\n    // Reinhard tonemap (matches BJS toneMappingType 0)\r\n    color = 1.0 - exp2(-1.590579 * color);\r\n    // Gamma\r\n    color = pow(color, vec3<f32>(1.0 / 2.2));\r\n    color = saturate(color);\r\n\r\n    // Contrast\r\n    let highContrast = color * color * (3.0 - 2.0 * color);\r\n    color = mix(color, highContrast, mesh.contrast - 1.0);\r\n\r\n    // Dithering (enableNoise=true, variance=0.5)\r\n    color = color + vec3<f32>(dither(input.positionW.xy, 0.5));\r\n    color = max(color, vec3<f32>(0.0));\r\n  }\r\n\r\n  return vec4<f32>(color, 1.0);\r\n}\r\n";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-dds-skybox.ts
+  var background_dds_skybox_exports = {};
+  __export(background_dds_skybox_exports, {
+    buildDdsSkyboxRenderable: () => buildDdsSkyboxRenderable
+  });
+  function createSkyboxBuffers2(engine, S) {
+    const positions = new F32([
+      S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S
+    ]);
+    const indices = new U16([
+      2,
+      1,
+      0,
+      3,
+      2,
+      0,
+      6,
+      5,
+      4,
+      7,
+      6,
+      4,
+      10,
+      9,
+      8,
+      11,
+      10,
+      8,
+      14,
+      13,
+      12,
+      15,
+      14,
+      12,
+      18,
+      17,
+      16,
+      19,
+      18,
+      16,
+      22,
+      21,
+      20,
+      23,
+      22,
+      20
+    ]);
+    return {
+      posBuffer: createMappedBuffer(engine, positions, BU.VERTEX),
+      idxBuffer: createMappedBuffer(engine, indices, BU.INDEX),
+      idxCount: 36
+    };
+  }
+  function buildSkyboxWorldMatrix2(rootPosition) {
+    const world = new F32(16);
+    world[0] = 1;
+    world[5] = 1;
+    world[10] = 1;
+    world[15] = 1;
+    world[12] = rootPosition[0];
+    world[13] = rootPosition[1];
+    world[14] = rootPosition[2];
+    return world;
+  }
+  async function buildDdsSkyboxRenderable(scene, skyHalfSize, rootPosition, primaryColor, skyboxTextureUrl, enableNoise = true) {
+    const engine = scene.surface.engine;
+    const skyboxWorld = buildSkyboxWorldMatrix2(rootPosition);
+    const skyBufs = createSkyboxBuffers2(engine, skyHalfSize);
+    const { cubeView, sampler } = await loadDdsCube(engine, skyboxTextureUrl ?? DEFAULT_SKY_URL);
+    const fragCode = SCENE_UBO_WGSL + (enableNoise ? WGSL_DITHER : WGSL_NO_DITHER) + skybox_dds_fragment_default;
+    const mat = createCubemapSkyboxMaterial(enableNoise ? "skybox-dds" : "skybox-dds0", SCENE_UBO_WGSL + skybox_dds_vertex_default, fragCode);
+    const ubo = createDdsMeshUBO(engine, skyboxWorld, primaryColor, scene.imageProcessing.exposure, scene.imageProcessing.contrast);
+    const bindGroup = mat.createBindGroup(engine, ubo, cubeView, sampler);
+    const r = {
+      order: 0,
+      isTransparent: false,
+      bind(eng, sig) {
+        return {
+          renderable: r,
+          pipeline: mat.getPipeline(eng, sig),
+          draw(pass) {
+            pass.setBindGroup(1, bindGroup);
+            pass.setVertexBuffer(0, skyBufs.posBuffer);
+            pass.setIndexBuffer(skyBufs.idxBuffer, "uint16");
+            pass.drawIndexed(skyBufs.idxCount);
+            return 1;
+          }
+        };
+      }
+    };
+    return r;
+  }
+  function createDdsMeshUBO(engine, world, primaryColor, exposureLinear, contrast) {
+    const data = new F32(SKY_DDS_UNIFORM_SIZE / 4);
+    data.set(world, 0);
+    data[16] = primaryColor[0];
+    data[17] = primaryColor[1];
+    data[18] = primaryColor[2];
+    data[19] = exposureLinear;
+    data[20] = contrast;
+    return createUniformBuffer(engine, data);
+  }
+  async function loadDdsCube(engine, url) {
+    const device = engine._device;
+    const buf = await (await fetch(url)).arrayBuffer();
+    const header = new I32(buf, 0, 32);
+    const width = header[3];
+    const height = header[4];
+    const mipCount = Math.max(header[7], 1);
+    const dataOffset = header[21] === 808540228 ? 128 + 20 : 128;
+    const raw = new U8(buf, dataOffset);
+    const fmt = "rgba16float";
+    const tex = device.createTexture({
+      size: [width, height, 6],
+      format: fmt,
+      mipLevelCount: mipCount,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT,
+      dimension: "2d"
+    });
+    let offset = 0;
+    for (let face = 0; face < 6; face++) {
+      for (let m = 0; m < mipCount; m++) {
+        const s = Math.max(width >> m, 1);
+        device.queue.writeTexture(
+          { texture: tex, origin: { x: 0, y: 0, z: face }, mipLevel: m },
+          raw.buffer,
+          { offset: raw.byteOffset + offset, bytesPerRow: s * 8 },
+          { width: s, height: s }
+        );
+        offset += s * s * 8;
+      }
+    }
+    const cubeView = tex.createView({ dimension: "cube" });
+    const sampler = getOrCreateSampler(engine, {
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      addressModeW: "clamp-to-edge",
+      maxAnisotropy: 4
+    });
+    return { cubeView, sampler };
+  }
+  var SKY_DDS_UNIFORM_SIZE, DEFAULT_SKY_URL;
+  var init_background_dds_skybox = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-dds-skybox.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_gpu_pool();
+      init_gpu_buffers();
+      init_wgsl_helpers();
+      init_scene_uniforms2();
+      init_cubemap_skybox_material();
+      init_skybox_dds_vertex();
+      init_skybox_dds_fragment();
+      SKY_DDS_UNIFORM_SIZE = 96;
+      DEFAULT_SKY_URL = "https://assets.babylonjs.com/core/environments/backgroundSkybox.dds";
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\skybox-hdr.fragment.wgsl
+  var skybox_hdr_fragment_default;
+  var init_skybox_hdr_fragment = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\skybox-hdr.fragment.wgsl"() {
+      skybox_hdr_fragment_default = "// HDR Skybox Fragment Shader \u2014 samples HDR environment cubemap with image processing.\r\n// Used when scene has an HDR environment rendered as the background.\r\n// Matches BJS BackgroundMaterial: cubemap at LOD 0 + exposure + gamma + contrast.\r\n\r\nstruct MeshUniforms {\r\n  world: mat4x4<f32>,\r\n  primaryColor: vec3<f32>,\r\n  _pad: f32,\r\n  skyOutputColor: vec3<f32>,\r\n  _pad2: f32,\r\n  exposureLinear: f32,\r\n  contrast: f32,\r\n  _pad3: f32,\r\n  _pad4: f32,\r\n};\r\n\r\n@group(1) @binding(0) var<uniform> mesh: MeshUniforms;\r\n@group(1) @binding(1) var envCubemap: texture_cube<f32>;\r\n@group(1) @binding(2) var envSampler: sampler;\r\n\r\nstruct FragmentInput {\r\n  @location(0) positionUVW: vec3<f32>,\r\n  @location(1) positionW: vec3<f32>,\r\n};\r\n\r\n@fragment\r\nfn main(input: FragmentInput) -> @location(0) vec4<f32> {\r\n  let dir = normalize(input.positionUVW);\r\n  var color = textureSampleLevel(envCubemap, envSampler, dir, 0.0).rgb;\r\n\r\n  // Image processing: exposure \u2192 gamma \u2192 contrast (matches BJS applyImageProcessing)\r\n  color *= mesh.exposureLinear;\r\n  color = pow(color, vec3<f32>(1.0 / 2.2));\r\n  color = clamp(color, vec3<f32>(0.0), vec3<f32>(1.0));\r\n\r\n  let highContrast = color * color * (3.0 - 2.0 * color);\r\n  if (mesh.contrast < 1.0) { color = mix(vec3<f32>(0.5), color, mesh.contrast); }\r\n  else { color = mix(color, highContrast, mesh.contrast - 1.0); }\r\n  color = max(color, vec3<f32>(0.0));\r\n\r\n  return vec4<f32>(color, 1.0);\r\n}\r\n";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-hdr-skybox.ts
+  var background_hdr_skybox_exports = {};
+  __export(background_hdr_skybox_exports, {
+    buildHdrSkyboxRenderable: () => buildHdrSkyboxRenderable
+  });
+  function createSkyboxBuffers3(engine, S) {
+    const positions = new F32([
+      S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S,
+      -S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      S,
+      S,
+      -S,
+      S,
+      S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      -S,
+      S
+    ]);
+    const indices = new U16([
+      2,
+      1,
+      0,
+      3,
+      2,
+      0,
+      6,
+      5,
+      4,
+      7,
+      6,
+      4,
+      10,
+      9,
+      8,
+      11,
+      10,
+      8,
+      14,
+      13,
+      12,
+      15,
+      14,
+      12,
+      18,
+      17,
+      16,
+      19,
+      18,
+      16,
+      22,
+      21,
+      20,
+      23,
+      22,
+      20
+    ]);
+    return {
+      posBuffer: createMappedBuffer(engine, positions, BU.VERTEX),
+      idxBuffer: createMappedBuffer(engine, indices, BU.INDEX),
+      idxCount: 36
+    };
+  }
+  function buildSkyboxWorldMatrix3(rootPosition) {
+    const world = new F32(16);
+    world[0] = 1;
+    world[5] = 1;
+    world[10] = 1;
+    world[15] = 1;
+    world[12] = rootPosition[0];
+    world[13] = rootPosition[1];
+    world[14] = rootPosition[2];
+    return world;
+  }
+  function buildHdrSkyboxRenderable(scene, envTextures, skyHalfSize, rootPosition, primaryColor) {
+    const engine = scene.surface.engine;
+    const skyboxWorld = buildSkyboxWorldMatrix3(rootPosition);
+    const cc = scene.clearColor;
+    const skyBufs = createSkyboxBuffers3(engine, skyHalfSize);
+    const mat = createCubemapSkyboxMaterial("skybox-hdr", SCENE_UBO_WGSL + skybox_vertex_default, skybox_hdr_fragment_default);
+    const ubo = createSkyHdrMeshUBO(engine, skyboxWorld, primaryColor, [cc.r, cc.g, cc.b], scene.imageProcessing.exposure, scene.imageProcessing.contrast);
+    const bindGroup = mat.createBindGroup(engine, ubo, envTextures.specularCubeView, envTextures.cubeSampler);
+    const r = {
+      order: 0,
+      isTransparent: false,
+      bind(eng, sig) {
+        return {
+          renderable: r,
+          pipeline: mat.getPipeline(eng, sig),
+          draw(pass) {
+            pass.setBindGroup(1, bindGroup);
+            pass.setVertexBuffer(0, skyBufs.posBuffer);
+            pass.setIndexBuffer(skyBufs.idxBuffer, "uint16");
+            pass.drawIndexed(skyBufs.idxCount);
+            return 1;
+          }
+        };
+      }
+    };
+    return r;
+  }
+  function createSkyHdrMeshUBO(engine, world, primaryColor, skyOutputColor, exposure, contrast) {
+    const data = new F32(SKY_HDR_UNIFORM_SIZE / 4);
+    data.set(world, 0);
+    data[16] = primaryColor[0];
+    data[17] = primaryColor[1];
+    data[18] = primaryColor[2];
+    data[20] = skyOutputColor[0];
+    data[21] = skyOutputColor[1];
+    data[22] = skyOutputColor[2];
+    data[24] = exposure;
+    data[25] = contrast;
+    return createUniformBuffer(engine, data);
+  }
+  var SKY_HDR_UNIFORM_SIZE;
+  var init_background_hdr_skybox = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/material/pbr/background-hdr-skybox.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_cubemap_skybox_material();
+      init_skybox_vertex();
+      init_skybox_hdr_fragment();
+      init_scene_uniforms2();
+      init_gpu_buffers();
+      SKY_HDR_UNIFORM_SIZE = 112;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/index.ts
+  init_engine();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene.ts
+  init_scene_core();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/camera/arc-rotate.ts
+  init_mat4_look_at_lh();
+  init_vec3_up();
+  init_world_matrix_state();
+  init_observable_vec3();
+  init_matrix_allocator();
+  function createArcRotateCamera(alpha, beta, radius, target) {
+    function localEyePosition() {
+      const cosA = Math.cos(cam.alpha), sinA = Math.sin(cam.alpha);
+      const cosB = Math.cos(cam.beta);
+      let sinB = Math.sin(cam.beta);
+      if (sinB === 0) {
+        sinB = 1e-4;
+      }
+      return {
+        x: cam.target.x + cam.radius * cosA * sinB,
+        y: cam.target.y + cam.radius * cosB,
+        z: cam.target.z + cam.radius * sinA * sinB
+      };
+    }
+    const _localMat = allocateMat4();
+    function cameraLocalWorldMatrix() {
+      const eye = localEyePosition();
+      const v = mat4LookAtLH(eye, cam.target, Vec3Up);
+      const m = _localMat;
+      m[0] = v[0];
+      m[1] = v[4];
+      m[2] = v[8];
+      m[3] = 0;
+      m[4] = v[1];
+      m[5] = v[5];
+      m[6] = v[9];
+      m[7] = 0;
+      m[8] = v[2];
+      m[9] = v[6];
+      m[10] = v[10];
+      m[11] = 0;
+      m[12] = eye.x;
+      m[13] = eye.y;
+      m[14] = eye.z;
+      m[15] = 1;
+      return _localMat;
+    }
+    const wm = createWorldMatrixState(cameraLocalWorldMatrix);
+    const onDirty = () => wm.markLocalDirty();
+    const scalars = { alpha, beta, radius };
+    const cam = {
+      alpha: 0,
+      // placeholder — overridden by defineProperty below
+      beta: 0,
+      radius: 0,
+      target: new ObservableVec3(target.x, target.y, target.z, onDirty),
+      fov: 0.8,
+      nearPlane: 0.1,
+      farPlane: 1e3,
+      children: [],
+      inertia: 0.9,
+      panningInertia: 0.9,
+      inertialAlphaOffset: 0,
+      inertialBetaOffset: 0,
+      inertialRadiusOffset: 0,
+      inertialPanningX: 0,
+      inertialPanningY: 0,
+      // Matrix caches use the process-global allocator — F32 by default,
+      // F64 after an HPM engine is created. Same backing as the camera world
+      // matrix above, so the camera's storage precision is uniform.
+      _viewCache: allocateMat4(),
+      _projCache: allocateMat4(),
+      _vpCache: allocateMat4(),
+      get parent() {
+        return wm.parent;
+      },
+      set parent(v) {
+        wm.parent = v;
+      },
+      get worldMatrix() {
+        return wm.getWorldMatrix();
+      },
+      get worldMatrixVersion() {
+        return wm.getWorldMatrixVersion();
+      }
+    };
+    for (const key of ["alpha", "beta", "radius"]) {
+      Object.defineProperty(cam, key, {
+        get: () => scalars[key],
+        set: (v) => {
+          if (scalars[key] !== v) {
+            scalars[key] = v;
+            onDirty();
+            cam._clampToLimits?.();
+          }
+        },
+        configurable: true,
+        enumerable: true
+      });
+    }
+    attachWorldMatrixState(cam, wm);
+    return cam;
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-ubo-extras.ts
+  function writeEnvShUbo(data, scene) {
+    const sh = scene._envTextures?.sphericalHarmonics;
+    if (sh) {
+      data.set(sh, 40);
+    }
+  }
+  function registerContributor(scene, contributor) {
+    const list = scene._sceneUboContributors ?? (scene._sceneUboContributors = []);
+    if (!list.includes(contributor)) {
+      list.push(contributor);
+    }
+  }
+  function registerEnvSceneUniforms(scene) {
+    registerContributor(scene, writeEnvShUbo);
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/index.ts
+  init_node_material();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/load-gltf.ts
+  init_typed_arrays();
+  init_gpu_flags();
+  init_compute_aabb();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/transform-node.ts
+  init_scene_node();
+  function createTransformNode(name, px = 0, py = 0, pz = 0, qx = 0, qy = 0, qz = 0, qw = 1, sx = 1, sy = 1, sz = 1) {
+    return createSceneNode(name, px, py, pz, qx, qy, qz, qw, sx, sy, sz);
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-gltf/load-gltf.ts
+  init_scene_node();
+  init_mesh();
+  init_gpu_pool();
+  init_gpu_buffers();
+  init_gltf_parser();
+  init_gltf_material();
+  init_gltf_pbr_builder();
+  var _interleavePromise;
+  function loadInterleave() {
+    return _interleavePromise ?? (_interleavePromise = Promise.resolve().then(() => (init_gltf_interleave(), gltf_interleave_exports)));
+  }
+  async function loadGltf(engine, source) {
+    const { json, binChunk, baseUrl } = await fetchGltfAsset(source);
+    const parentMap = buildParentMap(json);
+    const worldMatrixCache = /* @__PURE__ */ new Map();
+    const features = assetUsesGltfFeatures(json) ? await (await Promise.resolve().then(() => (init_gltf_feature_registry(), gltf_feature_registry_exports))).loadGltfFeatures(json) : [];
+    let activeBin = binChunk;
+    for (const f of features) {
+      if (f.preParse) {
+        const replacement = await f.preParse(json, activeBin);
+        if (replacement) {
+          activeBin = replacement;
+        }
+      }
+    }
+    const matExts = features.filter((f) => f.applyMaterial);
+    const texWraps = features.filter((f) => f.wrapTexture).map((f) => f.wrapTexture);
+    const wrapTex = !texWraps.length ? identityTexWrap : (tex, ti) => texWraps.reduce((acc, w) => w(acc, ti), tex);
+    const decodedPrimitives = /* @__PURE__ */ new Map();
+    for (const frag of await Promise.all(features.flatMap((f) => f.preMesh ? [f.preMesh(json, activeBin, baseUrl)] : []))) {
+      for (const [k, v] of frag) {
+        decodedPrimitives.set(k, v);
+      }
+    }
+    const meshDatas = await extractAllMeshes(json, activeBin, baseUrl, parentMap, worldMatrixCache, decodedPrimitives);
+    const ctx = {
+      _engine: engine,
+      _json: json,
+      _binChunk: activeBin,
+      _baseUrl: baseUrl,
+      _parentMap: parentMap,
+      _worldMatrixCache: worldMatrixCache,
+      _matExts: matExts,
+      _wrapTex: wrapTex
+    };
+    const meshes = await uploadMeshes(meshDatas, features, ctx);
+    const { root, nodeMap } = buildNodeHierarchy(json, meshes, meshDatas);
+    ctx._nodeMap = nodeMap;
+    const assetFragments = await Promise.all(features.flatMap((f) => f.applyAsset ? [f.applyAsset(meshes, root, ctx)] : []));
+    const container = { entities: [root] };
+    for (const frag of assetFragments) {
+      if (frag.entities?.length) {
+        container.entities.push(...frag.entities);
+      }
+      const { entities: _ignored, ...rest } = frag;
+      Object.assign(container, rest);
+    }
+    return container;
+  }
+  async function fetchGltfAsset(source) {
+    const isUrl = typeof source === "string";
+    const baseUrl = isUrl ? source.substring(0, source.lastIndexOf("/") + 1) : "";
+    const buffer = isUrl ? await fetch(source).then((r) => r.arrayBuffer()) : source instanceof Blob ? await source.arrayBuffer() : source;
+    if (buffer.byteLength >= 4 && new DV(buffer).getUint32(0, true) === 1179937895) {
+      const { parseGlbContainer: parseGlbContainer2 } = await Promise.resolve().then(() => (init_gltf_glb_parser(), gltf_glb_parser_exports));
+      return { ...parseGlbContainer2(buffer), baseUrl };
+    }
+    const json = JSON.parse(new TextDecoder().decode(buffer));
+    const bufferDef = json.buffers?.[0];
+    let binChunk;
+    if (bufferDef?.uri) {
+      binChunk = new DV(await fetch(resolveBufferUri(bufferDef.uri, baseUrl)).then((r) => r.arrayBuffer()));
+    } else {
+      binChunk = new DV(new ArrayBuffer(0));
+    }
+    return { json, binChunk, baseUrl };
+  }
+  function resolveBufferUri(uri, baseUrl) {
+    if (baseUrl) {
+      return new URL(uri, baseUrl + "x").href;
+    }
+    try {
+      return new URL(uri).href;
+    } catch {
+      throw new Error(`loadGltf: relative buffer URI "${uri}" needs a base URL \u2014 load from a URL, or use a self-contained GLB/data: URI glTF.`);
+    }
+  }
+  function assetUsesGltfFeatures(json) {
+    return !!(json.extensionsUsed?.length || json.animations?.length || json.skins?.length && anyPrimitive(json, (p) => p.attributes?.JOINTS_0 !== void 0) || anyPrimitive(json, (p) => !!p.targets?.length) || needsOrmComposite(json));
+  }
+  function buildNodeHierarchy(json, meshes, meshDatas) {
+    const nodeToMeshes = /* @__PURE__ */ new Map();
+    for (let i = 0; i < meshDatas.length; i++) {
+      const ni = meshDatas[i]._nodeIndex;
+      let arr = nodeToMeshes.get(ni);
+      if (!arr) {
+        arr = [];
+        nodeToMeshes.set(ni, arr);
+      }
+      arr.push(meshes[i]);
+    }
+    const nodeMap = new Array(json.nodes?.length ?? 0);
+    function buildNode(nodeIdx) {
+      const node = json.nodes[nodeIdx];
+      const name = node.name ?? `node_${nodeIdx}`;
+      let tn;
+      if (node.matrix) {
+        tn = createSceneNodeFromMatrix(name, node.matrix);
+      } else {
+        const t = node.translation ?? [0, 0, 0];
+        const r = node.rotation ?? [0, 0, 0, 1];
+        const s = node.scale ?? [1, 1, 1];
+        tn = createTransformNode(name, t[0], t[1], t[2], r[0], r[1], r[2], r[3], s[0], s[1], s[2]);
+      }
+      nodeMap[nodeIdx] = tn;
+      if (node.children) {
+        for (const childIdx of node.children) {
+          tn.children.push(buildNode(childIdx));
+        }
+      }
+      const nodeMeshes = nodeToMeshes.get(nodeIdx) ?? [];
+      tn.children.push(...nodeMeshes);
+      return tn;
+    }
+    const sceneRoots = json.scenes?.[json.scene ?? 0]?.nodes ?? [];
+    const rootChildren = sceneRoots.map((ni) => buildNode(ni));
+    const root = createTransformNode("__root__", 0, 0, 0, 0, 0, 0, 1, -1, 1, 1);
+    root.children.push(...rootChildren);
+    return { root, nodeMap };
+  }
+  async function extractAllMeshes(json, binChunk, baseUrl, parentMap, worldMatrixCache, decodedPrimitives) {
+    const imageCache = /* @__PURE__ */ new Map();
+    const matCache = /* @__PURE__ */ new Map();
+    const getMat = (matIdx) => {
+      const key = matIdx ?? -1;
+      let p = matCache.get(key);
+      if (!p) {
+        p = assembleMaterial(json, binChunk, matIdx, baseUrl, imageCache);
+        matCache.set(key, p);
+      }
+      return p;
+    };
+    const partials = [];
+    const matPromises = [];
+    const _accs = json.accessors;
+    const _bvs = json.bufferViews;
+    const _strided = (p) => {
+      for (const k in p.attributes) {
+        const a = _accs[p.attributes[k]];
+        const s = _bvs?.[a?.bufferView]?.byteStride;
+        if (s !== void 0 && s !== (TYPE_SIZES[a.type] ?? 1) * (a.componentType === 5126 || a.componentType === 5125 ? 4 : a.componentType === 5123 || a.componentType === 5122 ? 2 : 1)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    for (let nodeIdx = 0; nodeIdx < json.nodes.length; nodeIdx++) {
+      const node = json.nodes[nodeIdx];
+      if (node.mesh === void 0) {
+        continue;
+      }
+      const mesh = json.meshes[node.mesh];
+      const worldMatrix = computeNodeWorldMatrix(json, nodeIdx, parentMap, worldMatrixCache);
+      for (const primitive of mesh.primitives) {
+        const attrs = primitive.attributes;
+        const decoded = decodedPrimitives.get(primitive);
+        if (!decoded && _strided(primitive)) {
+          const ip = (await loadInterleave()).buildInterleavedPartial(json, binChunk, primitive, worldMatrix, nodeIdx);
+          if (ip) {
+            matPromises.push(getMat(primitive.material));
+            partials.push(ip);
+            continue;
+          }
+        }
+        const resolveAttr2 = (name) => {
+          if (decoded && decoded._attributes.has(name)) {
+            const data = decoded._attributes.get(name);
+            const componentCount = data.length / decoded._vertexCount;
+            return { _data: data, _count: decoded._vertexCount, _componentCount: componentCount };
+          }
+          const idx = attrs[name];
+          return idx !== void 0 ? resolveAccessor(json, binChunk, idx) : null;
+        };
+        const posData = resolveAttr2("POSITION");
+        const normData = resolveAttr2("NORMAL");
+        const uvData = resolveAttr2("TEXCOORD_0");
+        const uv2Data = resolveAttr2("TEXCOORD_1");
+        const tanData = resolveAttr2("TANGENT");
+        const colorData = resolveAttr2("COLOR_0");
+        const idxData = decoded ? decoded._indexCount > 0 ? { _data: decoded._indices, _count: decoded._indexCount, _componentCount: 1 } : null : primitive.indices !== void 0 ? resolveAccessor(json, binChunk, primitive.indices) : null;
+        const normalsHelper = !idxData || !normData ? await Promise.resolve().then(() => (init_gltf_normals(), gltf_normals_exports)) : null;
+        const colors = colorData ? (await Promise.resolve().then(() => (init_gltf_color_normalize(), gltf_color_normalize_exports))).normalizeColorToVec3(colorData._data, colorData._count, colorData._componentCount) : null;
+        const indices = idxData ? idxData._data instanceof U32 ? new U32(idxData._data) : idxData._data instanceof U8 ? Uint16Array.from(idxData._data) : new U16(idxData._data.buffer, idxData._data.byteOffset, idxData._count) : normalsHelper.createSequentialIndices(posData._count);
+        matPromises.push(getMat(primitive.material));
+        const normals = normData ? normData._data : normalsHelper.computeSmoothNormals(posData._data, indices, posData._count);
+        partials.push({
+          _positions: posData._data,
+          _normals: normals,
+          _tangents: tanData ? tanData._data : null,
+          _uvs: uvData ? uvData._data : new F32(posData._count * 2),
+          _uv2s: uv2Data ? uv2Data._data : null,
+          _colors: colors,
+          _indices: indices,
+          _vertexCount: posData._count,
+          _indexCount: indices.length,
+          _worldMatrix: worldMatrix,
+          _nodeIndex: nodeIdx,
+          _primitive: primitive,
+          _decoded: decoded
+        });
+      }
+    }
+    const materials = await Promise.all(matPromises);
+    return partials.map((p, i) => ({ ...p, _material: materials[i] }));
+  }
+  var _generateMipmaps = null;
+  async function ensureMipmapModule() {
+    if (!_generateMipmaps) {
+      _generateMipmaps = (await Promise.resolve().then(() => (init_generate_mipmaps(), generate_mipmaps_exports))).generateMipmaps;
+    }
+  }
+  async function uploadMeshes(meshDatas, features, ctx) {
+    const { _engine: engine, _json: json, _binChunk: binChunk, _baseUrl: baseUrl, _matExts: matExts, _wrapTex: wrapTex } = ctx;
+    const sampler = getOrCreateSampler(engine, {
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "repeat",
+      addressModeV: "repeat",
+      maxAnisotropy: 4
+    });
+    await ensureMipmapModule();
+    const meshFeatures = features.filter((f) => f.applyMesh);
+    const texCache = /* @__PURE__ */ new Map();
+    let texId = 0;
+    const bitmapIds = /* @__PURE__ */ new Map();
+    function getCachedTexture(bitmap, srgb) {
+      let id = bitmapIds.get(bitmap);
+      if (id === void 0) {
+        bitmapIds.set(bitmap, id = texId++);
+      }
+      const key = id * 2 + +srgb;
+      let tex = texCache.get(key);
+      if (!tex) {
+        tex = uploadTex(engine, bitmap, srgb, sampler, _generateMipmaps);
+        texCache.set(key, tex);
+      }
+      return tex;
+    }
+    const extImageCache = matExts.length ? /* @__PURE__ */ new Map() : null;
+    const extFetchImg = extImageCache ? makeImageFetcher(json, binChunk, baseUrl, extImageCache) : null;
+    const extCtx = {
+      _engine: engine,
+      async _texture(texInfo, sRGB) {
+        if (!texInfo || !extFetchImg) {
+          return void 0;
+        }
+        const img = await extFetchImg(texInfo);
+        return img ? wrapTex(getCachedTexture(img, sRGB), texInfo) : void 0;
+      },
+      _uploadImage(bitmap, sRGB) {
+        return uploadTex(engine, bitmap, sRGB, sampler, _generateMipmaps);
+      }
+    };
+    let _needsPbrExt = wrapTex !== identityTexWrap;
+    if (!_needsPbrExt) {
+      const mats = json.materials;
+      if (mats && JSON.stringify(mats).includes('"texCoord":1')) {
+        _needsPbrExt = true;
+      }
+    }
+    let _pbrExtPromise = null;
+    const _ensurePbrExt = () => _pbrExtPromise ?? (_pbrExtPromise = Promise.resolve().then(() => (init_gltf_pbr_builder_ext(), gltf_pbr_builder_ext_exports)));
+    const builtMaterialCache = /* @__PURE__ */ new Map();
+    async function buildPbrFromGltfMat(mat) {
+      let cached = builtMaterialCache.get(mat);
+      if (cached) {
+        return cached;
+      }
+      cached = (async () => {
+        const extLayers = await runMatExts(mat, matExts, extCtx);
+        if (_needsPbrExt) {
+          const extMod = await _ensurePbrExt();
+          const tex2 = extMod.buildDefaultPbrTexturesExt(engine, mat, sampler, _generateMipmaps, getCachedTexture, wrapTex);
+          return extMod.assemblePbrPropsExt(mat, tex2, extLayers);
+        }
+        const tex = buildDefaultPbrTextures(engine, mat, sampler, _generateMipmaps, getCachedTexture);
+        return assemblePbrProps(mat, tex.baseColorTexture, tex.ormTexture, tex.normalTexture, tex.emissiveTexture, extLayers);
+      })();
+      builtMaterialCache.set(mat, cached);
+      return cached;
+    }
+    const meshes = await Promise.all(
+      meshDatas.map(async (m, i) => {
+        const material = await buildPbrFromGltfMat(m._material);
+        let mesh;
+        if (m._vb) {
+          mesh = (await loadInterleave()).buildInterleavedMesh(engine, m, i, material);
+        } else {
+          const [boundMin, boundMax] = computeAabb(m._positions, m._worldMatrix);
+          const gpu = {
+            positionBuffer: createMappedBuffer(engine, m._positions, BU.VERTEX),
+            normalBuffer: createMappedBuffer(engine, m._normals, BU.VERTEX),
+            tangentBuffer: m._tangents ? createMappedBuffer(engine, m._tangents, BU.VERTEX) : null,
+            uvBuffer: createMappedBuffer(engine, m._uvs, BU.VERTEX),
+            uv2Buffer: m._uv2s ? createMappedBuffer(engine, m._uv2s, BU.VERTEX) : null,
+            colorBuffer: m._colors ? createMappedBuffer(engine, m._colors, BU.VERTEX) : null,
+            indexBuffer: createMappedBuffer(engine, m._indices, BU.INDEX),
+            indexCount: m._indexCount,
+            indexFormat: m._indices instanceof U32 ? "uint32" : "uint16"
+          };
+          mesh = {
+            name: `gltf_mesh_${i}`,
+            material,
+            receiveShadows: false,
+            boundMin,
+            boundMax,
+            skeleton: null,
+            morphTargets: null,
+            _gpu: gpu
+          };
+          initMeshTransform(mesh);
+          mesh._cpuPositions = m._positions;
+          mesh._cpuNormals = m._normals;
+          mesh._cpuUvs = m._uvs;
+          mesh._cpuIndices = m._indices instanceof U32 ? m._indices : new U32(m._indices);
+          engine._dlr?.m(mesh, m._uv2s, m._tangents, m._colors, m._indices, gpu.indexFormat);
+        }
+        if (meshFeatures.length > 0) {
+          await Promise.all(meshFeatures.map((f) => f.applyMesh(m, mesh, ctx)));
+        }
+        return mesh;
+      })
+    );
+    return meshes;
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-env/load-env.ts
+  init_typed_arrays();
+  init_gpu_pool();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-env/env-helpers.ts
+  init_samplers();
+  function createEnvSamplers(engine) {
+    return {
+      cubeSampler: getTrilinearSampler(engine),
+      brdfSampler: getBilinearSampler(engine)
+    };
+  }
+  function assembleEnvironmentTextures(specularCube, brdfLut, irradianceSH, lodGenerationScale, engine) {
+    const { cubeSampler, brdfSampler } = createEnvSamplers(engine);
+    return {
+      specularCube,
+      specularCubeView: specularCube.createView({ dimension: "cube" }),
+      brdfLut,
+      brdfLutView: brdfLut.createView(),
+      cubeSampler,
+      brdfSampler,
+      irradianceSH,
+      sphericalHarmonics: polynomialToPreScaledHarmonics(irradianceSH),
+      lodGenerationScale
+    };
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/loader-env/load-env.ts
+  init_mip_count();
+  init_scene_size();
+  var ENV_MAGIC = new U8([134, 22, 135, 150, 246, 214, 150, 54]);
+  async function loadEnvironment(scene, url, options) {
+    const engine = scene.surface.engine;
+    const envPromise = fetch(url).then((r) => r.arrayBuffer());
+    const brdfPromise = fetch(options.brdfUrl).then((r) => r.blob()).then((b) => createImageBitmap(b, { premultiplyAlpha: "none", colorSpaceConversion: "none" }));
+    const envBuffer = await envPromise;
+    const { faceBlobs, irradianceSH, width, mipCount } = parseEnvFile(envBuffer);
+    const faceImages = await Promise.all(faceBlobs.map((blob) => createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" })));
+    const { uploadCubemapRGBD: uploadCubemapRGBD2, decodeBrdfPng: decodeBrdfPng2 } = await Promise.resolve().then(() => (init_rgbd_decode(), rgbd_decode_exports));
+    const specularCube = uploadCubemapRGBD2(engine, faceImages, width, mipCount);
+    for (const img of faceImages) {
+      img.close();
+    }
+    const brdfImage = await brdfPromise;
+    const brdfLut = decodeBrdfPng2(engine, brdfImage);
+    brdfImage.close();
+    const textures = assembleEnvironmentTextures(specularCube, brdfLut, irradianceSH, 0.8, engine);
+    scene._envTextures = textures;
+    registerEnvSceneUniforms(scene);
+    acquireGPUTexture(specularCube);
+    acquireGPUTexture(brdfLut);
+    scene._disposables.push(() => {
+      releaseGPUTexture(specularCube);
+      releaseGPUTexture(brdfLut);
+    });
+    scene.imageProcessing.toneMappingEnabled = true;
+    scene.imageProcessing.exposure = 0.8;
+    scene.imageProcessing.contrast = 1.2;
+    const groundUrl = options?.groundTextureUrl;
+    const groundTexPromise = groundUrl ? fetch(groundUrl).then((r) => r.blob()).then((b) => createImageBitmap(b, { premultiplyAlpha: "none" })) : void 0;
+    const skyboxUrl = options?.skyboxUrl;
+    const skyboxIsDds = skyboxUrl != null && skyboxUrl.toLowerCase().endsWith(".dds");
+    const skyboxIsEnv = skyboxUrl != null && (skyboxUrl === url || skyboxUrl.toLowerCase().endsWith(".env"));
+    const bgOptions = {
+      skipSkybox: skyboxIsDds || skyboxIsEnv || options?.skipSkybox,
+      skipGround: options?.skipGround
+    };
+    scene._deferredBuilders.push(async () => {
+      const primaryColor = scene.environmentPrimaryColor ?? [0.08697355964132344, 0.08697355964132344, 0.2122208331110881];
+      const { groundSize, skyboxSize: autoSkyboxSize, rootPosition } = computeSceneSize(scene, options?.skyboxSize);
+      const skyHalfSize = autoSkyboxSize / 2;
+      if (!bgOptions.skipSkybox) {
+        const { buildSolidSkyboxRenderable: buildSolidSkyboxRenderable2 } = await Promise.resolve().then(() => (init_background_solid_skybox(), background_solid_skybox_exports));
+        scene._renderables.push(buildSolidSkyboxRenderable2(scene, textures, skyHalfSize, rootPosition, primaryColor));
+      }
+      if (!bgOptions.skipGround) {
+        const { buildGroundRenderable: buildGroundRenderable2 } = await Promise.resolve().then(() => (init_background_ground(), background_ground_exports));
+        scene._renderables.push(await buildGroundRenderable2(engine, groundSize, rootPosition, primaryColor, groundUrl, groundTexPromise));
+      }
+      if (skyboxIsDds) {
+        const { buildDdsSkyboxRenderable: buildDdsSkyboxRenderable2 } = await Promise.resolve().then(() => (init_background_dds_skybox(), background_dds_skybox_exports));
+        scene._renderables.push(await buildDdsSkyboxRenderable2(scene, skyHalfSize, rootPosition, primaryColor, skyboxUrl));
+      }
+      if (skyboxIsEnv) {
+        const { buildHdrSkyboxRenderable: buildHdrSkyboxRenderable2 } = await Promise.resolve().then(() => (init_background_hdr_skybox(), background_hdr_skybox_exports));
+        scene._renderables.push(buildHdrSkyboxRenderable2(scene, textures, skyHalfSize, rootPosition, primaryColor));
+      }
+    });
+    return textures;
+  }
+  function parseEnvFile(buffer) {
+    const bytes = new U8(buffer);
+    for (let i = 0; i < 8; i++) {
+      if (bytes[i] !== ENV_MAGIC[i]) {
+        throw new Error("Invalid .env file: bad magic");
+      }
+    }
+    let pos = 8;
+    while (pos < bytes.length && bytes[pos] !== 0) {
+      pos++;
+    }
+    const jsonStr = new TextDecoder().decode(bytes.subarray(8, pos));
+    pos++;
+    const binaryStart = pos;
+    const manifest = JSON.parse(jsonStr);
+    const width = manifest.width;
+    const mipCount = mipLevelCount(width, width);
+    const irr = manifest.irradiance;
+    const irradianceSH = new F32(27);
+    const shKeys = ["x", "y", "z", "xx", "yy", "zz", "yz", "zx", "xy"];
+    for (let i = 0; i < 9; i++) {
+      const coeff = irr[shKeys[i]];
+      irradianceSH[i * 3] = coeff[0];
+      irradianceSH[i * 3 + 1] = coeff[1];
+      irradianceSH[i * 3 + 2] = coeff[2];
+    }
+    const mipmaps = manifest.specular.mipmaps;
+    const imageType = manifest.imageType || "image/png";
+    const faceBlobs = [];
+    for (const entry of mipmaps) {
+      const start = binaryStart + entry.position;
+      const slice = buffer.slice(start, start + entry.length);
+      faceBlobs.push(new Blob([slice], { type: imageType }));
+    }
+    return { faceBlobs, irradianceSH, width, mipCount };
+  }
+  function polynomialToPreScaledHarmonics(poly) {
+    const C00xy = 0.3333338747897695;
+    const C00z = 0.33333298856284405;
+    const C1 = 1.4999984284682104;
+    const C2 = 3.999982863580422;
+    const C20zz = 1.3333326611423701;
+    const C20xy = 0.6666653397393608;
+    const C22 = 1.999991431790211;
+    const out = new F32(36);
+    for (let i = 0; i < 3; i++) {
+      const x = poly[i];
+      const y = poly[3 + i];
+      const z = poly[6 + i];
+      const xx = poly[9 + i];
+      const yy = poly[12 + i];
+      const zz = poly[15 + i];
+      const yz = poly[18 + i];
+      const zx = poly[21 + i];
+      const xy = poly[24 + i];
+      out[i] = (xx + yy) * C00xy + zz * C00z;
+      out[4 + i] = y * C1;
+      out[8 + i] = z * C1;
+      out[12 + i] = x * C1;
+      out[16 + i] = xy * C2;
+      out[20 + i] = yz * C2;
+      out[24 + i] = zz * C20zz - (xx + yy) * C20xy;
+      out[28 + i] = zx * C2;
+      out[32 + i] = (xx - yy) * C22;
+    }
+    return out;
+  }
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/index.ts
+  init_texture_2d();
+
+  // ../../../Babylon-Lite/lab/lite/src/shared/nme-compression.ts
+  async function decodeGzipBase64Json(encoded) {
+    const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return await new Response(stream).json();
+  }
+  function restoreInputNameAliases(json) {
+    const blocks = json.blocks;
+    if (!Array.isArray(blocks)) {
+      return json;
+    }
+    for (const block of blocks) {
+      if (!block || typeof block !== "object") {
+        continue;
+      }
+      const inputs = block.inputs;
+      if (!Array.isArray(inputs)) {
+        continue;
+      }
+      for (const input of inputs) {
+        if (!input || typeof input !== "object") {
+          continue;
+        }
+        const entry = input;
+        if (entry.inputName === void 0 && typeof entry.name === "string") {
+          entry.inputName = entry.name;
+        }
+      }
+    }
+    return json;
+  }
+
+  // ../../../Babylon-Lite/lab/lite/src/shared/scene73-nme.ts
+  var SCENE73_NME_GZIP_BASE64 = "H4sIAAAAAAACCu1aWXPbOBL+Ky4+bjEOL51vPuKMq5LI63iSnZlybUFkS8IGBFgAKB+p/PctEDwASJqxbMtxEr+R/QFgoxv42N3AV0+iufDGtCTE93KWgTcOfA9n3tij6s33KMqhe0sXkH45B5TdTOibJfCbI0SIN54hIsBGyc2EptBCQiKpxvF8D5Figbxx6HtTlH45QSkclYRgOvfGkpeqLc5gwjFQiSRmtGpadXpfKRj53n8pQHYMhVyccThDQrTfybBAUwIV9pljCS5yxAjjNjJjPF3bQ4lOSppqLQLfE1AgjmSjsPXlGZu/oeoLWTOPgmEqP+JbqGZwO5nNBMhqnAoRR4SVWdcfE/K+8QBkWDJ+jCTyxl89wtLKEsIb//XVmxKWfjnNvHHie9feeNALfO/GG4dJ8M030F6F9gKNRg7ar9Co6Rva6KBCX0WRhkcDGx7a8NAZe2SNHfVtNAwqOBzFde+Rg4ca7w00Phg6eGQNn8QOHFewBh1IGywMexu+3KvxWrPEmXaojRYGtWb9yMEH9czq4XsOrM02iNf3jgILdo0aabOMwtoljlWj2ILDKHBwPfd+vAnv27YJA/f7enLDenJhzx1Az65fr4mw7+J6VYRJv1muzpqLA9v6Yd9xfBw6DQaOf+LIaTB0jBTba+PS92Yc5aC21aVe0mG8H/fiJI4Go2HcC8Jev2r7KkyG+8NB0k+CKAwHYaJme8tY7o2D/X7cD4e9ZNgP+vFwEH7zvbQUkuUXN4VivMODwz/eTT7sf2AZvEcSOEbE8z1WyqKUSqg+n/hhcOlrTfUuXzvGJ+ASridV10PV1tNknbQ8bbZQfM3yHKgUmnmXWOApgVN6SkUBqWS8ZR9Mi1LqL9cjLXWDGvrgCCXic9A61GSjJUeMUqgIs+7BGlWweHNdMAHZhJ7wCtMsCVp6xrg8YwJrrn0VKu/ovpV7lB/XmuSCIypmjOemPXqtPT4zTrIzJvb+tfcJw9UZZ//T6rX9ntBK/ce3kt9qIo0JmcqYckef0Y691upWD2doe31z66nGKcsLAsr6f1Ybs3v/7I3D7bzeX/H6E/p28Mx8O/xhfXtKHXYbtH4tGnXu49e/V//S92Slx7AJhFXUSXFeRV5axcD3cqwjwRzpHwkWh4wRQLT9Xo4kx9dtJIfFEaNCIirbFnPOysJS1fPubo2hvcp3aYowGhpZgbgREvJPiJTP1zij7kdosf13slLyLKx0wtFcTX01blDRYj0tu9HDiJPPp8gkBD6fOsSlJQ5lqch/A2cRPF9IlSI+hEWRd9eg4uzw/D1IRAhOz1k5X1AQwrJb2NptXdOHWe+q/nk1TGfazcWeMsCovv2B8byKX1e0ahHXq9EulVpiuHL/0FrkqpHsUo0U5cDRBqetgK5qvV2qVgCXJZ/Cetetoq5yO11TUyR0RcZRy5Q7CkWbWaLmmXtrk9cb2VHGELu6xBt1eZgm3KASizcN+d11eSBt5lNVi5ukqcnprEApljemCNMMriezc5hx1Px1H/zZdavDgVxD7HTFcpiRNqawXGMCrkqbswN7vPsTEAHEU4akyz2G3FVqc/pnjXZvncQCgJoLRJRTUfIZSsGUIooFk5wVN96GFKPxN+FmvwzPZqWAY2xJ1f+1JIg74nZGbnOloyOrBz6l2bqBHXE7sNtcDezIeLczDGkb21i9UcauLCtVVXNloKr9CSKEzWZVfFgKOFDoBYguQkSN5KiUuuF+0jU9JEAzo+ReCjhHGUY0hckS+IEu0bfYx3ruKxhUFe8GPqASHxCMhDEyB0QucA4nmKjalwJqDVeQf5eIKEpRKU4p4A0FPr9RoS/wZX0SsKptmpJS2NhvjONbRlchSrC0q/76r3fC+BXimVH4n5bzNvyu3t7hXPV9FdbvJ0hHcVuWKFQwZGZve7T57T5VnSKMXwoVWxUqgrtnn8q27XnZvf36k9Qpwq4oXUfk3yMDj56pcboK9Up2sPsV4xpp8CyMdKZTEU3JlrG6wm7d5lFo8yXP3lapC0TnQC0KLZeOjpXAVW2nxXG9Ft6jYl2qsAK6qg13lk0KyYHO5cLRyBC7AXnw1L/CS6XaErj8j7FP1Psf9fsWjNZV6aslsDMWS57Xf+8CrmXJwTJFV6I/LPNiT+omD2Or77bR1rtlXYnXfDVfrMzGaobq8KtacxfsLcpz9LFAxr2hFnuHKSBug7OmZk3JTStsrD3+al1uKjnxxt7rGhWvRQoUBvHraBjNAjRKslEQJNkM9ouqylwat3WWxnP5MUVEL75l91geqLxGNW0erpqH8pzpa0xHQCVwlYf1fG+5Vnq1VrpgOZsDBVaKBj+lv3/qDrDbRaNr1EbyVZv5zrNeIFGnd81WAFkJTjjLz98etnICSyDV1FPGeIYpkiBOVf2nDqBbod5oA9+74qj4veqinj61T+fNTtZFAJy2+eA7/ZGk2qTlFIyJxsfGS3R8wDnqVsDcWEbaDprU/uzUZ1k1+Cm1p0tY9hYo8MrIhtctee12Ja7XpM5+301Mpc6BZsAvqs3YJeUNX9V8Z5Ot7wmUF+pimTZa/O3u9BsFNucYf5l/Jp3GSFtG3UY4+Q9EHD4eEfveUgWttT1omU+BN8K/TcdXeTrqTnEOyBQy9sLUj87UWuPHIOrZNBqEvX4apFGaDoL41yDqDbN+IeofhKirtONjQbCUwC3y6WpFVptHP3nfWz1631uTeySPnAdtJKN7ks9WxN6VnlbO5l84/jlH49MkjofZaBZEQW+UQvJrkPyGWb+Q/A8bjXcVywN9drmX1vWnXUXj6vL7XcPxYFfhuPXXi7uw/K/AD/xgM4eft4fglhW7ktK5eUr+AN4u1pd7i42V3sHOi6rrarxPckpmnGGvKZymGy5XPNlxnXExQrWoTqEXwHGKyG+I54ziVLT5hTrLPeW8PhQ+pc1txq3LmNFwzZr7xTdv6Id+uHnzHqkbEEcM2XbsbuK2+MO2LqYSqFD3A+yFasqdxRoHO70JtP0drTjcpUJr719ZllrFXQWjJzypeV7HSBI3N8oc4YE8xmov2beWFHKxwOmXytMbT8rWE0B3v0o14JCj4iSY0FMVZ6rrUUcL1X9r8oqD1U23Z+6Pn6oUaPLK/WqCqwYM1xiQb3Wt+yc0YLAfxFvYMFq3CHf6+9zCevHTL7/93hbG66pCW1Xw73tx5hmEHavb9fLb/wGU8sm5mEAAAA==";
+  function getScene73Nme() {
+    return decodeGzipBase64Json(SCENE73_NME_GZIP_BASE64).then(restoreInputNameAliases);
+  }
+
+  // ../../../Babylon-Lite/lab/lite/src/lite/scene73.ts
+  var MODEL_URL = "/models/CarbonFiberWheel.glb";
+  var ENV_URL = "https://assets.babylonjs.com/core/environments/environmentSpecular.env";
+  var BUMP_TEXTURE_URL = "/textures/scene73/282f0a94d9004dfe.png";
+  var ALBEDO_TEXTURE_URL = "/textures/scene73/fb27156c0c2cc703.png";
+  var METALLIC_ROUGHNESS_TEXTURE_URL = "/textures/scene73/b4338d9f02059ce4.png";
+  function collectMeshes(container) {
+    const meshes = [];
+    const visit = (node) => {
+      if (node && typeof node === "object") {
+        if ("_gpu" in node && "material" in node) {
+          meshes.push(node);
+        }
+        const children = node.children;
+        if (children) {
+          for (const child of children) {
+            visit(child);
+          }
+        }
+      }
+    };
+    for (const entity of container.entities) {
+      visit(entity);
+    }
+    return meshes;
+  }
+  async function loadScene73Textures(engine) {
+    const [bump, albedo, metallicRoughness] = await Promise.all([
+      loadTexture2D(engine, BUMP_TEXTURE_URL, { invertY: false }),
+      loadTexture2D(engine, ALBEDO_TEXTURE_URL, { invertY: false }),
+      loadTexture2D(engine, METALLIC_ROUGHNESS_TEXTURE_URL, { invertY: false })
+    ]);
+    return { Bump_texture: bump, Albedo_texture: albedo, MetallicRoughness_texture: metallicRoughness };
+  }
+  async function loadScene73BlockEmitter(className) {
+    switch (className) {
+      case "ClearCoatBlock":
+        return (await Promise.resolve().then(() => (init_clearcoat_block(), clearcoat_block_exports))).emitter;
+      case "ColorSplitterBlock":
+        return (await Promise.resolve().then(() => (init_color_splitter(), color_splitter_exports))).emitter;
+      case "FragmentOutputBlock":
+        return (await Promise.resolve().then(() => (init_fragment_output(), fragment_output_exports))).emitter;
+      case "InputBlock":
+        return (await Promise.resolve().then(() => (init_input_block(), input_block_exports))).emitter;
+      case "PBRMetallicRoughnessBlock":
+        return (await Promise.resolve().then(() => (init_pbr_metallic_roughness_block_full(), pbr_metallic_roughness_block_full_exports))).emitter;
+      case "PerturbNormalBlock":
+        return (await Promise.resolve().then(() => (init_perturb_normal(), perturb_normal_exports))).emitter;
+      case "ReflectionBlock":
+        return (await Promise.resolve().then(() => (init_reflection_block(), reflection_block_exports))).emitter;
+      case "TextureBlock":
+        return (await Promise.resolve().then(() => (init_texture_block(), texture_block_exports))).emitter;
+      case "TransformBlock":
+        return (await Promise.resolve().then(() => (init_transform_block(), transform_block_exports))).emitter;
+      case "VertexOutputBlock":
+        return (await Promise.resolve().then(() => (init_vertex_output(), vertex_output_exports))).emitter;
+      default:
+        throw new Error(`Scene73: unsupported NME block "${className}"`);
+    }
+  }
+  async function main() {
+    const initStart = performance.now();
+    const canvas = document.getElementById("renderCanvas");
+    const engine = await createEngine(canvas);
+    const left = createSceneContext(engine);
+    const right = createSceneContext(engine);
+    left.clearColor = { r: 0, g: 0, b: 0, a: 1 };
+    right.clearColor = { r: 0, g: 0, b: 0, a: 1 };
+    left.camera = createArcRotateCamera(Math.PI / 2, Math.PI / 2, 1, { x: 0, y: 0, z: 0 });
+    left.camera.nearPlane = 0.1;
+    left.camera.viewport = { x: 0, y: 0, width: 0.5, height: 1 };
+    right.camera = createArcRotateCamera(Math.PI / 2, Math.PI / 2, 1, { x: 0, y: 0, z: 0 });
+    right.camera.nearPlane = 0.1;
+    right.camera.viewport = { x: 0.5, y: 0, width: 0.5, height: 1 };
+    await Promise.all([
+      loadEnvironment(left, ENV_URL, { skipSkybox: true, skipGround: true, brdfUrl: "/brdf-lut.png" }),
+      loadEnvironment(right, ENV_URL, { skipSkybox: true, skipGround: true, brdfUrl: "/brdf-lut.png" })
+    ]);
+    const leftWheel = await loadGltf(engine, MODEL_URL);
+    const rightWheel = await loadGltf(engine, MODEL_URL);
+    const nmeJson = await getScene73Nme();
+    const textures = await loadScene73Textures(engine);
+    const nme = await parseNodeMaterialFromSnippet(engine, "", { json: nmeJson, textures, blockLoader: loadScene73BlockEmitter });
+    for (const mesh of collectMeshes(rightWheel)) {
+      mesh.material = nme;
+    }
+    addToScene(left, leftWheel);
+    addToScene(right, rightWheel);
+    await registerScene(left);
+    await registerScene(right);
+    await startEngine(engine);
+    canvas.dataset.drawCalls = String(engine.drawCallCount);
+    canvas.dataset.initMs = String(performance.now() - initStart);
+    canvas.dataset.ready = "true";
+  }
+  main().catch((err) => {
+    console.error(err);
+    const canvas = document.getElementById("renderCanvas");
+    if (canvas) {
+      canvas.dataset.error = String(err);
+    }
+  });
+})();

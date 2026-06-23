@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene34.js";const fr={id:"_animations",async applyAsset(a,s,t){const[{parseAnimationData:n},{createAnimationGroups:i}]=await Promise.all([sa(()=>__import("./scene34-gltf-animation-BccbO4ZF.js"),[]),sa(()=>__import("./scene34.js").then(a=>a.aA),[])]),o=n(t.We,t.Ke,a,t.Qe,t.Xe,t.ln);return o?{animationGroups:i(o)}:{};}};export{fr as default};

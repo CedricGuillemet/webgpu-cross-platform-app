@@ -1,0 +1,1 @@
+const jt={className:"StorageWriteBlock",emit(e,t,r,a,o){return o.resolve(e,"value",r,a);}};export{jt as emitter};

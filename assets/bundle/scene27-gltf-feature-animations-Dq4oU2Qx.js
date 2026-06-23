@@ -1,0 +1,1 @@
+import{_ as na}from"./scene27.js";const je={id:"_animations",async applyAsset(a,n,t){const[{parseAnimationData:i},{createAnimationGroups:s}]=await Promise.all([na(()=>__import("./scene27-gltf-animation-W8D_RdIX.js"),[]),na(()=>__import("./scene27-animation-group-CFVK95Y6.js"),[])]),o=i(t.je,t.Se,a,t.Le,t.ze,t.Qe);return o?{animationGroups:s(o)}:{};}};export{je as default};

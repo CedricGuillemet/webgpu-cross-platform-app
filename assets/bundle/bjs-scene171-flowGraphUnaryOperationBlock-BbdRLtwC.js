@@ -1,0 +1,1 @@
+import{F as o}from"./bjs-scene171-flowGraphCachedOperationBlock-BHV_NTvn.js";class p extends o{constructor(a,e,t,r,s){super(e,s),this._operation=t,this._className=r,this.a=this.registerDataInput("a",a);}_doOperation(a){return this._operation(this.a.getValue(a));}getClassName(){return this._className;}}export{p as F};

@@ -1,0 +1,1 @@
+const We={className:"ReflectionBlock",stage:"fragment",emit(e,t,c,r,a){return r.usesEnv=1,{expr:"vec3<f32>(0.0)",type:"vec3f"};}};export{We as emitter};

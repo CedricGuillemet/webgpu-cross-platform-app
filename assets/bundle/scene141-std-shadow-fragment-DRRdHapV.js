@@ -1,0 +1,1 @@
+import{c as La}from"./scene141-shadow-fragment-core-BgZG1upy.js";function Na(e){return La("std-shadow",e);}export{Na as createStdShadowFragment};

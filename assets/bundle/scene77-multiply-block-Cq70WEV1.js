@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene77-_math-factory-DFVyS8gB.js";const et=Ne("MultiplyBlock",(t,o)=>`${t}*${o}`);export{et as emitter};

@@ -1,0 +1,1 @@
+import{b as tl}from"./scene115.js";function na(o,n){xr(o,n),tl();}function xr(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)xr(s[o],n);}export{na as s};

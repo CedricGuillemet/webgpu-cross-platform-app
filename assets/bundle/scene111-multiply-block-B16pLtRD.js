@@ -1,0 +1,1 @@
+import{b as fa}from"./scene111-_math-factory-DFVyS8gB.js";const Pa=fa("MultiplyBlock",(t,o)=>`${t}*${o}`);export{Pa as emitter};

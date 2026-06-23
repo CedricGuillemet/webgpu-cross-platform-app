@@ -1,0 +1,1 @@
+import{b as Ne}from"./scene63-_math-factory-DFVyS8gB.js";const ge=Ne("DivideBlock",(t,e)=>`${t}/${e}`);export{ge as emitter};

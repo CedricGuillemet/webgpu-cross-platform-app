@@ -1,0 +1,1 @@
+const ka=1,qa=2;export{qa as N,ka as a};

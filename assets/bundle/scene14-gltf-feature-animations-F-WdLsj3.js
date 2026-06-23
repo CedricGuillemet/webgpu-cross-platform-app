@@ -1,0 +1,1 @@
+import{_ as na}from"./scene14.js";const Qe={id:"_animations",async applyAsset(a,n,s){const[{parseAnimationData:t},{createAnimationGroups:i}]=await Promise.all([na(()=>__import("./scene14-gltf-animation-BdAXsHEL.js"),[]),na(()=>__import("./scene14-animation-group-DdmuClDZ.js"),[])]),o=t(s.Ne,s.Ke,a,s.Xe,s.Ye,s.ln);return o?{animationGroups:i(o)}:{};}};export{Qe as default};

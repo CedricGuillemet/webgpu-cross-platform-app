@@ -1,0 +1,1 @@
+import{_ as ca}from"./scene73.js";const jr={id:"_animations",async applyAsset(a,i,n){const[{parseAnimationData:t},{createAnimationGroups:s}]=await Promise.all([ca(()=>__import("./scene73-gltf-animation-CpMiTi9v.js"),[]),ca(()=>__import("./scene73-animation-group-D1QUGGUj.js"),[])]),o=t(n._r,n.dr,a,n.hr,n.gr,n.Sr);return o?{animationGroups:s(o)}:{};}};export{jr as default};

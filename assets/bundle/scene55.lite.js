@@ -1,0 +1,3119 @@
+"use strict";
+(() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __esm = (fn, res) => function __init() {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  };
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/typed-arrays.ts
+  var F32, F64, U32, U16, U8;
+  var init_typed_arrays = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/typed-arrays.ts"() {
+      "use strict";
+      F32 = Float32Array;
+      F64 = Float64Array;
+      U32 = Uint32Array;
+      U16 = Uint16Array;
+      U8 = Uint8Array;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/_matrix-allocator.ts
+  function _defaultAllocate() {
+    return new F32(16);
+  }
+  function allocateMat4() {
+    return (_allocate ?? _defaultAllocate)();
+  }
+  function _setHpmAllocator(allocate) {
+    _allocate = allocate;
+  }
+  var _allocate;
+  var init_matrix_allocator = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/_matrix-allocator.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/gpu-flags.ts
+  var TU, BU, SS, CW;
+  var init_gpu_flags = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/gpu-flags.ts"() {
+      "use strict";
+      TU = globalThis.GPUTextureUsage;
+      BU = globalThis.GPUBufferUsage;
+      SS = globalThis.GPUShaderStage;
+      CW = globalThis.GPUColorWrite;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/render-target.ts
+  function createRenderTarget(descriptor) {
+    return {
+      _descriptor: descriptor,
+      _colorTexture: null,
+      _colorView: null,
+      _depthTexture: null,
+      _depthView: null,
+      _width: 0,
+      _height: 0
+    };
+  }
+  function buildRenderTarget(rt, engine) {
+    if (rt._eager) {
+      return;
+    }
+    disposeRenderTarget(rt);
+    const desc = rt._descriptor;
+    const { width, height } = resolveSize(desc);
+    rt._width = width;
+    rt._height = height;
+    const device = engine._device;
+    const allocColor = !!desc.format;
+    if (allocColor) {
+      rt._colorTexture = device.createTexture({
+        label: desc.lbl,
+        size: { width, height },
+        format: desc.format,
+        sampleCount: desc.samples,
+        usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING | TU.COPY_SRC
+      });
+      rt._colorView = rt._colorTexture.createView();
+    }
+    if (desc.dFormat) {
+      rt._depthTexture = device.createTexture({
+        label: desc.lbl,
+        size: { width, height },
+        format: desc.dFormat,
+        sampleCount: desc.samples,
+        usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING
+      });
+      rt._depthView = rt._depthTexture.createView();
+    }
+  }
+  function disposeRenderTarget(rt) {
+    if (!rt || rt._eager) {
+      return;
+    }
+    if (rt._colorTexture) {
+      rt._colorTexture.destroy();
+      rt._colorTexture = null;
+      rt._colorView = null;
+    }
+    if (rt._depthTexture) {
+      if (rt._ownsDepthTexture !== false) {
+        rt._depthTexture.destroy();
+      }
+      rt._depthTexture = null;
+      rt._depthView = null;
+    }
+    rt._width = 0;
+    rt._height = 0;
+  }
+  function resolveSize(desc) {
+    const size = desc.size;
+    if ("canvas" in size) {
+      const canvas = size.canvas;
+      return { width: canvas.width, height: canvas.height };
+    }
+    return size;
+  }
+  var init_render_target = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/render-target.ts"() {
+      "use strict";
+      init_gpu_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/surface.ts
+  function isDomCanvas(canvas) {
+    return "clientWidth" in canvas;
+  }
+  function _buildSurface(engine, canvas, options) {
+    const context = canvas.getContext("webgpu");
+    if (!context) {
+      throw new Error("WebGPU context not available");
+    }
+    const format = options?.format ?? navigator.gpu.getPreferredCanvasFormat();
+    const alphaMode = options?.alphaMode ?? "opaque";
+    context.configure({ device: engine._device, format, alphaMode });
+    const msaaSamples = options?.msaaSamples === 1 ? 1 : 4;
+    const scRT = createRenderTarget({ lbl: "swapchain", format, samples: 1, size: { width: 0, height: 0 } });
+    scRT._eager = true;
+    return {
+      engine,
+      canvas,
+      format,
+      msaaSamples,
+      scRT,
+      maxDevicePixelRatio: options?.maxDevicePixelRatio ?? Infinity,
+      _uniqueId: _nextSurfaceId++,
+      _context: context,
+      _alphaMode: alphaMode,
+      _renderingContexts: []
+    };
+  }
+  function _refreshScRT(surface) {
+    const tex = surface._context.getCurrentTexture();
+    const swap = surface.scRT;
+    swap._colorTexture = tex;
+    swap._colorView = tex.createView();
+    swap._width = tex.width;
+    swap._height = tex.height;
+  }
+  function resizeSurface(surface) {
+    const canvas = surface.canvas;
+    if (!isDomCanvas(canvas)) {
+      return;
+    }
+    const clientWidth = canvas.clientWidth;
+    const clientHeight = canvas.clientHeight;
+    if (!(clientWidth > 0 && clientHeight > 0)) {
+      return;
+    }
+    const scale = Math.min(globalThis.devicePixelRatio || 1, surface.maxDevicePixelRatio);
+    const w = clientWidth * scale | 0;
+    const h = clientHeight * scale | 0;
+    setSurfaceSize(surface, w, h);
+  }
+  function setSurfaceSize(surface, widthPx, heightPx) {
+    const canvas = surface.canvas;
+    const w = widthPx | 0;
+    const h = heightPx | 0;
+    if (!(w > 0 && h > 0)) {
+      return;
+    }
+    if (w === canvas.width && h === canvas.height) {
+      return;
+    }
+    canvas.width = w;
+    canvas.height = h;
+    surface.scRT._width = w;
+    surface.scRT._height = h;
+    for (const c of surface._renderingContexts) {
+      c._resize?.();
+    }
+  }
+  var _nextSurfaceId;
+  var init_surface = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/surface.ts"() {
+      "use strict";
+      init_render_target();
+      _nextSurfaceId = 1;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/_mat4-storage-f64.ts
+  var mat4_storage_f64_exports = {};
+  __export(mat4_storage_f64_exports, {
+    MAT4_STORAGE_F64_BUILD_TAG: () => MAT4_STORAGE_F64_BUILD_TAG,
+    allocateF64Mat4: () => allocateF64Mat4
+  });
+  function allocateF64Mat4() {
+    return new F64(16);
+  }
+  var MAT4_STORAGE_F64_BUILD_TAG;
+  var init_mat4_storage_f64 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/_mat4-storage-f64.ts"() {
+      "use strict";
+      init_typed_arrays();
+      MAT4_STORAGE_F64_BUILD_TAG = "@@MAT4_STORAGE_F64@@";
+      allocateF64Mat4[MAT4_STORAGE_F64_BUILD_TAG] = true;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/light/types.ts
+  var MAX_LIGHTS, LIGHT_ENTRY_FLOATS;
+  var init_types = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/light/types.ts"() {
+      "use strict";
+      MAX_LIGHTS = 16;
+      LIGHT_ENTRY_FLOATS = 16;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/large-world/floating-origin.ts
+  var floating_origin_exports = {};
+  __export(floating_origin_exports, {
+    applyLightFoOffset: () => applyLightFoOffset,
+    getFloatingOriginOffset: () => getFloatingOriginOffset,
+    lightFoVersion: () => lightFoVersion,
+    wrapRenderableForFO: () => wrapRenderableForFO
+  });
+  function getFloatingOriginOffset(scene) {
+    const cam = scene.camera;
+    if (!cam) {
+      return { x: 0, y: 0, z: 0 };
+    }
+    const w = cam.worldMatrix;
+    return { x: w[12], y: w[13], z: w[14] };
+  }
+  function lightFoVersion(scene) {
+    return scene.camera ? scene.camera.worldMatrixVersion : 0;
+  }
+  function applyLightFoOffset(data, scene) {
+    const cam = scene.camera;
+    const w = cam?.worldMatrix;
+    if (!w) {
+      return;
+    }
+    const ox = w[12];
+    const oy = w[13];
+    const oz = w[14];
+    let count = 0;
+    for (const light of scene.lights) {
+      if (count >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      const o = 4 + count * LIGHT_ENTRY_FLOATS;
+      const type = data[o + 3];
+      if (type === 0 || type === 2) {
+        const lw = light.worldMatrix;
+        data[o] = lw[12] - ox;
+        data[o + 1] = lw[13] - oy;
+        data[o + 2] = lw[14] - oz;
+      }
+      count++;
+    }
+  }
+  function wrapRenderableForFO(inner, scene, invalidate) {
+    let _lastCameraVersion = -1;
+    return () => {
+      const cv = scene.camera ? scene.camera.worldMatrixVersion : -1;
+      if (cv !== _lastCameraVersion) {
+        invalidate();
+        _lastCameraVersion = cv;
+      }
+      inner();
+    };
+  }
+  var init_floating_origin = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/large-world/floating-origin.ts"() {
+      "use strict";
+      init_types();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/large-world/pack-mat4-with-offset.ts
+  var pack_mat4_with_offset_exports = {};
+  __export(pack_mat4_with_offset_exports, {
+    makePackMeshWorld: () => makePackMeshWorld,
+    packMat4IntoF32WithOffset: () => packMat4IntoF32WithOffset
+  });
+  function packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, offsetX, offsetY, offsetZ) {
+    const src = mat;
+    const s = srcOffsetFloats;
+    const o = offsetFloats;
+    view[o + 0] = src[s + 0];
+    view[o + 1] = src[s + 1];
+    view[o + 2] = src[s + 2];
+    view[o + 3] = src[s + 3];
+    view[o + 4] = src[s + 4];
+    view[o + 5] = src[s + 5];
+    view[o + 6] = src[s + 6];
+    view[o + 7] = src[s + 7];
+    view[o + 8] = src[s + 8];
+    view[o + 9] = src[s + 9];
+    view[o + 10] = src[s + 10];
+    view[o + 11] = src[s + 11];
+    view[o + 12] = src[s + 12] - offsetX;
+    view[o + 13] = src[s + 13] - offsetY;
+    view[o + 14] = src[s + 14] - offsetZ;
+    view[o + 15] = src[s + 15];
+  }
+  function makePackMeshWorld(scene) {
+    return (view, mat, offsetFloats, srcOffsetFloats) => {
+      const cam = scene.camera;
+      if (!cam) {
+        packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, 0, 0, 0);
+        return;
+      }
+      const w = cam.worldMatrix;
+      packMat4IntoF32WithOffset(view, mat, offsetFloats, srcOffsetFloats, w[12], w[13], w[14]);
+    };
+  }
+  var init_pack_mat4_with_offset = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/large-world/pack-mat4-with-offset.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/engine/engine.ts
+  function isRenderingContextRegistered(surface, context) {
+    return surface._renderingContexts.indexOf(context) !== -1;
+  }
+  function registerRenderingContext(surface, context) {
+    if (surface._renderingContexts.indexOf(context) !== -1) {
+      return false;
+    }
+    surface._renderingContexts.push(context);
+    return true;
+  }
+  async function createEngine(canvas, options) {
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+    if (!adapter) {
+      throw new Error("WebGPU adapter not available");
+    }
+    const features = [];
+    if (adapter.features.has("float32-filterable")) {
+      features.push("float32-filterable");
+    }
+    for (const f of ["texture-compression-astc", "texture-compression-bc", "texture-compression-etc2", "timestamp-query"]) {
+      if (adapter.features.has(f)) {
+        features.push(f);
+      }
+    }
+    const device = await adapter.requestDevice({ requiredFeatures: features, requiredLimits: options?.requiredLimits });
+    const versionToLog = `Babylon Lite v${VERSION}`;
+    console.log(`${versionToLog} - WebGPU engine`);
+    if (isDomCanvas(canvas)) {
+      canvas.setAttribute("data-engine", versionToLog);
+    }
+    const useHpm = options?.useHighPrecisionMatrix === true;
+    const useFO = options?.useFloatingOrigin === true;
+    if (useFO && !useHpm) {
+      throw new Error("Babylon Lite: useFloatingOrigin requires useHighPrecisionMatrix on the engine.");
+    }
+    if (useHpm) {
+      const { allocateF64Mat4: allocateF64Mat42 } = await Promise.resolve().then(() => (init_mat4_storage_f64(), mat4_storage_f64_exports));
+      _setHpmAllocator(allocateF64Mat42);
+    }
+    let _wrapRenderableForFO;
+    let _makePackMeshWorld;
+    let _lightFoVersion;
+    let _applyLightFoOffset;
+    if (useFO) {
+      const [{ wrapRenderableForFO: wrapRenderableForFO2, lightFoVersion: lightFoVersion2, applyLightFoOffset: applyLightFoOffset2 }, { makePackMeshWorld: makePackMeshWorld2 }] = await Promise.all([
+        Promise.resolve().then(() => (init_floating_origin(), floating_origin_exports)),
+        Promise.resolve().then(() => (init_pack_mat4_with_offset(), pack_mat4_with_offset_exports))
+      ]);
+      _wrapRenderableForFO = wrapRenderableForFO2;
+      _makePackMeshWorld = makePackMeshWorld2;
+      _lightFoVersion = lightFoVersion2;
+      _applyLightFoOffset = applyLightFoOffset2;
+    }
+    const engine = { _device: device };
+    const surfaces = [engine];
+    Object.assign(
+      engine,
+      {
+        engine,
+        // self-reference: the engine IS its primary surface
+        surfaces,
+        // public readonly view of `_surfaces` (same underlying array)
+        _surfaces: surfaces,
+        _device: device,
+        drawCallCount: 0,
+        gpuFrameTimeMs: 0,
+        useHighPrecisionMatrix: useHpm,
+        useFloatingOrigin: useFO,
+        _animFrameId: 0,
+        _renderFn: null,
+        _currentEncoder: void 0,
+        _currentDelta: 0,
+        _cbs: [],
+        _wrapRenderableForFO,
+        _makePackMeshWorld,
+        _lightFoVersion,
+        _applyLightFoOffset
+      },
+      _buildSurface(engine, canvas, options)
+    );
+    resizeSurface(engine);
+    _refreshScRT(engine);
+    return engine;
+  }
+  function resizeEngine(engine) {
+    for (const surface of engine.surfaces) {
+      resizeSurface(surface);
+    }
+  }
+  function startEngine(engine) {
+    return new Promise((resolve) => {
+      let firstRafFrame = true;
+      let lastTime = 0;
+      engine._renderFn = (now) => {
+        const delta = firstRafFrame ? 0 : lastTime > 0 ? now - lastTime : 16.667;
+        lastTime = now;
+        resizeEngine(engine);
+        renderFrame(engine, delta);
+        if (firstRafFrame) {
+          firstRafFrame = false;
+          resolve();
+        }
+        engine._animFrameId = requestAnimationFrame(engine._renderFn);
+      };
+      engine._animFrameId = requestAnimationFrame(engine._renderFn);
+    });
+  }
+  function renderFrame(engine, delta) {
+    const surfaces = engine.surfaces;
+    let total = 0;
+    for (let i = 0; i < surfaces.length; i++) {
+      total += surfaces[i]._renderingContexts.length;
+    }
+    if (total === 0) {
+      return;
+    }
+    const encoder = engine._device.createCommandEncoder({ label: "frame" });
+    engine._currentEncoder = encoder;
+    engine._currentDelta = delta;
+    engine._gpuTimerBegin?.(encoder);
+    let drawCalls = 0;
+    for (let i = 0; i < surfaces.length; i++) {
+      const surface = surfaces[i];
+      surface._capturePreFrame?.(surface);
+      _refreshScRT(surface);
+      const ctxs = surface._renderingContexts;
+      for (let j = 0; j < ctxs.length; j++) {
+        const s = ctxs[j];
+        s._update();
+        drawCalls += s._drawCallsPre;
+        drawCalls += s._record();
+      }
+    }
+    const finalEncoder = engine._currentEncoder;
+    for (let i = 0; i < surfaces.length; i++) {
+      const surface = surfaces[i];
+      surface._captureService?.(surface, finalEncoder);
+    }
+    engine._gpuTimerEnd?.(finalEncoder);
+    engine._cbs[0] = finalEncoder.finish();
+    engine._device.queue.submit(engine._cbs);
+    engine.drawCallCount = drawCalls;
+    engine._gpuTimerResolve?.();
+  }
+  var VERSION, _vis;
+  var init_engine = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/engine/engine.ts"() {
+      "use strict";
+      init_matrix_allocator();
+      init_surface();
+      VERSION = "0.1.0";
+      _vis = 0;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/frame-graph.ts
+  function createFrameGraph(_engine) {
+    const fg = {
+      _tasks: [],
+      _currentProcessedTask: null,
+      build() {
+        for (let i = 0; i < fg._tasks.length; i++) {
+          const task = fg._tasks[i];
+          task._passes.length = 0;
+          fg._currentProcessedTask = task;
+          task.record();
+          fg._currentProcessedTask = null;
+        }
+        for (let i = 0; i < fg._tasks.length; i++) {
+          const passes = fg._tasks[i]._passes;
+          for (let j = 0; j < passes.length; j++) {
+            passes[j]._initialize();
+          }
+        }
+      },
+      execute() {
+        let drawCalls = 0;
+        for (const task of fg._tasks) {
+          if (task.execute) {
+            drawCalls += task.execute();
+          } else {
+            for (const pass of task._passes) {
+              drawCalls += pass._execute();
+            }
+          }
+        }
+        return drawCalls;
+      },
+      dispose() {
+        for (const task of fg._tasks) {
+          task.dispose();
+        }
+        fg._tasks.length = 0;
+        fg._currentProcessedTask = null;
+      }
+    };
+    return fg;
+  }
+  function _appendTask(fg, task) {
+    fg._tasks.push(task);
+  }
+  var init_frame_graph = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/frame-graph.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply-into.ts
+  function mat4MultiplyInto(dst, d, a, i, b, j) {
+    const a0 = a[i], a1 = a[i + 1], a2 = a[i + 2], a3 = a[i + 3];
+    const a4 = a[i + 4], a5 = a[i + 5], a6 = a[i + 6], a7 = a[i + 7];
+    const a8 = a[i + 8], a9 = a[i + 9], a10 = a[i + 10], a11 = a[i + 11];
+    const a12 = a[i + 12], a13 = a[i + 13], a14 = a[i + 14], a15 = a[i + 15];
+    let b0 = b[j], b1 = b[j + 1], b2 = b[j + 2], b3 = b[j + 3];
+    dst[d] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 1] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 2] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 3] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 4];
+    b1 = b[j + 5];
+    b2 = b[j + 6];
+    b3 = b[j + 7];
+    dst[d + 4] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 5] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 6] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 7] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 8];
+    b1 = b[j + 9];
+    b2 = b[j + 10];
+    b3 = b[j + 11];
+    dst[d + 8] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 9] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 10] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 11] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+    b0 = b[j + 12];
+    b1 = b[j + 13];
+    b2 = b[j + 14];
+    b3 = b[j + 15];
+    dst[d + 12] = a0 * b0 + a4 * b1 + a8 * b2 + a12 * b3;
+    dst[d + 13] = a1 * b0 + a5 * b1 + a9 * b2 + a13 * b3;
+    dst[d + 14] = a2 * b0 + a6 * b1 + a10 * b2 + a14 * b3;
+    dst[d + 15] = a3 * b0 + a7 * b1 + a11 * b2 + a15 * b3;
+  }
+  var init_mat4_multiply_into = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-multiply-into.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts
+  function mat4PerspectiveLHToRef(out, fov, aspect, near, far) {
+    const tan = 1 / Math.tan(fov * 0.5);
+    const range = far - near;
+    out[0] = tan / aspect;
+    out[5] = tan;
+    out[10] = -near / range;
+    out[11] = 1;
+    out[14] = far * near / range;
+  }
+  var init_mat4_perspective_lh_to_ref = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-perspective-lh-to-ref.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/camera/camera.ts
+  function getViewMatrix(camera) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._viewVer === ver) {
+      return camera._viewCache;
+    }
+    const v = camera._viewCache;
+    const w = camera.worldMatrix;
+    const useFO = camera._useFloatingOrigin;
+    const cx = useFO ? 0 : w[12];
+    const cy = useFO ? 0 : w[13];
+    const cz = useFO ? 0 : w[14];
+    v[0] = w[0];
+    v[1] = w[4];
+    v[2] = w[8];
+    v[3] = 0;
+    v[4] = w[1];
+    v[5] = w[5];
+    v[6] = w[9];
+    v[7] = 0;
+    v[8] = w[2];
+    v[9] = w[6];
+    v[10] = w[10];
+    v[11] = 0;
+    v[12] = -(w[0] * cx + w[1] * cy + w[2] * cz);
+    v[13] = -(w[4] * cx + w[5] * cy + w[6] * cz);
+    v[14] = -(w[8] * cx + w[9] * cy + w[10] * cz);
+    v[15] = 1;
+    camera._viewVer = ver;
+    return v;
+  }
+  function getProjectionMatrix(camera, aspectRatio) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._projVer === ver && camera._projAspect === aspectRatio) {
+      return camera._projCache;
+    }
+    const p = camera._projCache;
+    mat4PerspectiveLHToRef(p, camera.fov, aspectRatio, camera.nearPlane, camera.farPlane);
+    camera._projVer = ver;
+    camera._projAspect = aspectRatio;
+    return p;
+  }
+  function getViewProjectionMatrix(camera, aspectRatio) {
+    const ver = camera.worldMatrixVersion;
+    if (camera._vpVer === ver && camera._vpAspect === aspectRatio) {
+      return camera._vpCache;
+    }
+    const vp = camera._vpCache;
+    mat4MultiplyInto(vp, 0, getProjectionMatrix(camera, aspectRatio), 0, getViewMatrix(camera), 0);
+    camera._vpVer = ver;
+    camera._vpAspect = aspectRatio;
+    return vp;
+  }
+  var init_camera = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/camera/camera.ts"() {
+      "use strict";
+      init_mat4_multiply_into();
+      init_mat4_perspective_lh_to_ref();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/render/scene-helpers.ts
+  function getSceneBindGroupLayout(engine) {
+    const device = engine._device;
+    if (_cachedSceneBGL && _cachedDevice === device) {
+      return _cachedSceneBGL;
+    }
+    _cachedDevice = device;
+    _cachedSceneBGL = device.createBindGroupLayout({
+      label: "scene",
+      entries: [
+        { binding: 0, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } },
+        { binding: 1, visibility: SS.FRAGMENT, buffer: { type: "uniform" } }
+      ]
+    });
+    return _cachedSceneBGL;
+  }
+  var _cachedSceneBGL, _cachedDevice;
+  var init_scene_helpers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/render/scene-helpers.ts"() {
+      "use strict";
+      init_gpu_flags();
+      _cachedSceneBGL = null;
+      _cachedDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/pack-mat4-into-f32.ts
+  function packMat4IntoF32(view, mat, offsetFloats = 0, srcOffsetFloats = 0) {
+    const src = mat;
+    if (srcOffsetFloats === 0 && src.length === 16) {
+      view.set(src, offsetFloats);
+      return;
+    }
+    const s = srcOffsetFloats;
+    const o = offsetFloats;
+    view[o + 0] = src[s + 0];
+    view[o + 1] = src[s + 1];
+    view[o + 2] = src[s + 2];
+    view[o + 3] = src[s + 3];
+    view[o + 4] = src[s + 4];
+    view[o + 5] = src[s + 5];
+    view[o + 6] = src[s + 6];
+    view[o + 7] = src[s + 7];
+    view[o + 8] = src[s + 8];
+    view[o + 9] = src[s + 9];
+    view[o + 10] = src[s + 10];
+    view[o + 11] = src[s + 11];
+    view[o + 12] = src[s + 12];
+    view[o + 13] = src[s + 13];
+    view[o + 14] = src[s + 14];
+    view[o + 15] = src[s + 15];
+  }
+  var init_pack_mat4_into_f32 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/pack-mat4-into-f32.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/scene-uniforms-pack.ts
+  function _packSceneUniforms(data, eng, scene, camera, aspect) {
+    data.fill(0);
+    const viewProj = getViewProjectionMatrix(camera, aspect);
+    const viewMat = getViewMatrix(camera);
+    const wm = camera.worldMatrix;
+    packMat4IntoF32(data, viewProj, 0);
+    packMat4IntoF32(data, viewMat, 16);
+    if (eng.useFloatingOrigin) {
+      data[32] = 0;
+      data[33] = 0;
+      data[34] = 0;
+    } else {
+      data[32] = wm[12];
+      data[33] = wm[13];
+      data[34] = wm[14];
+    }
+    data[87] = eng.canvas.width;
+    data[36] = scene.envRotationY || 0;
+    const envTextures = scene._envTextures;
+    const img = scene.imageProcessing;
+    data[76] = img.exposure;
+    data[77] = img.contrast;
+    data[78] = envTextures?.lodGenerationScale ?? 0.8;
+    data[79] = +img.toneMappingEnabled;
+    data[37] = eng.canvas.height;
+  }
+  var init_scene_uniforms_pack = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/scene-uniforms-pack.ts"() {
+      "use strict";
+      init_camera();
+      init_pack_mat4_into_f32();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-buffers.ts
+  function align(n, to) {
+    return n + to - 1 & ~(to - 1);
+  }
+  function createUniformBuffer(engine, data, label) {
+    const device = engine._device;
+    const buf = device.createBuffer({
+      label,
+      size: align(data.byteLength, 16),
+      usage: BU.UNIFORM | BU.COPY_DST
+    });
+    device.queue.writeBuffer(buf, 0, data.buffer, data.byteOffset, data.byteLength);
+    return buf;
+  }
+  function createEmptyUniformBuffer(engine, byteLength, label) {
+    return engine._device.createBuffer({
+      label,
+      size: align(byteLength, 16),
+      usage: BU.UNIFORM | BU.COPY_DST
+    });
+  }
+  function createMappedBuffer(engine, data, usage) {
+    const size = align(Math.max(data.byteLength, 4), 4);
+    const buf = engine._device.createBuffer({
+      size,
+      usage: usage | BU.COPY_DST,
+      mappedAtCreation: true
+    });
+    new U8(buf.getMappedRange()).set(new U8(data.buffer, data.byteOffset, data.byteLength));
+    buf.unmap();
+    return buf;
+  }
+  var init_gpu_buffers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-buffers.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms-size.ts
+  var SCENE_UBO_BYTES;
+  var init_scene_uniforms_size = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms-size.ts"() {
+      "use strict";
+      SCENE_UBO_BYTES = 368;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/render/lights-ubo.ts
+  function getLightsUboSize() {
+    return 16 + MAX_LIGHTS * LIGHT_ENTRY_FLOATS * 4;
+  }
+  function computeLightsVersion(lights) {
+    let v = 0;
+    for (const light of lights) {
+      v += light._lightVersion ?? 0;
+    }
+    return v;
+  }
+  function fillLightsData(data, lights) {
+    data.fill(0);
+    let count = 0;
+    const headerFloats = 4;
+    for (const light of lights) {
+      if (count >= MAX_LIGHTS) {
+        break;
+      }
+      if (!light._writeLightUbo) {
+        continue;
+      }
+      light._writeLightUbo(data, headerFloats + count * LIGHT_ENTRY_FLOATS);
+      count++;
+    }
+    _countU32[0] = count;
+    data[0] = _countF32[0];
+  }
+  function ensureSceneLightState(engine, scene) {
+    let state = scene._lightGpuState;
+    const byteSize = getLightsUboSize();
+    if (state && state._byteSize === byteSize) {
+      return state;
+    }
+    const registerDisposer = !state;
+    state?._buffer.destroy();
+    const scratch = new F32(byteSize / 4);
+    fillLightsData(scratch, scene.lights);
+    engine._applyLightFoOffset?.(scratch, scene);
+    state = {
+      _buffer: createUniformBuffer(engine, scratch),
+      _scratch: scratch,
+      _version: computeLightsVersion(scene.lights) + (engine._lightFoVersion?.(scene) ?? 0),
+      _lightCount: scene.lights.length,
+      _byteSize: byteSize
+    };
+    scene._lightGpuState = state;
+    if (registerDisposer) {
+      scene._disposables.push(() => {
+        scene._lightGpuState?._buffer.destroy();
+        scene._lightGpuState = void 0;
+      });
+    }
+    return state;
+  }
+  function refreshSceneLightsUBO(engine, scene) {
+    const state = ensureSceneLightState(engine, scene);
+    const version = computeLightsVersion(scene.lights) + (engine._lightFoVersion?.(scene) ?? 0);
+    if (version !== state._version || scene.lights.length !== state._lightCount) {
+      state._version = version;
+      state._lightCount = scene.lights.length;
+      fillLightsData(state._scratch, scene.lights);
+      engine._applyLightFoOffset?.(state._scratch, scene);
+      engine._device.queue.writeBuffer(state._buffer, 0, state._scratch);
+    }
+    return state._buffer;
+  }
+  var _countU32, _countF32;
+  var init_lights_ubo = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/render/lights-ubo.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_types();
+      init_gpu_buffers();
+      _countU32 = new U32(1);
+      _countF32 = new F32(_countU32.buffer);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/render-task.ts
+  function createRenderTask(config, engine, scene) {
+    const sc = scene;
+    config.clrColor ?? (config.clrColor = { r: 0.2, g: 0.2, b: 0.3, a: 1 });
+    config.clr ?? (config.clr = true);
+    const desc = config.rt._descriptor;
+    const targetSignature = {
+      _colorFormat: desc.format,
+      _depthStencilFormat: config.depth?._descriptor.dFormat ?? desc.dFormat,
+      _depthCompare: desc._depthCompare,
+      _sampleCount: desc.samples ?? 1
+    };
+    const sceneBGL = getSceneBindGroupLayout(engine);
+    const sceneUBO = createEmptyUniformBuffer(engine, SCENE_UBO_BYTES);
+    const lightsUBO = ensureSceneLightState(engine, sc)._buffer;
+    const sceneBG = engine._device.createBindGroup({
+      layout: sceneBGL,
+      entries: [
+        { binding: 0, resource: { buffer: sceneUBO } },
+        { binding: 1, resource: { buffer: lightsUBO } }
+      ]
+    });
+    const colorAttachment = { loadOp: "clear", storeOp: "store" };
+    const updateContext = { targetWidth: 0, targetHeight: 0 };
+    const task = {
+      name: config.name,
+      _config: config,
+      engine,
+      scene: sc,
+      _passes: [],
+      _autoFromScene: false,
+      _renderables: [],
+      _opaqueBindings: [],
+      _directBindings: [],
+      _transparentBindings: [],
+      _opaqueBundles: [],
+      _lastVersion: -1,
+      _lastVis: 0,
+      _renderPassDescriptor: { colorAttachments: [colorAttachment] },
+      _colorAttachment: colorAttachment,
+      _depthSrc: config.depth,
+      _depthLoadOp: config.depth ? config.depth._eager ? "load" : "clear" : void 0,
+      _sceneUBO: sceneUBO,
+      _sceneBG: sceneBG,
+      _lightsUBO: lightsUBO,
+      _suData: new F32(SCENE_UBO_BYTES / 4),
+      _su: [],
+      _targetSignature: targetSignature,
+      _pendingMeshes: [],
+      addMesh(mesh, opts) {
+        const material = opts?.material ?? mesh.material;
+        if (!material) {
+          return;
+        }
+        task._pendingMeshes.push({ mesh, material });
+      },
+      record() {
+        if (task._autoFromScene) {
+          task._renderables.length = 0;
+        }
+        resolvePendingMeshes(task, sc);
+        task._autoFromScene = task._renderables.length === 0;
+        if (task._autoFromScene) {
+          task._renderables.push(...sc._renderables);
+        }
+        const rt = config.rt;
+        buildRenderTarget(rt, engine);
+        if (config.rst && (rt._descriptor.samples ?? 1) > 1) {
+          buildRenderTarget(config.rst, engine);
+        }
+        if (config.depth && !config.depth._eager) {
+          buildRenderTarget(config.depth, engine);
+        }
+        updateContext.targetWidth = rt._width;
+        updateContext.targetHeight = rt._height;
+        refreshTaskSceneBindGroup(task, engine);
+        buildBindings(task, engine, targetSignature);
+        buildRenderPassDescriptor(task, rt);
+      },
+      execute() {
+        return executePass(task, engine, targetSignature, updateContext);
+      },
+      dispose() {
+        task._passes.length = 0;
+        disposeRenderTarget(config.rt);
+        disposeRenderTarget(config.rst);
+        disposeRenderTarget(config.depth);
+        task._opaqueBindings.length = 0;
+        task._directBindings.length = 0;
+        task._transparentBindings.length = 0;
+        task._renderables.length = 0;
+        task._opaqueBundles.length = 0;
+        task._sceneUBO.destroy();
+      }
+    };
+    return task;
+  }
+  function resolvePendingMeshes(task, sc) {
+    if (task._pendingMeshes.length === 0) {
+      return;
+    }
+    for (const { mesh, material } of task._pendingMeshes) {
+      const rebuild = material._buildGroup?._rebuildSingle;
+      if (!rebuild) {
+        throw new Error();
+      }
+      const renderable = rebuild(sc, mesh, material);
+      if (!task._renderables.includes(renderable)) {
+        task._renderables.push(renderable);
+      }
+    }
+    task._pendingMeshes.length = 0;
+  }
+  function sortTransparentBindings(task, camera) {
+    const arr = task._transparentBindings;
+    if (arr.length <= 1 || !camera) {
+      return;
+    }
+    const v = getViewMatrix(camera);
+    for (const b of arr) {
+      const wc = b.renderable._worldCenter;
+      b._sortDistance = wc ? wc[0] * v[2] + wc[1] * v[6] + wc[2] * v[10] + v[14] : 0;
+    }
+    arr.sort((a, b) => b._sortDistance - a._sortDistance || a.renderable.order - b.renderable.order);
+  }
+  function buildBindings(task, eng, targetSignature) {
+    const opaque = task._opaqueBindings;
+    const direct = task._directBindings;
+    const transparent = task._transparentBindings;
+    opaque.length = 0;
+    direct.length = 0;
+    transparent.length = 0;
+    for (const r of task._renderables) {
+      const binding = r.bind(eng, targetSignature);
+      if (r.isTransparent || r._transmissive) {
+        transparent.push(binding);
+      } else if (r._direct) {
+        direct.push(binding);
+      } else {
+        opaque.push(binding);
+      }
+    }
+    opaque.sort((a, b) => a.renderable.order - b.renderable.order);
+    direct.sort((a, b) => a.renderable.order - b.renderable.order);
+    task._opaqueBundles.length = 0;
+    task._lastVersion = task.scene._renderableVersion;
+  }
+  function buildRenderPassDescriptor(task, rt) {
+    const att = task._colorAttachment;
+    att.view = rt._colorView;
+    att.resolveTarget = task._config.rst?._colorView ?? void 0;
+    task._renderPassDescriptor.colorAttachments = rt._colorView ? [att] : [];
+    const depthSrc = task._depthSrc ?? rt;
+    const depthView = depthSrc._depthView;
+    let depthAttachment;
+    if (depthView) {
+      const dd = depthSrc._descriptor;
+      const loadOp = task._depthLoadOp ?? "clear";
+      depthAttachment = {
+        view: depthView,
+        depthClearValue: dd._depthClearValue ?? 0,
+        depthLoadOp: loadOp,
+        depthStoreOp: "store"
+      };
+      if (dd.dFormat?.includes("stencil")) {
+        depthAttachment.stencilClearValue = 0;
+        depthAttachment.stencilLoadOp = loadOp;
+        depthAttachment.stencilStoreOp = "store";
+      }
+    }
+    task._renderPassDescriptor.depthStencilAttachment = depthAttachment;
+  }
+  function prepareRenderTaskPass(task, eng, targetSignature, context) {
+    const sc = task.scene;
+    if (task._autoFromScene && task._lastVersion !== sc._renderableVersion) {
+      task._renderables.length = 0;
+      task._renderables.push(...sc._renderables);
+      buildBindings(task, eng, targetSignature);
+    }
+    refreshTaskSceneBindGroup(task, eng);
+    const camera = task._config.cam ?? sc.camera;
+    sc._clusteredLightUpdater?.(camera, context.targetWidth, context.targetHeight);
+    writePassSceneUBO(task, eng, sc, camera);
+    refreshSceneLightsUBO(eng, sc);
+    context._camera = camera;
+    updateBindings(task._opaqueBindings, context);
+    updateBindings(task._directBindings, context);
+    updateBindings(task._transparentBindings, context);
+    sortTransparentBindings(task, camera);
+  }
+  function executePass(task, eng, targetSignature, context) {
+    const sc = task.scene;
+    const sampleCount = targetSignature._sampleCount;
+    prepareRenderTaskPass(task, eng, targetSignature, context);
+    const att = task._colorAttachment;
+    const cfg = task._config;
+    if (cfg.rt._colorView) {
+      if (cfg.rt === eng.scRT) {
+        att.view = cfg.rt._colorView;
+      }
+      att.resolveTarget = cfg.rst?._colorView ?? void 0;
+      att.clearValue = task._autoFromScene ? sc.clearColor : cfg.clrColor;
+      att.loadOp = cfg.clr ? "clear" : "load";
+    }
+    if (task._executeWithTransmission) {
+      return task._executeWithTransmission(sampleCount);
+    }
+    const pass = eng._currentEncoder.beginRenderPass(task._renderPassDescriptor);
+    const draws = executePassBody(task, pass);
+    pass.end();
+    return draws;
+  }
+  function executePassBody(task, pass) {
+    const eng = task.engine;
+    const cfg = task._config;
+    const rt = cfg.rt;
+    const scene = task.scene;
+    const opaqueBindings = task._opaqueBindings;
+    const opaqueBundles = task._opaqueBundles;
+    const sceneBG = task._sceneBG;
+    const camera = cfg.cam ?? scene.camera;
+    const v = camera?.viewport;
+    if (v) {
+      const rw = rt._width;
+      const rh = rt._height;
+      const x = Math.floor(v.x * rw);
+      const y = Math.floor((1 - v.y - v.height) * rh);
+      const w = Math.ceil((v.x + v.width) * rw) - x;
+      const h = Math.ceil((1 - v.y) * rh) - y;
+      pass.setViewport(x, y, w, h, 0, 1);
+      pass.setScissorRect(x, y, w, h);
+    }
+    pass.setBindGroup(0, sceneBG);
+    if (task._lastVersion !== scene._renderableVersion || task._lastVis !== _vis || opaqueBundles.length === 0) {
+      const desc = rt._descriptor;
+      const be = eng._device.createRenderBundleEncoder({
+        colorFormats: desc.format ? [desc.format] : [],
+        // Use the task's target signature, not the RT descriptor: a depth
+        // override (config.depth) supplies the depth format externally, so
+        // the cached opaque pipelines are built with it while the colour RT
+        // carries no depthStencilFormat of its own. The bundle encoder's
+        // attachment state must match those pipelines exactly.
+        depthStencilFormat: task._targetSignature._depthStencilFormat,
+        sampleCount: desc.samples ?? 1
+      });
+      be.setBindGroup(0, sceneBG);
+      drawList(be, opaqueBindings, eng);
+      opaqueBundles[0] = be.finish();
+      task._lastVersion = scene._renderableVersion;
+      task._lastVis = _vis;
+    }
+    let draws = opaqueBindings.length;
+    pass.executeBundles(opaqueBundles);
+    pass.setBindGroup(0, sceneBG);
+    draws += drawList(pass, task._directBindings, eng);
+    draws += drawList(pass, task._transparentBindings, eng);
+    return draws;
+  }
+  function refreshTaskSceneBindGroup(task, eng) {
+    const lightsUBO = ensureSceneLightState(eng, task.scene)._buffer;
+    if (lightsUBO === task._lightsUBO) {
+      return;
+    }
+    task._lightsUBO = lightsUBO;
+    task._sceneBG = eng._device.createBindGroup({
+      layout: getSceneBindGroupLayout(eng),
+      entries: [
+        { binding: 0, resource: { buffer: task._sceneUBO } },
+        { binding: 1, resource: { buffer: lightsUBO } }
+      ]
+    });
+    task._opaqueBundles.length = 0;
+    task._lastVersion = -1;
+  }
+  function writePassSceneUBO(task, eng, scene, camera) {
+    if (!camera) {
+      return;
+    }
+    const v = camera.viewport;
+    const rt = task._config.rt;
+    const aspect = (task._config.cs ? eng.canvas.width / eng.canvas.height : rt._width / rt._height) * (v ? v.width / v.height : 1);
+    const fog = scene.fog;
+    const img = scene.imageProcessing;
+    const envRotationY = scene.envRotationY || 0;
+    const wv = camera.worldMatrixVersion;
+    const s = task._su;
+    if (s[0] === camera && s[1] === fog && s[2] === wv && s[3] === aspect && s[4] === envRotationY && s[5] === img.exposure && s[6] === img.contrast) {
+      return;
+    }
+    s[0] = camera;
+    s[1] = fog;
+    s[2] = wv;
+    s[3] = aspect;
+    s[4] = envRotationY;
+    s[5] = img.exposure;
+    s[6] = img.contrast;
+    const data = task._suData;
+    _packSceneUniforms(data, eng, scene, camera, aspect);
+    const contribs = scene._sceneUboContributors;
+    if (contribs) {
+      for (const c of contribs) {
+        c(data, scene);
+      }
+    }
+    eng._device.queue.writeBuffer(task._sceneUBO, 0, data);
+  }
+  function updateBindings(list, context) {
+    for (const b of list) {
+      b.update?.(context);
+    }
+  }
+  function drawList(enc, list, engine) {
+    let lp = null;
+    let draws = 0;
+    for (const b of list) {
+      const mesh = b.renderable.mesh;
+      if (mesh && mesh.visible === false) {
+        continue;
+      }
+      if (b.pipeline !== lp) {
+        enc.setPipeline(b.pipeline);
+        lp = b.pipeline;
+      }
+      draws += b.draw(enc, engine);
+    }
+    return draws;
+  }
+  var init_render_task = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/frame-graph/render-task.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_engine();
+      init_render_target();
+      init_camera();
+      init_scene_helpers();
+      init_scene_uniforms_pack();
+      init_gpu_buffers();
+      init_scene_uniforms_size();
+      init_lights_ubo();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/swapchain-overlay.ts
+  var swapchain_overlay_exports = {};
+  __export(swapchain_overlay_exports, {
+    configureSwapchainOverlayScene: () => configureSwapchainOverlayScene
+  });
+  function getDefaultSwapchainTask(scene, surface) {
+    for (const task of scene._frameGraph._tasks) {
+      const ptask = task;
+      if (!ptask?._config || !ptask._colorAttachment) {
+        continue;
+      }
+      const renderTask = task;
+      if (renderTask._config.rt === surface.scRT || renderTask._config.rst === surface.scRT) {
+        return renderTask;
+      }
+    }
+    return null;
+  }
+  function configureSwapchainOverlayScene(surface, overlay) {
+    const base = surface._renderingContexts[surface._renderingContexts.length - 1];
+    if (!base?._frameGraph) {
+      return;
+    }
+    const baseTask = getDefaultSwapchainTask(base, surface);
+    const overlayTask = getDefaultSwapchainTask(overlay, surface);
+    if (!baseTask || !overlayTask) {
+      return;
+    }
+    overlayTask._config.clr = false;
+    overlay._beforeRender.unshift(() => {
+      if (surface.msaaSamples > 1) {
+        const view = baseTask._config.rt._colorView;
+        if (view) {
+          overlayTask._colorAttachment.view = view;
+        }
+      }
+    });
+  }
+  var init_swapchain_overlay = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/swapchain-overlay.ts"() {
+      "use strict";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-core.ts
+  function createSceneContext(surface, options) {
+    const eng = surface.engine;
+    const ctxLocal = {
+      surface,
+      clearColor: { r: 0.2, g: 0.2, b: 0.3, a: 1 },
+      camera: null,
+      lights: [],
+      meshes: [],
+      animationGroups: [],
+      fog: null,
+      clipPlane: null,
+      shadowGenerators: [],
+      imageProcessing: { exposure: 1, contrast: 1, toneMappingEnabled: false },
+      _renderables: [],
+      _prePasses: [],
+      _gsMeshes: [],
+      _uniformUpdaters: [],
+      fixedDeltaMs: 0,
+      _beforeRender: [],
+      _deferredBuilders: [],
+      _groups: /* @__PURE__ */ new Map(),
+      _disposables: [],
+      _meshDisposables: /* @__PURE__ */ new Map(),
+      _materialSwapQueue: [],
+      _renderableVersion: 0,
+      _built: false,
+      _drawCallsPre: 0,
+      _update() {
+        if (eng.useFloatingOrigin && ctx.camera && !ctx.camera._useFloatingOrigin) {
+          ctx.camera._useFloatingOrigin = true;
+          ctx.camera._viewVer = -1;
+          ctx.camera._vpVer = -1;
+        }
+        const d = ctx.fixedDeltaMs > 0 ? ctx.fixedDeltaMs : eng._currentDelta;
+        const encoder = eng._currentEncoder;
+        let draws = 0;
+        for (const cb of ctx._beforeRender) {
+          cb(d);
+        }
+        if (ctx._materialSwapQueue.length > 0) {
+          ctx._processSwaps?.(ctx);
+        }
+        for (const pp of ctx._prePasses) {
+          draws += pp.execute(encoder, eng);
+        }
+        for (const u of ctx._uniformUpdaters) {
+          u.update(eng);
+        }
+        ctx._drawCallsPre = draws;
+      },
+      _record() {
+        return ctx._frameGraph.execute();
+      },
+      _resize() {
+        ctx._frameGraph.build();
+      }
+    };
+    const ctx = ctxLocal;
+    const fg = createFrameGraph(eng);
+    ctx._frameGraph = fg;
+    if (options?.defaultRenderTask !== false) {
+      const msaa = surface.msaaSamples > 1;
+      const rt = msaa ? createRenderTarget({ lbl: "scene-color", format: surface.format, dFormat: "depth24plus-stencil8", samples: surface.msaaSamples, size: surface }) : surface.scRT;
+      const depth = msaa ? void 0 : createRenderTarget({ lbl: "scene-depth", dFormat: "depth24plus-stencil8", samples: 1, size: surface });
+      _appendTask(fg, createRenderTask({ name: "scene", rt, rst: msaa ? surface.scRT : void 0, depth, clrColor: ctx.clearColor }, eng, ctx));
+    }
+    ctx._disposables.push(() => fg.dispose());
+    return ctx;
+  }
+  function addDeferredSceneRenderables(scene, build) {
+    const ctx = scene;
+    ctx._deferredBuilders.push(async () => {
+      const built = await build(ctx.surface.engine, ctx);
+      ctx._renderables.push(...built.renderables);
+      if (built.dispose) {
+        ctx._disposables.push(built.dispose);
+      }
+    });
+  }
+  async function buildScene(scene) {
+    const ctx = scene;
+    while (ctx._deferredBuilders.length > 0) {
+      const builders = [...ctx._deferredBuilders];
+      ctx._deferredBuilders = [];
+      await Promise.all(builders.map(async (b) => b()));
+    }
+    ctx._materialSwapQueue.length = 0;
+    ctx._renderableVersion++;
+    ctx._built = true;
+  }
+  async function registerScene(scene) {
+    const ctx = scene;
+    const surface = ctx.surface;
+    if (isRenderingContextRegistered(surface, ctx)) {
+      return;
+    }
+    await buildScene(scene);
+    ctx._renderables.sort(byOrder);
+    await Promise.all(ctx._frameGraph._tasks.map((task) => task._preload?.()).filter((preload) => preload !== void 0));
+    ctx._frameGraph.build();
+    if (surface._renderingContexts.length > 0) {
+      (await Promise.resolve().then(() => (init_swapchain_overlay(), swapchain_overlay_exports))).configureSwapchainOverlayScene(surface, ctx);
+    }
+    registerRenderingContext(surface, ctx);
+  }
+  var byOrder;
+  var init_scene_core = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/scene-core.ts"() {
+      "use strict";
+      init_engine();
+      init_frame_graph();
+      init_render_task();
+      init_render_target();
+      byOrder = (a, b) => a.order - b.order;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-identity.ts
+  function mat4Identity() {
+    const m = new F32(16);
+    m[0] = 1;
+    m[5] = 1;
+    m[10] = 1;
+    m[15] = 1;
+    return m;
+  }
+  var init_mat4_identity = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-identity.ts"() {
+      "use strict";
+      init_typed_arrays();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-look-at-lh.ts
+  function mat4LookAtLH(eye, target, up) {
+    const zAxis = { x: target.x - eye.x, y: target.y - eye.y, z: target.z - eye.z };
+    const zLen = Math.sqrt(zAxis.x * zAxis.x + zAxis.y * zAxis.y + zAxis.z * zAxis.z);
+    if (zLen < 1e-10) {
+      return mat4Identity();
+    }
+    const invZ = 1 / zLen;
+    zAxis.x *= invZ;
+    zAxis.y *= invZ;
+    zAxis.z *= invZ;
+    const xAxis = {
+      x: up.y * zAxis.z - up.z * zAxis.y,
+      y: up.z * zAxis.x - up.x * zAxis.z,
+      z: up.x * zAxis.y - up.y * zAxis.x
+    };
+    const xLen = Math.sqrt(xAxis.x * xAxis.x + xAxis.y * xAxis.y + xAxis.z * xAxis.z);
+    if (xLen < 1e-10) {
+      return mat4Identity();
+    }
+    const invX = 1 / xLen;
+    xAxis.x *= invX;
+    xAxis.y *= invX;
+    xAxis.z *= invX;
+    const yAxis = {
+      x: zAxis.y * xAxis.z - zAxis.z * xAxis.y,
+      y: zAxis.z * xAxis.x - zAxis.x * xAxis.z,
+      z: zAxis.x * xAxis.y - zAxis.y * xAxis.x
+    };
+    return new F32([
+      xAxis.x,
+      yAxis.x,
+      zAxis.x,
+      0,
+      xAxis.y,
+      yAxis.y,
+      zAxis.y,
+      0,
+      xAxis.z,
+      yAxis.z,
+      zAxis.z,
+      0,
+      -(xAxis.x * eye.x + xAxis.y * eye.y + xAxis.z * eye.z),
+      -(yAxis.x * eye.x + yAxis.y * eye.y + yAxis.z * eye.z),
+      -(zAxis.x * eye.x + zAxis.y * eye.y + zAxis.z * eye.z),
+      1
+    ]);
+  }
+  var init_mat4_look_at_lh = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/mat4-look-at-lh.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_mat4_identity();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/vec3-up.ts
+  var Vec3Up;
+  var init_vec3_up = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/vec3-up.ts"() {
+      "use strict";
+      Vec3Up = { x: 0, y: 1, z: 0 };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/world-matrix-state.ts
+  function attachWorldMatrixState(host, state) {
+    host[WM_STATE] = state;
+  }
+  function peekWorldMatrixState(p) {
+    if (p === null) {
+      return null;
+    }
+    const s = p[WM_STATE];
+    return s ?? null;
+  }
+  function createWorldMatrixState(getLocalMatrix) {
+    let _worldVersion = 0;
+    let _lastSeenParentVersion = -1;
+    let _cachedWorld = null;
+    const _ownedWorld = allocateMat4();
+    let _parent = null;
+    let _parentState = null;
+    const _children = [];
+    function invalidate() {
+      _cachedWorld = null;
+      _worldVersion++;
+      for (const child of _children) {
+        child._invalidate();
+      }
+    }
+    function pollForeignParent() {
+      const pv = _parent.worldMatrixVersion;
+      if (pv !== _lastSeenParentVersion) {
+        _lastSeenParentVersion = pv;
+        invalidate();
+      }
+    }
+    const state = {
+      get parent() {
+        return _parent;
+      },
+      set parent(p) {
+        if (p === _parent) {
+          return;
+        }
+        if (_parentState !== null) {
+          _parentState._removeChild(state);
+        }
+        _parent = p;
+        _parentState = peekWorldMatrixState(p);
+        if (_parentState !== null) {
+          _parentState._addChild(state);
+        }
+        _lastSeenParentVersion = -1;
+        invalidate();
+      },
+      markLocalDirty() {
+        invalidate();
+      },
+      getWorldMatrix() {
+        if (_parentState === null && _parent !== null) {
+          pollForeignParent();
+        }
+        if (_cachedWorld !== null) {
+          return _cachedWorld;
+        }
+        const local = getLocalMatrix();
+        if (_parent !== null) {
+          const pw = _parent.worldMatrix;
+          mat4MultiplyInto(_ownedWorld, 0, pw, 0, local, 0);
+          _cachedWorld = _ownedWorld;
+        } else {
+          _cachedWorld = local;
+        }
+        return _cachedWorld;
+      },
+      getWorldMatrixVersion() {
+        if (_parentState === null && _parent !== null) {
+          pollForeignParent();
+        }
+        return _worldVersion;
+      },
+      _invalidate() {
+        invalidate();
+      },
+      _addChild(child) {
+        _children.push(child);
+      },
+      _removeChild(child) {
+        const i = _children.indexOf(child);
+        if (i >= 0) {
+          _children.splice(i, 1);
+        }
+      }
+    };
+    return state;
+  }
+  var WM_STATE;
+  var init_world_matrix_state = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/scene/world-matrix-state.ts"() {
+      "use strict";
+      init_mat4_multiply_into();
+      init_matrix_allocator();
+      WM_STATE = Symbol("wmState");
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/math/observable-vec3.ts
+  var ObservableVec3;
+  var init_observable_vec3 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/math/observable-vec3.ts"() {
+      "use strict";
+      ObservableVec3 = class {
+        constructor(x, y, z, onDirty) {
+          __publicField(this, "_x");
+          __publicField(this, "_y");
+          __publicField(this, "_z");
+          __publicField(this, "_onDirty");
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._onDirty = onDirty;
+        }
+        get x() {
+          return this._x;
+        }
+        set x(v) {
+          if (this._x !== v) {
+            this._x = v;
+            this._onDirty();
+          }
+        }
+        get y() {
+          return this._y;
+        }
+        set y(v) {
+          if (this._y !== v) {
+            this._y = v;
+            this._onDirty();
+          }
+        }
+        get z() {
+          return this._z;
+        }
+        set z(v) {
+          if (this._z !== v) {
+            this._z = v;
+            this._onDirty();
+          }
+        }
+        /** Bulk set — one dirty notification instead of three. */
+        set(x, y, z) {
+          this._x = x;
+          this._y = y;
+          this._z = z;
+          this._onDirty();
+        }
+        /** Copy values from another vector. */
+        copyFrom(v) {
+          this.set(v.x, v.y, v.z);
+        }
+        /** Copy into a Float32Array at offset. */
+        toArray(out, offset = 0) {
+          out[offset] = this._x;
+          out[offset + 1] = this._y;
+          out[offset + 2] = this._z;
+        }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-pool.ts
+  function texRefs() {
+    if (!_texRefs) {
+      _texRefs = /* @__PURE__ */ new WeakMap();
+    }
+    return _texRefs;
+  }
+  function acquireTexture(tex) {
+    const m = texRefs();
+    m.set(tex.texture, (m.get(tex.texture) ?? 0) + 1);
+  }
+  function samplerKey(desc) {
+    return `${desc.minFilter ?? "nearest"}:${desc.magFilter ?? "nearest"}:${desc.mipmapFilter ?? "nearest"}:${desc.addressModeU ?? "clamp-to-edge"}:${desc.addressModeV ?? "clamp-to-edge"}:${desc.addressModeW ?? "clamp-to-edge"}:${desc.maxAnisotropy ?? 1}`;
+  }
+  function getOrCreateSampler(engine, desc = {}) {
+    const device = engine._device;
+    if (!_samplerCache) {
+      _samplerCache = /* @__PURE__ */ new WeakMap();
+    }
+    let dc = _samplerCache.get(device);
+    if (!dc) {
+      dc = /* @__PURE__ */ new Map();
+      _samplerCache.set(device, dc);
+    }
+    const key = samplerKey(desc);
+    let s = dc.get(key);
+    if (!s) {
+      s = device.createSampler(desc);
+      dc.set(key, s);
+    }
+    return s;
+  }
+  var _texRefs, _samplerCache;
+  var init_gpu_pool = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/gpu-pool.ts"() {
+      "use strict";
+      _texRefs = null;
+      _samplerCache = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/resource/samplers.ts
+  function getBilinearSampler(engine) {
+    return getOrCreateSampler(engine, _bilinearDesc);
+  }
+  var _bilinearDesc;
+  var init_samplers = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/resource/samplers.ts"() {
+      "use strict";
+      init_gpu_pool();
+      _bilinearDesc = { magFilter: "linear", minFilter: "linear" };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/generate-mipmaps.ts
+  var generate_mipmaps_exports = {};
+  __export(generate_mipmaps_exports, {
+    generateMipmaps: () => generateMipmaps,
+    recordMipmaps: () => recordMipmaps
+  });
+  function clearCache() {
+    pipelineCache?.clear();
+    pipelineCache = null;
+    shaderModule = null;
+    linearSampler = null;
+    bindGroupLayout = null;
+    cachedDevice = null;
+  }
+  function ensureResources(engine) {
+    const device = engine._device;
+    if (device !== cachedDevice) {
+      clearCache();
+      cachedDevice = device;
+    }
+    shaderModule ?? (shaderModule = device.createShaderModule({ code: BLIT_SHADER }));
+    linearSampler ?? (linearSampler = getBilinearSampler(engine));
+    bindGroupLayout ?? (bindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: SS.FRAGMENT, texture: { sampleType: "float" } },
+        { binding: 1, visibility: SS.FRAGMENT, sampler: {} }
+      ]
+    }));
+  }
+  function getPipeline(engine, format) {
+    const device = engine._device;
+    ensureResources(engine);
+    pipelineCache ?? (pipelineCache = /* @__PURE__ */ new Map());
+    let pipeline = pipelineCache.get(format);
+    if (!pipeline) {
+      pipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+        vertex: { module: shaderModule, entryPoint: "vs" },
+        fragment: { module: shaderModule, entryPoint: "fs", targets: [{ format }] },
+        primitive: { topology: "triangle-list" }
+      });
+      pipelineCache.set(format, pipeline);
+    }
+    return pipeline;
+  }
+  function generateMipmaps(engine, texture, face) {
+    const device = engine._device;
+    const encoder = device.createCommandEncoder();
+    recordMipmaps(engine, texture, encoder, face);
+    device.queue.submit([encoder.finish()]);
+  }
+  function recordMipmaps(engine, texture, encoder, face) {
+    if (texture.mipLevelCount <= 1) {
+      return;
+    }
+    const device = engine._device;
+    const pipeline = getPipeline(engine, texture.format);
+    const vp = face != null ? { dimension: "2d", baseArrayLayer: face, arrayLayerCount: 1 } : {};
+    for (let mip = 1; mip < texture.mipLevelCount; mip++) {
+      const srcView = texture.createView({ baseMipLevel: mip - 1, mipLevelCount: 1, ...vp });
+      const dstView = texture.createView({ baseMipLevel: mip, mipLevelCount: 1, ...vp });
+      const bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+          { binding: 0, resource: srcView },
+          { binding: 1, resource: linearSampler }
+        ]
+      });
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{ view: dstView, loadOp: "clear", storeOp: "store", clearValue: { r: 0, g: 0, b: 0, a: 0 } }]
+      });
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(3);
+      pass.end();
+    }
+  }
+  var BLIT_SHADER, pipelineCache, shaderModule, linearSampler, bindGroupLayout, cachedDevice;
+  var init_generate_mipmaps = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/generate-mipmaps.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_samplers();
+      BLIT_SHADER = `@group(0)@binding(0)var t:texture_2d<f32>;@group(0)@binding(1)var s:sampler;
+struct V{@builtin(position)p:vec4f,@location(0)u:vec2f};
+@vertex fn vs(@builtin(vertex_index)i:u32)->V{let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3))[i];return V(vec4f(p,0,1),p*vec2f(.5,-.5)+.5);}
+@fragment fn fs(v:V)->@location(0)vec4f{return textureSample(t,s,v.u);}`;
+      pipelineCache = null;
+      shaderModule = null;
+      linearSampler = null;
+      bindGroupLayout = null;
+      cachedDevice = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/camera/free-camera.ts
+  function createFreeCamera(position, target) {
+    const dx = target.x - position.x;
+    const dy = target.y - position.y;
+    const dz = target.z - position.z;
+    const _localMat = allocateMat4();
+    function cameraLocalWorldMatrix() {
+      const view = mat4LookAtLH(cam.position, cam.target, Vec3Up);
+      const m = _localMat;
+      m[0] = view[0];
+      m[1] = view[4];
+      m[2] = view[8];
+      m[3] = 0;
+      m[4] = view[1];
+      m[5] = view[5];
+      m[6] = view[9];
+      m[7] = 0;
+      m[8] = view[2];
+      m[9] = view[6];
+      m[10] = view[10];
+      m[11] = 0;
+      m[12] = cam.position.x;
+      m[13] = cam.position.y;
+      m[14] = cam.position.z;
+      m[15] = 1;
+      return _localMat;
+    }
+    const wm = createWorldMatrixState(cameraLocalWorldMatrix);
+    const onDirty = () => wm.markLocalDirty();
+    let _yaw = Math.atan2(dx, dz);
+    let _pitch = Math.atan2(dy, Math.sqrt(dx * dx + dz * dz));
+    const cam = {
+      position: new ObservableVec3(position.x, position.y, position.z, onDirty),
+      target: new ObservableVec3(target.x, target.y, target.z, onDirty),
+      fov: 0.8,
+      nearPlane: 1,
+      farPlane: 1e4,
+      speed: 2,
+      angularSensitivity: 2e3,
+      inertia: 0.9,
+      children: [],
+      // Matrix caches use the process-global allocator.
+      _viewCache: allocateMat4(),
+      _projCache: allocateMat4(),
+      _vpCache: allocateMat4(),
+      get parent() {
+        return wm.parent;
+      },
+      set parent(v) {
+        wm.parent = v;
+      },
+      get worldMatrix() {
+        return wm.getWorldMatrix();
+      },
+      get worldMatrixVersion() {
+        return wm.getWorldMatrixVersion();
+      }
+    };
+    Object.defineProperty(cam, "_yaw", {
+      get() {
+        return _yaw;
+      },
+      set(v) {
+        if (_yaw !== v) {
+          _yaw = v;
+          onDirty();
+        }
+      },
+      configurable: true,
+      enumerable: true
+    });
+    Object.defineProperty(cam, "_pitch", {
+      get() {
+        return _pitch;
+      },
+      set(v) {
+        if (_pitch !== v) {
+          _pitch = v;
+          onDirty();
+        }
+      },
+      configurable: true,
+      enumerable: true
+    });
+    attachWorldMatrixState(cam, wm);
+    return cam;
+  }
+  var init_free_camera = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/camera/free-camera.ts"() {
+      "use strict";
+      init_mat4_look_at_lh();
+      init_vec3_up();
+      init_world_matrix_state();
+      init_observable_vec3();
+      init_matrix_allocator();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/texture/texture-2d.ts
+  function loadTexture2D(engine, url, opts = {}) {
+    const device = engine._device;
+    if (!_tex2dCache) {
+      _tex2dCache = /* @__PURE__ */ new WeakMap();
+    }
+    let dc = _tex2dCache.get(device);
+    if (!dc) {
+      dc = /* @__PURE__ */ new Map();
+      _tex2dCache.set(device, dc);
+    }
+    const key = `${url}\0${opts.mipMaps ?? true}\0${opts.addressModeU ?? "repeat"}\0${opts.addressModeV ?? "repeat"}\0${opts.minFilter ?? "linear"}\0${opts.magFilter ?? "linear"}\0${opts.invertY ?? true}\0${opts.srgb ?? false}\0${opts.premultiplyAlpha ?? false}`;
+    const hit = dc.get(key);
+    if (hit) {
+      return hit;
+    }
+    const map = dc;
+    const p = loadTexture2DImpl(engine, url, opts);
+    map.set(key, p);
+    p.catch(() => map.delete(key));
+    return p;
+  }
+  async function loadTexture2DImpl(engine, url, opts) {
+    const device = engine._device;
+    const mipMaps = opts.mipMaps ?? true;
+    const addressModeU = opts.addressModeU ?? "repeat";
+    const addressModeV = opts.addressModeV ?? "repeat";
+    const invertY = opts.invertY ?? true;
+    const srgb = opts.srgb ?? false;
+    const premultiplyAlpha = opts.premultiplyAlpha ?? false;
+    const format = srgb ? "rgba8unorm-srgb" : "rgba8unorm";
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const imageBitmap = await createImageBitmap(blob, {
+      premultiplyAlpha: premultiplyAlpha ? "premultiply" : "none",
+      colorSpaceConversion: "none"
+    });
+    const width = imageBitmap.width;
+    const height = imageBitmap.height;
+    const mipLevelCount = mipMaps ? Math.floor(Math.log2(Math.max(width, height))) + 1 : 1;
+    const texture = device.createTexture({
+      size: { width, height },
+      format,
+      mipLevelCount,
+      usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT
+    });
+    device.queue.copyExternalImageToTexture({ source: imageBitmap, flipY: invertY }, { texture, premultipliedAlpha: premultiplyAlpha }, { width, height });
+    imageBitmap.close();
+    if (mipMaps && mipLevelCount > 1) {
+      const { generateMipmaps: generateMipmaps2 } = await Promise.resolve().then(() => (init_generate_mipmaps(), generate_mipmaps_exports));
+      generateMipmaps2(engine, texture);
+    }
+    const minF = opts.minFilter ?? "linear";
+    const magF = opts.magFilter ?? "linear";
+    const mipF = mipMaps ? "linear" : "nearest";
+    const allLinear = minF === "linear" && magF === "linear" && mipF === "linear";
+    const sampler = getOrCreateSampler(engine, {
+      addressModeU,
+      addressModeV,
+      minFilter: minF,
+      magFilter: magF,
+      mipmapFilter: mipF,
+      maxAnisotropy: allLinear ? 4 : 1
+    });
+    const tex2d = { texture, view: texture.createView(), sampler, width, height };
+    engine._dlr?.u(tex2d, url, opts);
+    acquireTexture(tex2d);
+    return tex2d;
+  }
+  var _tex2dCache;
+  var init_texture_2d = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/texture/texture-2d.ts"() {
+      "use strict";
+      init_gpu_flags();
+      init_gpu_pool();
+      _tex2dCache = null;
+    }
+  });
+
+  // vite-raw:E:\dev\babylon\DawnTest\Babylon-Lite\packages\babylon-lite\shaders\scene-uniforms.wgsl
+  var scene_uniforms_default;
+  var init_scene_uniforms = __esm({
+    "vite-raw:E:\\dev\\babylon\\DawnTest\\Babylon-Lite\\packages\\babylon-lite\\shaders\\scene-uniforms.wgsl"() {
+      scene_uniforms_default = "struct SceneUniforms {\r\nviewProjection: mat4x4<f32>,\r\nview: mat4x4<f32>,\r\nvEyePosition: vec4<f32>,\r\nenvRotationY: f32,\r\n_envPad0: f32, _envPad1: f32, _envPad2: f32,\r\nvSphericalL00: vec4<f32>,\r\nvSphericalL1_1: vec4<f32>,\r\nvSphericalL10: vec4<f32>,\r\nvSphericalL11: vec4<f32>,\r\nvSphericalL2_2: vec4<f32>,\r\nvSphericalL2_1: vec4<f32>,\r\nvSphericalL20: vec4<f32>,\r\nvSphericalL21: vec4<f32>,\r\nvSphericalL22: vec4<f32>,\r\nvImageInfos: vec4<f32>, // exposureLinear, contrast, lodGenerationScale, toneMappingEnabled\r\nvFogInfos: vec4<f32>,\r\nvFogColor: vec4<f32>,\r\nclipPlane: vec4<f32>,\r\n}\r\n@group(0) @binding(0) var<uniform> scene: SceneUniforms;\r\n";
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms.ts
+  var SCENE_UBO_WGSL;
+  var init_scene_uniforms2 = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/shader/scene-uniforms.ts"() {
+      "use strict";
+      init_scene_uniforms();
+      SCENE_UBO_WGSL = scene_uniforms_default;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/shared/sprite-atlas.ts
+  function createGridSpriteAtlas(texture, options) {
+    const cellW = options.cellWidthPx;
+    const cellH = options.cellHeightPx;
+    const margin = options.marginPx ?? 0;
+    const spacing = options.spacingPx ?? 0;
+    const cols = options.columns ?? Math.max(1, Math.floor((texture.width - margin * 2 + spacing) / (cellW + spacing)));
+    const rows = options.rows ?? Math.max(1, Math.floor((texture.height - margin * 2 + spacing) / (cellH + spacing)));
+    const pivot = options.pivot ?? [0.5, 0.5];
+    const tw = texture.width;
+    const th = texture.height;
+    const frames = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = margin + c * (cellW + spacing);
+        const y = margin + r * (cellH + spacing);
+        frames.push({
+          uvMin: [x / tw, y / th],
+          uvMax: [(x + cellW) / tw, (y + cellH) / th],
+          sourceSizePx: [cellW, cellH],
+          pivot: [pivot[0], pivot[1]]
+        });
+      }
+    }
+    return {
+      texture,
+      textureSizePx: [tw, th],
+      frames,
+      premultipliedAlpha: options.premultipliedAlpha ?? false
+    };
+  }
+  async function loadSpriteAtlas(engine, textureUrl, options = {}) {
+    if (options.metadataUrl !== void 0) {
+      throw new Error("loadSpriteAtlas: metadataUrl is not implemented in PR 1.");
+    }
+    if (!options.gridSize) {
+      throw new Error("loadSpriteAtlas: options.gridSize is required in PR 1.");
+    }
+    const texOpts = {
+      // Sprite UVs are top-down (origin at image top-left); do not flip.
+      invertY: false,
+      // Atlas frames typically tile cleanly; use clamp to avoid bleeding from neighbouring cells at edges.
+      addressModeU: "clamp-to-edge",
+      addressModeV: "clamp-to-edge",
+      // Sprites usually look best with bilinear filtering and no mip chain — sharp pixel art still works in nearest.
+      mipMaps: false,
+      minFilter: options.sampling === "nearest" ? "nearest" : "linear",
+      magFilter: options.sampling === "nearest" ? "nearest" : "linear",
+      // Premultiply at decode if requested. Pair with `premultipliedAlpha: true` for
+      // a mathematically honest premultiplied pipeline.
+      premultiplyAlpha: options.premultiplyOnLoad ?? false,
+      ...options.textureOptions
+    };
+    const texture = await loadTexture2D(engine, textureUrl, texOpts);
+    return createGridSpriteAtlas(texture, {
+      cellWidthPx: options.gridSize[0],
+      cellHeightPx: options.gridSize[1],
+      // Default `false` — matches the straight RGBA bits the PNG decoder produces.
+      // Callers wanting premultiplied blending should pass `premultiplyOnLoad: true`
+      // *and* `premultipliedAlpha: true` together so storage and blend factors agree.
+      premultipliedAlpha: options.premultipliedAlpha ?? false
+    });
+  }
+  function resolveSpriteFrame(atlas, frame) {
+    if (frame < 0 || frame >= atlas.frames.length) {
+      throw new Error(`resolveSpriteFrame: index ${frame} out of range [0, ${atlas.frames.length})`);
+    }
+    return frame;
+  }
+  var init_sprite_atlas = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/sprite/shared/sprite-atlas.ts"() {
+      "use strict";
+      init_texture_2d();
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/blend-descriptors.ts
+  var _ALPHA_BLEND_STATE;
+  var init_blend_descriptors = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/sprite/blend-descriptors.ts"() {
+      "use strict";
+      _ALPHA_BLEND_STATE = {
+        color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+        alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/sprite-fx-hook.ts
+  function _getBillboardFxHook() {
+    return _billboardFxHook;
+  }
+  var _billboardFxHook;
+  var init_sprite_fx_hook = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/sprite/sprite-fx-hook.ts"() {
+      "use strict";
+      _billboardFxHook = null;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-blend.ts
+  var billboardBlendAlpha;
+  var init_billboard_blend = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-blend.ts"() {
+      "use strict";
+      init_blend_descriptors();
+      billboardBlendAlpha = {
+        _key: "alpha",
+        _descriptor: _ALPHA_BLEND_STATE,
+        _depthMode: "transparent"
+      };
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-sprite.ts
+  function setBillboardCount(system, count) {
+    system.count = count;
+  }
+  function resolveAlphaCutoff(opts, depthMode) {
+    const cutoff = opts.alphaCutoff ?? (depthMode === "cutout" ? 0.5 : 0);
+    if (!Number.isFinite(cutoff)) {
+      throw new Error("BillboardSpriteSystem: alphaCutoff must be a finite number.");
+    }
+    return cutoff;
+  }
+  function resolveOpacity(opts) {
+    const opacity = opts.opacity ?? 1;
+    if (!Number.isFinite(opacity)) {
+      throw new Error("BillboardSpriteSystem: opacity must be a finite number.");
+    }
+    return opacity;
+  }
+  function createFacingBillboardSystem(atlas, opts = {}) {
+    return createBillboardSystem(atlas, "facing", [0, 0, 0], opts);
+  }
+  function createBillboardSystem(atlas, orientation, axis, opts) {
+    const blendMode = opts.blendMode ?? billboardBlendAlpha;
+    const depthMode = blendMode._depthMode;
+    const capacity = Math.max(1, opts.capacity ?? DEFAULT_CAPACITY);
+    const instanceData = new F32(capacity * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE);
+    const system = {
+      _entityType: "billboard-sprite-system",
+      atlas,
+      blendMode,
+      alphaCutoff: resolveAlphaCutoff(opts, depthMode),
+      opacity: resolveOpacity(opts),
+      visible: opts.visible ?? true,
+      order: opts.order ?? (depthMode === "transparent" ? 200 : 100),
+      count: 0,
+      _orientation: orientation,
+      _depthMode: depthMode,
+      _axis: axis,
+      _capacity: capacity,
+      _instanceFloatsPerSprite: BILLBOARD_INSTANCE_FLOATS_PER_SPRITE,
+      _instanceStrideBytes: BILLBOARD_INSTANCE_STRIDE_BYTES,
+      _instanceData: instanceData,
+      _savedSize: new F32(capacity * BILLBOARD_SAVED_SIZE_FLOATS_PER_SPRITE),
+      _version: 0,
+      _dirtyMin: 0,
+      _dirtyMax: 0
+    };
+    _getBillboardFxHook()?.initSystem(system, opts);
+    return system;
+  }
+  function growCapacity(system, minCapacity) {
+    let capacity = system._capacity;
+    while (capacity < minCapacity) {
+      capacity *= 2;
+    }
+    const next = new F32(capacity * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE);
+    next.set(system._instanceData);
+    system._instanceData = next;
+    const nextSavedSize = new F32(capacity * BILLBOARD_SAVED_SIZE_FLOATS_PER_SPRITE);
+    nextSavedSize.set(system._savedSize);
+    system._savedSize = nextSavedSize;
+    system._capacity = capacity;
+  }
+  function writeInstance(system, slotIndex, props, prev) {
+    const data = system._instanceData;
+    const base = slotIndex * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE;
+    const savedBase = slotIndex * BILLBOARD_SAVED_SIZE_FLOATS_PER_SPRITE;
+    const isAdd = prev === null;
+    const frame = props.frame !== void 0 ? system.atlas.frames[resolveSpriteFrame(system.atlas, props.frame)] : null;
+    const posX = props.position ? props.position[0] : prev[0];
+    const posY = props.position ? props.position[1] : prev[1];
+    const posZ = props.position ? props.position[2] : prev[2];
+    let trueWidth;
+    let trueHeight;
+    if (props.sizeWorld) {
+      trueWidth = props.sizeWorld[0];
+      trueHeight = props.sizeWorld[1];
+    } else if (isAdd) {
+      trueWidth = 0;
+      trueHeight = 0;
+    } else {
+      trueWidth = system._savedSize[savedBase];
+      trueHeight = system._savedSize[savedBase + 1];
+    }
+    system._savedSize[savedBase] = trueWidth;
+    system._savedSize[savedBase + 1] = trueHeight;
+    let visible;
+    if (props.visible !== void 0) {
+      visible = props.visible;
+    } else if (isAdd) {
+      visible = true;
+    } else {
+      visible = prev[3] !== 0 || prev[4] !== 0;
+    }
+    let uvMinX;
+    let uvMinY;
+    let uvMaxX;
+    let uvMaxY;
+    if (frame) {
+      uvMinX = frame.uvMin[0];
+      uvMinY = frame.uvMin[1];
+      uvMaxX = frame.uvMax[0];
+      uvMaxY = frame.uvMax[1];
+    } else if (isAdd) {
+      uvMinX = 0;
+      uvMinY = 0;
+      uvMaxX = 1;
+      uvMaxY = 1;
+    } else {
+      uvMinX = prev[5];
+      uvMinY = prev[6];
+      uvMaxX = prev[7];
+      uvMaxY = prev[8];
+    }
+    const currentFlipX = uvMinX > uvMaxX;
+    const currentFlipY = uvMinY > uvMaxY;
+    const prevFlipX = !isAdd && prev[5] > prev[7];
+    const prevFlipY = !isAdd && prev[6] > prev[8];
+    const wantsFlipX = props.flipX !== void 0 ? props.flipX === true : prevFlipX;
+    const wantsFlipY = props.flipY !== void 0 ? props.flipY === true : prevFlipY;
+    if (currentFlipX !== wantsFlipX) {
+      const previousMinX = uvMinX;
+      uvMinX = uvMaxX;
+      uvMaxX = previousMinX;
+    }
+    if (currentFlipY !== wantsFlipY) {
+      const previousMinY = uvMinY;
+      uvMinY = uvMaxY;
+      uvMaxY = previousMinY;
+    }
+    const rotation = props.rotation ?? (prev ? prev[9] : 0);
+    const pivotX = props.pivot ? props.pivot[0] : prev ? prev[10] : frame?.pivot[0] ?? 0.5;
+    const pivotY = props.pivot ? props.pivot[1] : prev ? prev[11] : frame?.pivot[1] ?? 0.5;
+    data[base + 0] = posX;
+    data[base + 1] = posY;
+    data[base + 2] = posZ;
+    data[base + 3] = visible ? trueWidth : 0;
+    data[base + 4] = visible ? trueHeight : 0;
+    data[base + 5] = uvMinX;
+    data[base + 6] = uvMinY;
+    data[base + 7] = uvMaxX;
+    data[base + 8] = uvMaxY;
+    data[base + 9] = rotation;
+    data[base + 10] = pivotX;
+    data[base + 11] = pivotY;
+    if (props.color) {
+      data[base + 12] = props.color[0];
+      data[base + 13] = props.color[1];
+      data[base + 14] = props.color[2];
+      data[base + 15] = props.color[3];
+    } else if (isAdd) {
+      data[base + 12] = 1;
+      data[base + 13] = 1;
+      data[base + 14] = 1;
+      data[base + 15] = 1;
+    }
+  }
+  function markDirty(system, dirtyMin, dirtyMax) {
+    if (system._dirtyMin >= system._dirtyMax) {
+      system._dirtyMin = dirtyMin;
+      system._dirtyMax = dirtyMax;
+    } else {
+      if (dirtyMin < system._dirtyMin) {
+        system._dirtyMin = dirtyMin;
+      }
+      if (dirtyMax > system._dirtyMax) {
+        system._dirtyMax = dirtyMax;
+      }
+    }
+    system._version = system._version + 1 | 0;
+  }
+  function addBillboardSpriteIndex(system, props) {
+    if (props.position === void 0) {
+      throw new Error("addBillboardSpriteIndex: props.position is required.");
+    }
+    if (props.sizeWorld === void 0) {
+      throw new Error("addBillboardSpriteIndex: props.sizeWorld is required.");
+    }
+    const index = system.count;
+    if (index >= system._capacity) {
+      growCapacity(system, index + 1);
+    }
+    writeInstance(system, index, props, null);
+    setBillboardCount(system, system.count + 1);
+    markDirty(system, index, index + 1);
+    return index;
+  }
+  var BILLBOARD_INSTANCE_FLOATS_PER_SPRITE, BILLBOARD_INSTANCE_STRIDE_BYTES, BILLBOARD_SAVED_SIZE_FLOATS_PER_SPRITE, DEFAULT_CAPACITY;
+  var init_billboard_sprite = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-sprite.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_sprite_atlas();
+      init_billboard_blend();
+      init_sprite_fx_hook();
+      BILLBOARD_INSTANCE_FLOATS_PER_SPRITE = 16;
+      BILLBOARD_INSTANCE_STRIDE_BYTES = BILLBOARD_INSTANCE_FLOATS_PER_SPRITE * 4;
+      BILLBOARD_SAVED_SIZE_FLOATS_PER_SPRITE = 2;
+      DEFAULT_CAPACITY = 16;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-pipeline.ts
+  function getDepthModeEntry(depthMode) {
+    return DEPTH_MODE_TABLE[depthMode];
+  }
+  function makeBillboardBasisWgsl(orientation) {
+    switch (orientation) {
+      case "facing":
+        return `struct BillboardBasis {
+right: vec3<f32>,
+up: vec3<f32>,
+};
+fn getBillboardBasis(_anchor: vec3<f32>) -> BillboardBasis {
+let cameraRight = normalize(vec3<f32>(scene.view[0][0], scene.view[1][0], scene.view[2][0]));
+let cameraUp = normalize(vec3<f32>(scene.view[0][1], scene.view[1][1], scene.view[2][1]));
+return BillboardBasis(cameraRight, -cameraUp);
+}`;
+      case "axis-locked":
+        return `struct BillboardBasis {
+right: vec3<f32>,
+up: vec3<f32>,
+};
+fn getBillboardBasis(_anchor: vec3<f32>) -> BillboardBasis {
+let lockAxis = normalize(billboards.axisAndCutoff.xyz);
+let cameraRight = normalize(vec3<f32>(scene.view[0][0], scene.view[1][0], scene.view[2][0]));
+let projectedRight = cameraRight - lockAxis * dot(cameraRight, lockAxis);
+let projectedRightLen = length(projectedRight);
+let safeProjectedRightLen = max(projectedRightLen, 1e-4);
+let fallbackSeed = select(vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), abs(lockAxis.z) > 0.999);
+let fallbackRightRaw = cross(lockAxis, fallbackSeed);
+let fallbackRight = fallbackRightRaw / max(length(fallbackRightRaw), 1e-4);
+let right = select(fallbackRight, projectedRight / safeProjectedRightLen, projectedRightLen > 1e-4);
+return BillboardBasis(right, -lockAxis);
+}`;
+    }
+  }
+  function makeBillboardFragmentWgsl(depthMode) {
+    if (depthMode === "cutout") {
+      return `@fragment
+fn fs(in: VOut) -> @location(0) vec4<f32> {
+let sampleColor = textureSample(atlasTex, atlasSamp, in.uv);
+if (sampleColor.a < billboards.axisAndCutoff.w) {
+discard;
+}
+return sampleColor * in.tint * billboards.opacityMul;
+}`;
+    }
+    return `@fragment
+fn fs(in: VOut) -> @location(0) vec4<f32> {
+let sampleColor = textureSample(atlasTex, atlasSamp, in.uv);
+return sampleColor * in.tint * billboards.opacityMul;
+}`;
+  }
+  function makeBillboardWgsl(orientation, depthMode) {
+    return `${SCENE_UBO_WGSL}
+struct BillboardSystem {
+opacityMul: vec4<f32>,
+axisAndCutoff: vec4<f32>,
+};
+@group(1) @binding(0) var<uniform> billboards: BillboardSystem;
+@group(1) @binding(1) var atlasTex: texture_2d<f32>;
+@group(1) @binding(2) var atlasSamp: sampler;
+${makeBillboardBasisWgsl(orientation)}
+struct VIn {
+@builtin(vertex_index) vid: u32,
+@location(0) iPos: vec3<f32>,
+@location(1) iSize: vec2<f32>,
+@location(2) iUvMin: vec2<f32>,
+@location(3) iUvMax: vec2<f32>,
+@location(4) iRot: f32,
+@location(5) iPivot: vec2<f32>,
+@location(6) iColor: vec4<f32>,
+};
+struct VOut {
+@builtin(position) pos: vec4<f32>,
+@location(0) uv: vec2<f32>,
+@location(1) tint: vec4<f32>,
+};
+@vertex
+fn vs(in: VIn) -> VOut {
+let corner = vec2<f32>(select(0.0, 1.0, in.vid == 1u || in.vid == 2u), select(0.0, 1.0, in.vid >= 2u));
+let local = (corner - in.iPivot) * in.iSize;
+let cosRot = cos(in.iRot);
+let sinRot = sin(in.iRot);
+let rotated = vec2<f32>(local.x * cosRot - local.y * sinRot, local.x * sinRot + local.y * cosRot);
+let basis = getBillboardBasis(in.iPos);
+let worldPos = in.iPos + basis.right * rotated.x + basis.up * rotated.y;
+var out: VOut;
+out.pos = scene.viewProjection * vec4<f32>(worldPos, 1.0);
+out.uv = mix(in.iUvMin, in.iUvMax, corner);
+out.tint = in.iColor;
+return out;
+}
+${makeBillboardFragmentWgsl(depthMode)}`;
+  }
+  function createBillboardPipelineCache() {
+    return {
+      _devices: /* @__PURE__ */ new WeakMap()
+    };
+  }
+  function resetBillboardPipelineCache(cache) {
+    cache._devices = /* @__PURE__ */ new WeakMap();
+  }
+  function getOrCreateBillboardPipeline(engine, cache, format, sampleCount, system, depthStencilFormat, sceneBindGroupLayout) {
+    const deviceCache = getBillboardPipelineDeviceCache(engine, cache);
+    const depthEntry = getDepthModeEntry(system._depthMode);
+    const customKey = _getBillboardFxHook()?.pipelineKeyPart(system) ?? "";
+    const key = `${format}:${sampleCount}:${system._orientation}:${system.blendMode._key}:${depthEntry.index}:${depthStencilFormat}:${customKey}`;
+    const cached = deviceCache._pipelines.get(key);
+    if (cached) {
+      return cached;
+    }
+    const pipeline = buildBillboardPipeline(engine, deviceCache, format, sampleCount, system, depthStencilFormat, sceneBindGroupLayout);
+    deviceCache._pipelines.set(key, pipeline);
+    return pipeline;
+  }
+  function createBillboardInstanceBuffer(device, system, label) {
+    return device.createBuffer({
+      label,
+      size: system._capacity * BILLBOARD_INSTANCE_STRIDE_BYTES,
+      usage: BU.VERTEX | BU.COPY_DST
+    });
+  }
+  function createBillboardInstanceSortScratch() {
+    return {
+      _capacity: 0,
+      _sortedInstanceData: new F32(0),
+      _sortIndices: new U32(0),
+      _sortDepths: new F32(0)
+    };
+  }
+  function uploadSortedBillboardInstances(device, system, instanceBuffer, scratch, cameraViewMatrix, foX = 0, foY = 0, foZ = 0) {
+    const count = system.count;
+    if (count === 0) {
+      system._dirtyMin = 0;
+      system._dirtyMax = 0;
+      return;
+    }
+    ensureBillboardInstanceSortScratch(scratch, count);
+    const sourceData = system._instanceData;
+    const sortedData = scratch._sortedInstanceData;
+    const indices = scratch._sortIndices;
+    const depths = scratch._sortDepths;
+    for (let index = 0; index < count; index++) {
+      const base = index * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE;
+      const anchorX = sourceData[base] - foX;
+      const anchorY = sourceData[base + 1] - foY;
+      const anchorZ = sourceData[base + 2] - foZ;
+      indices[index] = index;
+      depths[index] = cameraViewMatrix[2] * anchorX + cameraViewMatrix[6] * anchorY + cameraViewMatrix[10] * anchorZ + cameraViewMatrix[14];
+    }
+    indices.subarray(0, count).sort((left, right) => depths[right] - depths[left] || left - right);
+    for (let outIndex = 0; outIndex < count; outIndex++) {
+      const sourceBase = indices[outIndex] * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE;
+      const destBase = outIndex * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE;
+      sortedData[destBase] = sourceData[sourceBase] - foX;
+      sortedData[destBase + 1] = sourceData[sourceBase + 1] - foY;
+      sortedData[destBase + 2] = sourceData[sourceBase + 2] - foZ;
+      for (let field = 3; field < BILLBOARD_INSTANCE_FLOATS_PER_SPRITE; field++) {
+        sortedData[destBase + field] = sourceData[sourceBase + field];
+      }
+    }
+    device.queue.writeBuffer(instanceBuffer, 0, sortedData.buffer, sortedData.byteOffset, count * BILLBOARD_INSTANCE_STRIDE_BYTES);
+    system._dirtyMin = 0;
+    system._dirtyMax = 0;
+  }
+  function ensureBillboardInstanceBuffer(device, system, currentBuffer, currentCapacity, label) {
+    if (currentCapacity >= system._capacity) {
+      return { buffer: currentBuffer, capacity: currentCapacity, reallocated: false };
+    }
+    currentBuffer.destroy();
+    return { buffer: createBillboardInstanceBuffer(device, system, label), capacity: system._capacity, reallocated: true };
+  }
+  function uploadBillboardInstances(device, system, instanceBuffer, uploadedVersion, foX = 0, foY = 0, foZ = 0, foScratch = null) {
+    if (uploadedVersion === system._version) {
+      return uploadedVersion;
+    }
+    if (system.count === 0) {
+      system._dirtyMin = 0;
+      system._dirtyMax = 0;
+      return system._version;
+    }
+    if ((foX !== 0 || foY !== 0 || foZ !== 0) && foScratch) {
+      const count = system.count;
+      ensureBillboardInstanceSortScratch(foScratch, count);
+      const sourceData = system._instanceData;
+      const dest = foScratch._sortedInstanceData;
+      for (let index = 0; index < count; index++) {
+        const base = index * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE;
+        dest[base] = sourceData[base] - foX;
+        dest[base + 1] = sourceData[base + 1] - foY;
+        dest[base + 2] = sourceData[base + 2] - foZ;
+        for (let field = 3; field < BILLBOARD_INSTANCE_FLOATS_PER_SPRITE; field++) {
+          dest[base + field] = sourceData[base + field];
+        }
+      }
+      device.queue.writeBuffer(instanceBuffer, 0, dest.buffer, dest.byteOffset, count * BILLBOARD_INSTANCE_STRIDE_BYTES);
+      system._dirtyMin = 0;
+      system._dirtyMax = 0;
+      return system._version;
+    }
+    let lowIndex;
+    let highIndex;
+    if (uploadedVersion === -1) {
+      lowIndex = 0;
+      highIndex = system.count;
+    } else {
+      lowIndex = system._dirtyMin;
+      highIndex = Math.min(system._dirtyMax, system.count);
+    }
+    if (highIndex > lowIndex) {
+      const offsetBytes = lowIndex * BILLBOARD_INSTANCE_STRIDE_BYTES;
+      const byteLength = (highIndex - lowIndex) * BILLBOARD_INSTANCE_STRIDE_BYTES;
+      device.queue.writeBuffer(instanceBuffer, offsetBytes, system._instanceData.buffer, system._instanceData.byteOffset + offsetBytes, byteLength);
+    }
+    system._dirtyMin = 0;
+    system._dirtyMax = 0;
+    return system._version;
+  }
+  function ensureBillboardInstanceSortScratch(scratch, count) {
+    if (scratch._capacity >= count) {
+      return;
+    }
+    scratch._capacity = count;
+    scratch._sortedInstanceData = new F32(count * BILLBOARD_INSTANCE_FLOATS_PER_SPRITE);
+    scratch._sortIndices = new U32(count);
+    scratch._sortDepths = new F32(count);
+  }
+  function buildBillboardSystemUbo(system, ubo) {
+    const opacity = system.opacity;
+    if (system.blendMode._premultipliedOpacity) {
+      ubo[0] = opacity;
+      ubo[1] = opacity;
+      ubo[2] = opacity;
+      ubo[3] = opacity;
+    } else {
+      ubo[0] = 1;
+      ubo[1] = 1;
+      ubo[2] = 1;
+      ubo[3] = opacity;
+    }
+    ubo[4] = system._axis[0];
+    ubo[5] = system._axis[1];
+    ubo[6] = system._axis[2];
+    ubo[7] = system.alphaCutoff;
+  }
+  function writeBillboardSystemUboIfDirty(device, uniformBuffer, scratchUbo, lastUbo, forceWrite) {
+    let dirty = forceWrite;
+    if (!dirty) {
+      for (let index = 0; index < BILLBOARD_SYSTEM_UBO_FLOATS; index++) {
+        if (lastUbo[index] !== scratchUbo[index]) {
+          dirty = true;
+          break;
+        }
+      }
+    }
+    if (dirty) {
+      device.queue.writeBuffer(uniformBuffer, 0, scratchUbo.buffer, scratchUbo.byteOffset, BILLBOARD_SYSTEM_UBO_BYTES);
+      lastUbo.set(scratchUbo);
+    }
+  }
+  function createBillboardSystemBindGroup(engine, pipeline, system, uniformBuffer, fx) {
+    const texture = system.atlas.texture;
+    const entries = [
+      { binding: 0, resource: { buffer: uniformBuffer } },
+      { binding: 1, resource: texture.view },
+      { binding: 2, resource: texture.sampler }
+    ];
+    if (fx) {
+      for (const entry of _getBillboardFxHook().bindEntries(fx, 3)) {
+        entries.push(entry);
+      }
+    }
+    return engine._device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(1),
+      entries
+    });
+  }
+  function getBillboardPipelineDeviceCache(engine, cache) {
+    let deviceCache = cache._devices.get(engine._device);
+    if (!deviceCache) {
+      deviceCache = { _shaderModules: /* @__PURE__ */ new Map(), _pipelines: /* @__PURE__ */ new Map() };
+      cache._devices.set(engine._device, deviceCache);
+    }
+    return deviceCache;
+  }
+  function getShaderModule(engine, cache, system) {
+    const orientation = system._orientation;
+    const depthMode = system._depthMode;
+    const customModule = _getBillboardFxHook()?.shaderModule(engine, system);
+    if (customModule) {
+      return customModule;
+    }
+    const key = `${orientation}:${getDepthModeEntry(depthMode).index}`;
+    let module = cache._shaderModules.get(key);
+    if (!module) {
+      module = engine._device.createShaderModule({ code: makeBillboardWgsl(orientation, depthMode) });
+      cache._shaderModules.set(key, module);
+    }
+    return module;
+  }
+  function buildBillboardPipeline(engine, cache, format, sampleCount, system, depthStencilFormat, sceneBindGroupLayout) {
+    const device = engine._device;
+    const depthEntry = getDepthModeEntry(system._depthMode);
+    const shaderModule2 = getShaderModule(engine, cache, system);
+    const layoutEntries = [
+      { binding: 0, visibility: SS.VERTEX | SS.FRAGMENT, buffer: { type: "uniform" } },
+      { binding: 1, visibility: SS.FRAGMENT, texture: { sampleType: "float" } },
+      { binding: 2, visibility: SS.FRAGMENT, sampler: { type: "filtering" } }
+    ];
+    const extraLayoutEntries = _getBillboardFxHook()?.layoutEntries(system, 3);
+    if (extraLayoutEntries) {
+      for (const entry of extraLayoutEntries) {
+        layoutEntries.push(entry);
+      }
+    }
+    const billboardBindGroupLayout = device.createBindGroupLayout({ entries: layoutEntries });
+    return device.createRenderPipeline({
+      label: `${system._orientation}-billboard-sprite-pipeline`,
+      layout: device.createPipelineLayout({ bindGroupLayouts: [sceneBindGroupLayout, billboardBindGroupLayout] }),
+      vertex: {
+        module: shaderModule2,
+        entryPoint: "vs",
+        buffers: [
+          {
+            arrayStride: BILLBOARD_INSTANCE_STRIDE_BYTES,
+            stepMode: "instance",
+            attributes: [
+              { shaderLocation: 0, offset: BILLBOARD_POSITION_OFFSET_BYTES, format: "float32x3" },
+              { shaderLocation: 1, offset: BILLBOARD_SIZE_OFFSET_BYTES, format: "float32x2" },
+              { shaderLocation: 2, offset: BILLBOARD_UV_MIN_OFFSET_BYTES, format: "float32x2" },
+              { shaderLocation: 3, offset: BILLBOARD_UV_MAX_OFFSET_BYTES, format: "float32x2" },
+              { shaderLocation: 4, offset: BILLBOARD_ROTATION_OFFSET_BYTES, format: "float32" },
+              { shaderLocation: 5, offset: BILLBOARD_PIVOT_OFFSET_BYTES, format: "float32x2" },
+              { shaderLocation: 6, offset: BILLBOARD_COLOR_OFFSET_BYTES, format: "float32x4" }
+            ]
+          }
+        ]
+      },
+      fragment: {
+        module: shaderModule2,
+        entryPoint: "fs",
+        targets: [system.blendMode._descriptor ? { format, blend: system.blendMode._descriptor, writeMask: CW.ALL } : { format, writeMask: CW.ALL }]
+      },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: { format: depthStencilFormat, depthCompare: "greater-equal", depthWriteEnabled: depthEntry.writeEnabled },
+      multisample: { count: sampleCount }
+    });
+  }
+  var DEPTH_MODE_TABLE, BILLBOARD_POSITION_OFFSET_BYTES, BILLBOARD_SIZE_OFFSET_BYTES, BILLBOARD_UV_MIN_OFFSET_BYTES, BILLBOARD_UV_MAX_OFFSET_BYTES, BILLBOARD_ROTATION_OFFSET_BYTES, BILLBOARD_PIVOT_OFFSET_BYTES, BILLBOARD_COLOR_OFFSET_BYTES, BILLBOARD_SYSTEM_UBO_BYTES, BILLBOARD_SYSTEM_UBO_FLOATS, BILLBOARD_INDEX_DATA;
+  var init_billboard_pipeline = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-pipeline.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_scene_uniforms2();
+      init_sprite_fx_hook();
+      init_billboard_sprite();
+      DEPTH_MODE_TABLE = {
+        transparent: { index: 0, writeEnabled: false },
+        cutout: { index: 1, writeEnabled: true }
+      };
+      BILLBOARD_POSITION_OFFSET_BYTES = 0;
+      BILLBOARD_SIZE_OFFSET_BYTES = 12;
+      BILLBOARD_UV_MIN_OFFSET_BYTES = 20;
+      BILLBOARD_UV_MAX_OFFSET_BYTES = 28;
+      BILLBOARD_ROTATION_OFFSET_BYTES = 36;
+      BILLBOARD_PIVOT_OFFSET_BYTES = 40;
+      BILLBOARD_COLOR_OFFSET_BYTES = 48;
+      BILLBOARD_SYSTEM_UBO_BYTES = 32;
+      BILLBOARD_SYSTEM_UBO_FLOATS = BILLBOARD_SYSTEM_UBO_BYTES / 4;
+      BILLBOARD_INDEX_DATA = new U16([0, 1, 2, 0, 2, 3]);
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-renderable.ts
+  var billboard_renderable_exports = {};
+  __export(billboard_renderable_exports, {
+    buildBillboardRenderable: () => buildBillboardRenderable
+  });
+  function acquireSharedPipelineCache() {
+    _sharedPipelineCache ?? (_sharedPipelineCache = createBillboardPipelineCache());
+    _sharedPipelineCacheRefs++;
+    return _sharedPipelineCache;
+  }
+  function releaseSharedPipelineCache() {
+    if (_sharedPipelineCacheRefs === 0) {
+      return;
+    }
+    _sharedPipelineCacheRefs--;
+    if (_sharedPipelineCacheRefs === 0 && _sharedPipelineCache) {
+      resetBillboardPipelineCache(_sharedPipelineCache);
+      _sharedPipelineCache = null;
+    }
+  }
+  function buildBillboardRenderable(engine, system) {
+    const indexBuffer = createMappedBuffer(engine, BILLBOARD_INDEX_DATA, BU.INDEX);
+    const uniformBuffer = createEmptyUniformBuffer(engine, BILLBOARD_SYSTEM_UBO_BYTES, `${system._orientation}-billboard-system-ubo`);
+    const instanceBuffer = createBillboardInstanceBuffer(engine._device, system, `${system._orientation}-billboard-instances`);
+    const fx = _getBillboardFxHook()?.createLayerFx(engine, `${system._orientation}-billboard-fx-ubo`, system) ?? null;
+    const isTransparent = system._depthMode === "transparent";
+    const renderable = {
+      order: system.order,
+      isTransparent,
+      _direct: !isTransparent,
+      _engine: engine,
+      _system: system,
+      _indexBuffer: indexBuffer,
+      _uniformBuffer: uniformBuffer,
+      _instanceBuffer: instanceBuffer,
+      _instanceBufferCapacity: system._capacity,
+      _instanceSortScratch: createBillboardInstanceSortScratch(),
+      _pipelineCache: acquireSharedPipelineCache(),
+      _bindGroups: /* @__PURE__ */ new Map(),
+      _uploadedVersion: -1,
+      _uploadedCamera: null,
+      _uploadedCameraViewVersion: -1,
+      _uploadedSorted: false,
+      _centerVersion: -1,
+      _drawableCount: 0,
+      _uboUploaded: false,
+      _lastUbo: new F32(BILLBOARD_SYSTEM_UBO_BYTES / 4),
+      _scratchUbo: new F32(BILLBOARD_SYSTEM_UBO_BYTES / 4),
+      _fx: fx,
+      _disposed: false,
+      _worldCenter: [0, 0, 0],
+      bind(engine2, target) {
+        return bindSystem(renderable, engine2, target);
+      }
+    };
+    refreshBillboardWorldCenter(renderable);
+    return {
+      renderable,
+      dispose() {
+        disposeRenderable(renderable);
+      }
+    };
+  }
+  function bindSystem(renderable, engine, target) {
+    if (!target._depthStencilFormat) {
+      throw new Error("BillboardSpriteSystem requires a depth-stencil render target.");
+    }
+    const sampleCount = target._sampleCount === 1 ? 1 : 4;
+    const pipeline = getOrCreateBillboardPipeline(
+      engine,
+      renderable._pipelineCache,
+      target._colorFormat,
+      sampleCount,
+      renderable._system,
+      target._depthStencilFormat,
+      getSceneBindGroupLayout(engine)
+    );
+    let bindGroup = renderable._bindGroups.get(pipeline);
+    if (!bindGroup) {
+      bindGroup = createBillboardSystemBindGroup(engine, pipeline, renderable._system, renderable._uniformBuffer, renderable._fx);
+      renderable._bindGroups.set(pipeline, bindGroup);
+    }
+    return {
+      renderable,
+      pipeline,
+      update(context) {
+        uploadSystem(renderable, context);
+      },
+      draw(pass) {
+        return drawSystem(renderable, bindGroup, pass);
+      }
+    };
+  }
+  function uploadSystem(renderable, context) {
+    if (renderable._disposed) {
+      return;
+    }
+    refreshBillboardWorldCenter(renderable);
+    if (!renderable._system.visible || renderable._system.count === 0) {
+      if (renderable._system.count === 0) {
+        renderable._system._dirtyMin = 0;
+        renderable._system._dirtyMax = 0;
+        renderable._uploadedVersion = renderable._system._version;
+        renderable._uploadedSorted = false;
+      }
+      return;
+    }
+    if (renderable._fx) {
+      _getBillboardFxHook().updateFx(renderable._fx, renderable._system, renderable._engine._currentDelta);
+    }
+    const grown = ensureBillboardInstanceBuffer(
+      renderable._engine._device,
+      renderable._system,
+      renderable._instanceBuffer,
+      renderable._instanceBufferCapacity,
+      `${renderable._system._orientation}-billboard-instances`
+    );
+    if (grown.reallocated) {
+      renderable._instanceBuffer = grown.buffer;
+      renderable._instanceBufferCapacity = grown.capacity;
+      renderable._uploadedVersion = -1;
+      renderable._uploadedCamera = null;
+      renderable._uploadedCameraViewVersion = -1;
+      renderable._uploadedSorted = false;
+    }
+    const camera = context._camera;
+    const useFloatingOrigin = renderable._engine.useFloatingOrigin && camera != null;
+    let foX = 0;
+    let foY = 0;
+    let foZ = 0;
+    if (useFloatingOrigin) {
+      const wm = camera.worldMatrix;
+      foX = wm[12];
+      foY = wm[13];
+      foZ = wm[14];
+    }
+    if (renderable._system._depthMode === "transparent" && camera) {
+      const cameraViewMatrix = getViewMatrix(camera);
+      if (!renderable._uploadedSorted || renderable._uploadedVersion !== renderable._system._version || renderable._uploadedCamera !== camera || renderable._uploadedCameraViewVersion !== camera.worldMatrixVersion) {
+        uploadSortedBillboardInstances(
+          renderable._engine._device,
+          renderable._system,
+          renderable._instanceBuffer,
+          renderable._instanceSortScratch,
+          cameraViewMatrix,
+          foX,
+          foY,
+          foZ
+        );
+        renderable._uploadedVersion = renderable._system._version;
+        renderable._uploadedCamera = camera;
+        renderable._uploadedCameraViewVersion = camera.worldMatrixVersion;
+        renderable._uploadedSorted = true;
+      }
+    } else {
+      let uploadedVersion = renderable._uploadedSorted ? -1 : renderable._uploadedVersion;
+      if (useFloatingOrigin && (renderable._uploadedCamera !== camera || renderable._uploadedCameraViewVersion !== camera.worldMatrixVersion)) {
+        uploadedVersion = -1;
+      }
+      renderable._uploadedVersion = uploadBillboardInstances(
+        renderable._engine._device,
+        renderable._system,
+        renderable._instanceBuffer,
+        uploadedVersion,
+        foX,
+        foY,
+        foZ,
+        renderable._instanceSortScratch
+      );
+      if (useFloatingOrigin) {
+        renderable._uploadedCamera = camera;
+        renderable._uploadedCameraViewVersion = camera.worldMatrixVersion;
+      } else {
+        renderable._uploadedCamera = null;
+        renderable._uploadedCameraViewVersion = -1;
+      }
+      renderable._uploadedSorted = false;
+    }
+    buildBillboardSystemUbo(renderable._system, renderable._scratchUbo);
+    writeBillboardSystemUboIfDirty(renderable._engine._device, renderable._uniformBuffer, renderable._scratchUbo, renderable._lastUbo, !renderable._uboUploaded);
+    renderable._uboUploaded = true;
+  }
+  function refreshBillboardWorldCenter(renderable) {
+    const system = renderable._system;
+    if (renderable._centerVersion === system._version) {
+      return;
+    }
+    const center = renderable._worldCenter;
+    if (system.count === 0) {
+      center[0] = 0;
+      center[1] = 0;
+      center[2] = 0;
+      renderable._drawableCount = 0;
+      renderable._centerVersion = system._version;
+      return;
+    }
+    const data = system._instanceData;
+    const stride = system._instanceFloatsPerSprite;
+    let minX = Infinity;
+    let minY = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxZ = -Infinity;
+    let drawableCount = 0;
+    for (let index = 0; index < system.count; index++) {
+      const base = index * stride;
+      const width = data[base + 3];
+      const height = data[base + 4];
+      if (width === 0 || height === 0) {
+        continue;
+      }
+      const x = data[base];
+      const y = data[base + 1];
+      const z = data[base + 2];
+      if (x < minX) {
+        minX = x;
+      }
+      if (y < minY) {
+        minY = y;
+      }
+      if (z < minZ) {
+        minZ = z;
+      }
+      if (x > maxX) {
+        maxX = x;
+      }
+      if (y > maxY) {
+        maxY = y;
+      }
+      if (z > maxZ) {
+        maxZ = z;
+      }
+      drawableCount++;
+    }
+    if (drawableCount === 0) {
+      center[0] = 0;
+      center[1] = 0;
+      center[2] = 0;
+    } else {
+      center[0] = (minX + maxX) * 0.5;
+      center[1] = (minY + maxY) * 0.5;
+      center[2] = (minZ + maxZ) * 0.5;
+    }
+    renderable._drawableCount = drawableCount;
+    renderable._centerVersion = system._version;
+  }
+  function drawSystem(renderable, bindGroup, pass) {
+    if (renderable._disposed) {
+      return 0;
+    }
+    refreshBillboardWorldCenter(renderable);
+    if (!renderable._system.visible || renderable._system.count === 0 || renderable._drawableCount === 0) {
+      return 0;
+    }
+    pass.setBindGroup(1, bindGroup);
+    pass.setIndexBuffer(renderable._indexBuffer, "uint16");
+    pass.setVertexBuffer(0, renderable._instanceBuffer);
+    pass.drawIndexed(6, renderable._system.count, 0, 0, 0);
+    return 1;
+  }
+  function disposeRenderable(renderable) {
+    if (renderable._disposed) {
+      return;
+    }
+    renderable._disposed = true;
+    renderable._instanceBuffer.destroy();
+    renderable._uniformBuffer.destroy();
+    renderable._indexBuffer.destroy();
+    if (renderable._fx) {
+      _getBillboardFxHook().disposeFx(renderable._fx);
+    }
+    renderable._bindGroups.clear();
+    releaseSharedPipelineCache();
+  }
+  var _sharedPipelineCache, _sharedPipelineCacheRefs;
+  var init_billboard_renderable = __esm({
+    "../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-renderable.ts"() {
+      "use strict";
+      init_typed_arrays();
+      init_gpu_flags();
+      init_camera();
+      init_scene_helpers();
+      init_gpu_buffers();
+      init_sprite_fx_hook();
+      init_billboard_pipeline();
+      _sharedPipelineCache = null;
+      _sharedPipelineCacheRefs = 0;
+    }
+  });
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/index.ts
+  init_engine();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/scene/scene.ts
+  init_scene_core();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/index.ts
+  init_free_camera();
+  init_sprite_atlas();
+  init_billboard_sprite();
+
+  // ../../../Babylon-Lite/packages/babylon-lite/src/sprite/billboard-scene.ts
+  init_scene_core();
+  function addBillboardSystem(scene, system) {
+    addDeferredSceneRenderables(scene, async (engine) => {
+      const { buildBillboardRenderable: buildBillboardRenderable2 } = await Promise.resolve().then(() => (init_billboard_renderable(), billboard_renderable_exports));
+      const built = buildBillboardRenderable2(engine, system);
+      return { renderables: [built.renderable], dispose: built.dispose };
+    });
+  }
+  function addFacingBillboardSystem(scene, system) {
+    addBillboardSystem(scene, system);
+  }
+
+  // ../../../Babylon-Lite/lab/lite/src/_shared/sprite-atlas-image.ts
+  var ATLAS_WIDTH = 256;
+  var ATLAS_HEIGHT = 128;
+  var CELL = 32;
+  var _cached = null;
+  function getSpriteAtlasDataUrl() {
+    if (_cached) {
+      return _cached;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = ATLAS_WIDTH;
+    canvas.height = ATLAS_HEIGHT;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 8; c++) {
+        const idx = r * 8 + c;
+        drawCell(ctx, c * CELL, r * CELL, idx);
+      }
+    }
+    _cached = canvas.toDataURL("image/png");
+    return _cached;
+  }
+  function drawCell(ctx, x, y, idx) {
+    if (idx < 8) {
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(x, y, CELL, CELL);
+      const cx = x + CELL / 2;
+      const cy = y + CELL / 2;
+      const angle = idx * Math.PI / 4;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(14, -4);
+      ctx.lineTo(14, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    if (idx < 24) {
+      const i = idx - 8;
+      const bgHue = i * 360 / 16;
+      const fgHue = (bgHue + 180) % 360;
+      ctx.fillStyle = `hsl(${bgHue}, 60%, 30%)`;
+      ctx.fillRect(x, y, CELL, CELL);
+      ctx.fillStyle = `hsl(${fgHue}, 80%, 65%)`;
+      ctx.beginPath();
+      ctx.arc(x + CELL / 2, y + CELL / 2, 11, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    const digit = idx - 24;
+    ctx.fillStyle = "#0a4020";
+    ctx.fillRect(x, y, CELL, CELL);
+    ctx.fillStyle = "#cfe8d5";
+    for (let i = 0; i < digit; i++) {
+      const bx = x + 4 + i * 3;
+      ctx.fillRect(bx, y + 6, 2, 20);
+    }
+  }
+  var SPRITE_ATLAS_INFO = {
+    widthPx: ATLAS_WIDTH,
+    heightPx: ATLAS_HEIGHT,
+    cellWidthPx: CELL,
+    cellHeightPx: CELL,
+    columns: 8,
+    rows: 4
+  };
+
+  // ../../../Babylon-Lite/lab/lite/src/lite/scene55.ts
+  async function main() {
+    const initStart = performance.now();
+    const canvas = document.getElementById("renderCanvas");
+    const engine = await createEngine(canvas);
+    const scene = createSceneContext(engine);
+    scene.clearColor = { r: 0.1, g: 0.12, b: 0.16, a: 1 };
+    scene.camera = createFreeCamera({ x: 0, y: 0, z: -6 }, { x: 0, y: 0, z: 1.2 });
+    scene.camera.fov = 0.8;
+    scene.camera.nearPlane = 1;
+    scene.camera.farPlane = 100;
+    const atlas = await loadSpriteAtlas(engine, getSpriteAtlasDataUrl(), {
+      gridSize: [SPRITE_ATLAS_INFO.cellWidthPx, SPRITE_ATLAS_INFO.cellHeightPx],
+      sampling: "linear"
+    });
+    const billboards = createFacingBillboardSystem(atlas, { capacity: 3 });
+    addBillboardSpriteIndex(billboards, {
+      position: [-0.35, -0.2, 0],
+      sizeWorld: [2.7, 2.7],
+      frame: 18,
+      color: [1, 1, 1, 0.58]
+    });
+    addBillboardSpriteIndex(billboards, {
+      position: [0, 0, 1.2],
+      sizeWorld: [2.7, 2.7],
+      frame: 13,
+      color: [1, 1, 1, 0.58]
+    });
+    addBillboardSpriteIndex(billboards, {
+      position: [0.35, 0.2, 2.4],
+      sizeWorld: [2.7, 2.7],
+      frame: 8,
+      color: [1, 1, 1, 0.58]
+    });
+    addFacingBillboardSystem(scene, billboards);
+    await registerScene(scene);
+    await startEngine(engine);
+    canvas.dataset.drawCalls = String(engine.drawCallCount);
+    canvas.dataset.initMs = String(performance.now() - initStart);
+    canvas.dataset.ready = "true";
+  }
+  main().catch((err) => {
+    console.error(err);
+  });
+})();

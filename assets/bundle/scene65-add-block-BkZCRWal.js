@@ -1,0 +1,1 @@
+import{b as et}from"./scene65-_math-factory-DFVyS8gB.js";const ot=et("AddBlock",(t,o)=>`${t}+${o}`);export{ot as emitter};

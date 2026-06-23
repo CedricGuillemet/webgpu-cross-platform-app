@@ -1,0 +1,1 @@
+import{A as Da}from"./scene200.js";const tr={id:"_animations",async applyAsset(a,n,t){const[{parseAnimationData:i},{createAnimationGroups:o}]=await Promise.all([Da(()=>__import("./scene200-gltf-animation-DM24G60L.js"),[]),Da(()=>__import("./scene200-animation-group-DoB6BZlF.js"),[])]),s=i(t.ke,t.Ne,a,t.Ke,t.We,t.Xe);return s?{animationGroups:o(s)}:{};}};export{tr as default};

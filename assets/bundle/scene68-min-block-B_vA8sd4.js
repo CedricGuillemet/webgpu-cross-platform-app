@@ -1,0 +1,1 @@
+import{b as Xe}from"./scene68-_math-factory-DFVyS8gB.js";const Ue=Xe("MinBlock",(t,o)=>`min(${t},${o})`);export{Ue as emitter};

@@ -1,0 +1,1 @@
+import{u as at}from"./scene80-_math-factory-DFVyS8gB.js";const Ie=at("OneMinusBlock",t=>"1.0-"+t);export{Ie as emitter};

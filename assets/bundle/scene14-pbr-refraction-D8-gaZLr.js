@@ -1,0 +1,1 @@
+import{_ as sa}from"./scene14.js";async function Ke(s,r,e){(await sa(()=>__import("./scene14-pbr-transmission-ext-BHLZ0jWd.js"),[])).registerPbrTransmission(s,r,e);}export{Ke as registerPbrRefraction};

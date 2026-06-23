@@ -1,0 +1,1 @@
+const g={className:"DesaturateBlock",emit(e,t,c,m,$){const a=$.cast($.resolve(e,"color",c,m),"vec3f").expr;return{expr:`mix(${a},vec3<f32>((0.5*(min(min((${a}).x,(${a}).y),(${a}).z)+max(max((${a}).x,(${a}).y),(${a}).z)))),${$.cast($.resolve(e,"level",c,m),"f32").expr})`,type:"vec3f"};}};export{g as emitter};

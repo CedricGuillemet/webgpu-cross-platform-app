@@ -1,0 +1,1 @@
+function Z(n){for(const o of n.it.lt){const n=o;if(n!==null&&n!==void 0&&n.q&&n.Z&&1==o.q.rt.T.resolveToSwapchain)return o;}return null;}function nn(n,o){const t=n.t[n.t.length-1];if(!(t!==null&&t!==void 0&&t.it))return;const c=Z(t),r=Z(o);!c||!r||(r.q.clr=0,o.Qe.unshift(()=>{const o=c.Z.view;n.msaaSamples>1&&o&&(r.Z.view=o);}));}export{nn as configureSwapchainOverlayScene};

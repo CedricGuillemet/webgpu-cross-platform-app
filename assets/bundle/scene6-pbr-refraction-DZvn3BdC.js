@@ -1,0 +1,1 @@
+import{A as ss}from"./scene6.js";async function ir(s,r,e){(await ss(()=>__import("./scene6-pbr-transmission-ext-ffzcsUIp.js"),[])).registerPbrTransmission(s,r,e);}export{ir as registerPbrRefraction};

@@ -1,0 +1,1 @@
+import{u as Rt}from"./scene85-_math-factory-DFVyS8gB.js";const ie=Rt("NormalizeBlock",o=>`normalize(${o})`);export{ie as emitter};

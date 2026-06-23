@@ -1,0 +1,1 @@
+const sa={className:"NodeMaterialDebugBlock",emit(e,t,r,a,o){var _e$inputs$get;return(_e$inputs$get=e.inputs.get("debug"))!==null&&_e$inputs$get!==void 0&&_e$inputs$get.source?o.resolve(e,"debug",r,a):{expr:"0.0",type:"f32"};}};export{sa as emitter};

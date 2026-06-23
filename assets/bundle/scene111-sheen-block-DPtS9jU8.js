@@ -1,0 +1,1 @@
+const Ma={className:"SheenBlock",stage:"fragment",emit(e,t,r,a,c){return a.usesSheen=1,{expr:"vec3<f32>(0.0)",type:"vec3f"};}};export{Ma as emitter};

@@ -1,0 +1,1 @@
+const Ee={className:"ElbowBlock",emit(t,e,o,r,s){return s.resolve(t,"input",o,r);}};export{Ee as emitter};

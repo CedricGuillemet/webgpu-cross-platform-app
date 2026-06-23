@@ -1,0 +1,1 @@
+import{_ as na}from"./scene1.js";const Qe={id:"_animations",async applyAsset(a,n,t){const[{parseAnimationData:i},{createAnimationGroups:o}]=await Promise.all([na(()=>__import("./scene1-gltf-animation-Dko6Z8DW.js"),[]),na(()=>__import("./scene1-animation-group-CmUCRGrC.js"),[])]),s=i(t.Ke,t.Ne,a,t.Qe,t.Je,t.ln);return s?{animationGroups:o(s)}:{};}};export{Qe as default};

@@ -1,0 +1,1 @@
+import{b as tl}from"./scene37.js";function Ke(o,n){je(o,n),tl();}function je(o,n){o.visible=n;const s=o.children;for(let o=0;o<s.length;o++)je(s[o],n);}export{Ke as s};

@@ -1,0 +1,1 @@
+import{au as t,ag as a}from"./bjs-scene171.js";class r extends t{constructor(){super(...arguments),this.initPriority=-1,this.type="SceneReady";}_executeEvent(e,s){return this._execute(e),!0;}_preparePendingTasks(e){}_cancelPendingTasks(e){}getClassName(){return"FlowGraphSceneReadyEventBlock";}}a("FlowGraphSceneReadyEventBlock",r);export{r as FlowGraphSceneReadyEventBlock};

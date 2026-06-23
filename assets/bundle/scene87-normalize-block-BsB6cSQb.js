@@ -1,0 +1,1 @@
+import{u as et}from"./scene87-_math-factory-DFVyS8gB.js";const De=et("NormalizeBlock",o=>`normalize(${o})`);export{De as emitter};

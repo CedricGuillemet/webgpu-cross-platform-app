@@ -1,0 +1,1 @@
+const qt={xy:{swizzle:"",type:"vec2f"},x:{swizzle:".x",type:"f32"},y:{swizzle:".y",type:"f32"}},Ht={className:"ScreenSizeBlock",stage:"fragment",emit(e,t,r,o){o.usesScreenSize=1;const s=qt[t];if(!s)throw Error(`NodeMaterial:ScreenSizeBlock has no output "${t}"`);return{expr:"_NME_SCREEN_SIZE_"+s.swizzle,type:s.type};}};export{Ht as emitter};

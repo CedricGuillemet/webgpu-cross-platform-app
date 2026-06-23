@@ -1,0 +1,1 @@
+import{b as aa}from"./scene73-_math-factory-DFVyS8gB.js";const sr=aa("MaxBlock",(t,a)=>`max(${t},${a})`);export{sr as emitter};

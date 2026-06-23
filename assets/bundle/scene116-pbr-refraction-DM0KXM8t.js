@@ -1,0 +1,1 @@
+import{A as ar}from"./scene116.js";async function ei(r,s,e){(await ar(()=>__import("./scene116-pbr-transmission-ext-CUxuLrOA.js"),[])).registerPbrTransmission(r,s,e);}export{ei as registerPbrRefraction};

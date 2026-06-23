@@ -1,0 +1,1 @@
+import{u as La}from"./scene141-_math-factory-DFVyS8gB.js";const Oa=La("OppositeBlock",t=>"1.0-"+t);export{Oa as emitter};

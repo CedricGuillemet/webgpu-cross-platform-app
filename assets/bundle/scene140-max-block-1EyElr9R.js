@@ -1,0 +1,1 @@
+import{b as et}from"./scene140-_math-factory-DFVyS8gB.js";const He=et("MaxBlock",(t,a)=>`max(${t},${a})`);export{He as emitter};

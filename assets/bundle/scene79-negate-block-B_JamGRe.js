@@ -1,0 +1,1 @@
+import{u as Lt}from"./scene79-_math-factory-DFVyS8gB.js";const ii=Lt("NegateBlock",e=>"-"+e,void 0,"value");export{ii as emitter};

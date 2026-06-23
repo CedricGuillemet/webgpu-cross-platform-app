@@ -1,0 +1,1 @@
+import{b as Na}from"./scene141-_math-factory-DFVyS8gB.js";const za=Na("MultiplyBlock",(t,o)=>`${t}*${o}`);export{za as emitter};

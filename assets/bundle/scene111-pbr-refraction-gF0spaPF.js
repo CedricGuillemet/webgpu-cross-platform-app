@@ -1,0 +1,1 @@
+import{A as fa}from"./scene111.js";async function Ma(s,r,e){(await fa(()=>__import("./scene111-pbr-transmission-ext-C5j5qo4n.js"),[])).registerPbrTransmission(s,r,e);}export{Ma as registerPbrRefraction};

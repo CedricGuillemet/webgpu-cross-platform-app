@@ -1,0 +1,1 @@
+import{b as He}from"./scene86-_math-factory-DFVyS8gB.js";const ht=He("MaxBlock",(t,a)=>`max(${t},${a})`);export{ht as emitter};

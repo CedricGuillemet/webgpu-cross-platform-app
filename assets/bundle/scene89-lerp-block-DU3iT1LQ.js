@@ -1,0 +1,1 @@
+import{w as to}from"./scene89-_math-factory-DFVyS8gB.js";const ye={className:"LerpBlock",emit(t,e,r,s,a){const m=a.resolve(t,"left",r,s),o=a.resolve(t,"right",r,s),c=a.resolve(t,"gradient",r,s),i=to(m.type,o.type);return{expr:`mix(${a.cast(m,i).expr},${a.cast(o,i).expr},${a.cast(c,i).expr})`,type:i};}};export{ye as emitter};

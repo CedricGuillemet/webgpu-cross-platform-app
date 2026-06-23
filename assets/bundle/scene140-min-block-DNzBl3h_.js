@@ -1,0 +1,1 @@
+import{b as et}from"./scene140-_math-factory-DFVyS8gB.js";const je=et("MinBlock",(t,o)=>`min(${t},${o})`);export{je as emitter};

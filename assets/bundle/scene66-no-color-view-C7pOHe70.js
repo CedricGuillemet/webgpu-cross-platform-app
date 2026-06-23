@@ -1,0 +1,1 @@
+import{c as De}from"./scene66-material-view-Dua1bl7W.js";function ea(e){var _e$sn;return De(e,{features:262144|((_e$sn=e.sn)!==null&&_e$sn!==void 0?_e$sn:{features:0}).features});}export{ea as createStandardNoColorMaterialView};

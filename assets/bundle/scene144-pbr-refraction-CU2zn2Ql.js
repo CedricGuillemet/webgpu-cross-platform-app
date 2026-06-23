@@ -1,0 +1,1 @@
+import{_ as ss}from"./scene144.js";async function en(s,r,e){(await ss(()=>__import("./scene144-pbr-transmission-ext-BicLOWIl.js"),[])).registerPbrTransmission(s,r,e);}export{en as registerPbrRefraction};

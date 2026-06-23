@@ -1,0 +1,1 @@
+import{A as er}from"./scene22.js";async function Da(s,r,e){(await er(()=>__import("./scene22-pbr-transmission-ext-DRJJ43jy.js"),[])).registerPbrTransmission(s,r,e);}export{Da as registerPbrRefraction};

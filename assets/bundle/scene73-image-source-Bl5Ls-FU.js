@@ -1,0 +1,1 @@
+const dr={className:"ImageSourceBlock",emit(e,t,r,a,m){const n=(e=>e.replace(/[^A-Za-z0-9_]/g,"_"))(e.name||"img"+e.id);return a.textures.find(e=>e.name===n)||a.textures.push({name:n,kind:"texture2d",texture:null}),{expr:n,type:"texture2d"};}};export{dr as emitter};

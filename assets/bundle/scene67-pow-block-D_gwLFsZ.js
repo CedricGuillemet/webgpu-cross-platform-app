@@ -1,0 +1,1 @@
+const nn={className:"PowBlock",emit(e,t,o,r,p){const s=p.resolve(e,"value",o,r),a=p.resolve(e,"power",o,r),c=p.cast(a,s.type).expr;return{expr:`pow(${s.expr},${c})`,type:s.type};}};export{nn as emitter};
