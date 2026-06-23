@@ -549,6 +549,21 @@ jobs:
           esac
           sed -i "s|\"-DJS_ENGINE=QuickJS\"|\"-DJS_ENGINE=$newEngine\"|" Android/app/build.gradle.kts
 
+      - name: Statically link libc++ for quickjs/hermes (Android)
+        if: matrix.engine != 'v8'
+        run: |
+          # quickjs and hermes are compiled statically into libdawntest.so, and
+          # nothing else in the APK needs the C++ runtime, so link libc++
+          # statically and drop the ~1.2 MB libc++_shared.so from the APK.
+          #
+          # V8 is intentionally excluded: its prebuilt libv8android.so
+          # dynamically NEEDs libc++_shared.so (verified via readelf). Switching
+          # our lib to a private static libc++ while V8 uses the shared one
+          # would put two C++ runtimes in the process and risk an ABI clash on
+          # the libdawntest.so <-> libv8android.so boundary, so V8 keeps
+          # c++_shared.
+          sed -i 's|"-DANDROID_STL=c++_shared"|"-DANDROID_STL=c++_static"|' Android/app/build.gradle.kts
+
       - name: Build host hermesc (Hermes only)
         if: matrix.engine == 'hermes'
         run: |
@@ -1234,6 +1249,22 @@ jobs:
           sed -i "/pickFirsts += \['lib\/\*\/libv8android.so'/a\\            excludes += ['lib/*/libhermesvm.so', 'lib/*/libhermesvmlean.so', 'lib/*/libshermes_console.so']" "$gradle"
           echo "----- jniLibs packaging block after injection -----"
           sed -n '/packaging {/,/^    }/p' "$gradle"
+
+      - name: Statically link libc++ for quickjs/hermes (Android)
+        if: matrix.engine != 'v8'
+        run: |
+          # quickjs and hermes are statically linked into libBabylonNativeJNI.so,
+          # and the only other native libs in the APK are the ARCore prebuilts
+          # (libarcore_sdk_c/jni.so), which bundle their own static C++ runtime
+          # and expose a C API (verified via readelf: no libc++_shared.so NEED).
+          # So libBabylonNativeJNI.so is the sole C++ consumer — link libc++
+          # statically and drop the ~1.2 MB libc++_shared.so from the APK.
+          #
+          # V8 is intentionally excluded: its prebuilt libv8android.so
+          # dynamically NEEDs libc++_shared.so, and mixing a private static
+          # libc++ in our lib with V8's shared one risks an ABI clash across the
+          # libBabylonNativeJNI.so <-> libv8android.so boundary.
+          sed -i 's|"-DANDROID_STL=c++_shared"|"-DANDROID_STL=c++_static"|' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle
 
       - name: Map matrix graphics → BN GRAPHICS_API
         id: gfx
