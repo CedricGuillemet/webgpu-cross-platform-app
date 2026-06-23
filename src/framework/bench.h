@@ -51,7 +51,7 @@ public:
     FrameStats finish() const;
 
     // Emit a single line of the form:
-    //   BENCH scene=<name> frames=<N> wall_ms=<X> min_ms=<X> avg_ms=<X> max_ms=<X> p95_ms=<X>
+    //   BENCH scene=<name> frames=<N> wall_ms=<X> min_ms=<X> avg_ms=<X> max_ms=<X> p95_ms=<X> cpu_ms=<X> mem_peak_bytes=<N>
     // to stdout. Designed to be parsed by tools/bench/run-bench.mjs.
     void printBenchLine(const std::string& sceneName) const;
 
@@ -65,5 +65,13 @@ private:
 // Cross-platform monotonic millisecond clock helper. Lives here so callers
 // don't have to duplicate the std::chrono boilerplate.
 double monotonicMillis();
+
+// Total CPU time (kernel + user) consumed by this process so far, in ms.
+// Returns 0 on platforms where it isn't wired up.
+double processCpuMillis();
+
+// Peak working-set size of this process so far, in bytes (Windows:
+// PeakWorkingSetSize). Returns 0 where unavailable.
+uint64_t peakWorkingSetBytes();
 
 } // namespace bench

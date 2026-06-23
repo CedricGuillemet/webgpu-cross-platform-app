@@ -4,12 +4,63 @@
 #include <chrono>
 #include <cstdio>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
+#elif defined(__APPLE__) || defined(__linux__)
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif
+
 namespace bench {
 
 double monotonicMillis() {
     using namespace std::chrono;
     static const auto kEpoch = steady_clock::now();
     return duration<double, std::milli>(steady_clock::now() - kEpoch).count();
+}
+
+double processCpuMillis() {
+#if defined(_WIN32)
+    FILETIME creation, exit, kernel, user;
+    if (!GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user))
+        return 0.0;
+    auto toMs = [](const FILETIME& ft) -> double {
+        ULARGE_INTEGER u; u.LowPart = ft.dwLowDateTime; u.HighPart = ft.dwHighDateTime;
+        return static_cast<double>(u.QuadPart) / 10000.0; // 100ns units -> ms
+    };
+    return toMs(kernel) + toMs(user);
+#elif defined(__APPLE__) || defined(__linux__)
+    struct rusage ru{};
+    if (getrusage(RUSAGE_SELF, &ru) != 0) return 0.0;
+    auto toMs = [](const struct timeval& tv) -> double {
+        return static_cast<double>(tv.tv_sec) * 1000.0 + static_cast<double>(tv.tv_usec) / 1000.0;
+    };
+    return toMs(ru.ru_utime) + toMs(ru.ru_stime);
+#else
+    return 0.0;
+#endif
+}
+
+uint64_t peakWorkingSetBytes() {
+#if defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS pmc{};
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) return 0;
+    return static_cast<uint64_t>(pmc.PeakWorkingSetSize);
+#elif defined(__APPLE__) || defined(__linux__)
+    struct rusage ru{};
+    if (getrusage(RUSAGE_SELF, &ru) != 0) return 0;
+    // ru_maxrss is bytes on macOS, kilobytes on Linux.
+#if defined(__APPLE__)
+    return static_cast<uint64_t>(ru.ru_maxrss);
+#else
+    return static_cast<uint64_t>(ru.ru_maxrss) * 1024ull;
+#endif
+#else
+    return 0;
+#endif
 }
 
 void FrameTimer::setWarmupFrames(int n) {
@@ -58,16 +109,20 @@ FrameStats FrameTimer::finish() const {
 void FrameTimer::printBenchLine(const std::string& sceneName) const {
     const FrameStats s = finish();
     // Single line, machine-readable. Keys are stable; numeric formatting is
-    // %.3f for sub-millisecond precision without trailing noise.
+    // %.3f for sub-millisecond precision without trailing noise. cpu_ms and
+    // mem_peak_bytes report total process CPU time and peak working set so
+    // the bench harness can compare CPU cost and memory across engines.
     std::fprintf(stdout,
-        "BENCH scene=%s frames=%d wall_ms=%.3f min_ms=%.3f avg_ms=%.3f max_ms=%.3f p95_ms=%.3f\n",
+        "BENCH scene=%s frames=%d wall_ms=%.3f min_ms=%.3f avg_ms=%.3f max_ms=%.3f p95_ms=%.3f cpu_ms=%.3f mem_peak_bytes=%llu\n",
         sceneName.c_str(),
         s.frameCount,
         s.wallMs,
         s.minMs,
         s.avgMs,
         s.maxMs,
-        s.p95Ms);
+        s.p95Ms,
+        processCpuMillis(),
+        static_cast<unsigned long long>(peakWorkingSetBytes()));
     std::fflush(stdout);
 }
 

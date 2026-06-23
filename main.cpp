@@ -80,6 +80,7 @@ struct Args {
     int height = 0;               // 0 = use kInitialHeight (768)
     std::string screenshotPath;   // capture PNG after data-ready and before exit
     int screenshotDelayFrames = 2;// how many extra frames after ready before capture
+    int screenshotFrame = -1;     // capture PNG at this exact rendered frame (>0); independent of ready
     bool noVsync = false;         // request PresentMode::Immediate; auto when --frames set
     bool bench = false;           // emit BENCH line on exit
 };
@@ -115,6 +116,11 @@ Args parseArgs(int argc, char** argv) {
             a.screenshotPath = argv[++i];
         } else if (s == "--screenshot-delay" && i + 1 < argc) {
             a.screenshotDelayFrames = std::atoi(argv[++i]);
+        } else if (s == "--screenshot-frame" && i + 1 < argc) {
+            // Capture a PNG at exactly this rendered frame number, decoupled
+            // from data-ready. Works alongside --frames (e.g. render 100
+            // frames, grab a screenshot at frame 50).
+            a.screenshotFrame = std::atoi(argv[++i]);
         } else if (!s.empty() && s[0] != '-') {
             a.bundlePath = s;
         }
@@ -152,7 +158,7 @@ int main(int argc, char** argv) {
     std::string bundlePath = resolveBundlePath(cli.bundlePath);
     if (!fs::exists(bundlePath)) {
         std::fprintf(stderr, "[main] scene bundle not found: %s\n", bundlePath.c_str());
-        std::fprintf(stderr, "       usage: app.exe [path/to/scene-bundle.js] [--scene PATH] [--frames N] [--max-frames N] [--no-vsync] [--exit-on-ready] [--no-window]\n");
+        std::fprintf(stderr, "       usage: app.exe [path/to/scene-bundle.js] [--scene PATH] [--frames N] [--max-frames N] [--no-vsync] [--screenshot PATH] [--screenshot-frame N] [--exit-on-ready] [--no-window]\n");
         return kExitError;
     }
     std::string bundleDir = fs::path(bundlePath).parent_path().string();
@@ -328,6 +334,17 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "[main] frame %d (t=%.1fs)\n", frameNo, (monotonicMs() - tStart) / 1000.0);
         }
 
+        // Frame-pinned screenshot: capture at exactly --screenshot-frame N,
+        // independent of data-ready. The PNG is written inside a subsequent
+        // `present`; we just arm the request once when the frame is reached.
+        if (cli.screenshotFrame > 0 && !cli.screenshotPath.empty()
+            && !screenshotRequested && frameNo >= cli.screenshotFrame) {
+            wgpu_bridge::requestScreenshot(cli.screenshotPath);
+            screenshotRequested = true;
+            std::fprintf(stderr, "[main] screenshot armed at frame %d -> %s\n",
+                         frameNo, cli.screenshotPath.c_str());
+        }
+
         // Test-mode exits.
         if (checkSkipped()) {
             std::fprintf(stderr, "[main] scene skipped: WebAssembly required\n");
@@ -340,7 +357,7 @@ int main(int argc, char** argv) {
             break;
         }
         if (cli.exitOnReady && checkSceneOk() == 1) {
-            if (!cli.screenshotPath.empty() && readyAtFrame < 0) {
+            if (cli.screenshotFrame <= 0 && !cli.screenshotPath.empty() && readyAtFrame < 0) {
                 readyAtFrame = frameNo;
                 std::fprintf(stderr, "[main] scene ready (data-ready=true) at frame %d; "
                                      "rendering %d more frame(s) then capturing screenshot\n",
@@ -359,7 +376,7 @@ int main(int argc, char** argv) {
             }
             // The actual capture happens inside the next `present` call; let one
             // more frame pass so the capture is flushed to disk.
-            if (screenshotRequested && frameNo >= readyAtFrame + cli.screenshotDelayFrames + 2) {
+            if (readyAtFrame >= 0 && screenshotRequested && frameNo >= readyAtFrame + cli.screenshotDelayFrames + 2) {
                 std::fprintf(stderr, "[main] scene ready (data-ready=true)\n");
                 exitCode = kExitOk;
                 break;
@@ -374,6 +391,17 @@ int main(int argc, char** argv) {
     }
 
     std::fprintf(stderr, "[main] shutting down (rendered %d frames, exit=%d)\n", frameNo, exitCode);
+    {
+        // Always log time + memory at exit so non-bench runs still report it.
+        double wallMs = monotonicMs() - tStart;
+        double cpuMs = bench::processCpuMillis();
+        uint64_t peakBytes = bench::peakWorkingSetBytes();
+        std::fprintf(stderr,
+            "[main] frames=%d wall_ms=%.1f cpu_ms=%.1f mem_peak_bytes=%llu (%.1f MB)\n",
+            frameNo, wallMs, cpuMs,
+            static_cast<unsigned long long>(peakBytes),
+            static_cast<double>(peakBytes) / (1024.0 * 1024.0));
+    }
     if (cli.bench) {
         timer.printBenchLine(sceneName);
     }

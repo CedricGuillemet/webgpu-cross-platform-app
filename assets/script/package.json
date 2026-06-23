@@ -6,10 +6,13 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "clean": "node -e \"import('node:fs').then(fs=>['dist','dist-chakra'].forEach(d=>fs.rmSync(d,{recursive:true,force:true})))\""
+    "clean": "node -e \"import('node:fs').then(fs=>['dist','dist-chakra'].forEach(d=>fs.rmSync(d,{recursive:true,force:true})))\"",
+    "build:bundles": "node scripts/build-bundles.mjs",
+    "build:bundles-chakra": "node scripts/build-bundles-chakra.mjs",
+    "build:bench": "node scripts/build-bench.mjs"
   },
   "dependencies": {
-    "@babylonjs/lite": "0.2.0"
+    "@babylonjs/lite": "1.3.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.25.0",
