@@ -1213,6 +1213,28 @@ jobs:
           # cmake arguments block in the BN library gradle file.
           sed -i 's|"-DBABYLON_DEBUG_TRACE=ON"|"-DBABYLON_DEBUG_TRACE=ON",\n                    "-DIMPORT_HOST_COMPILERS='"$HERMESC_HOST"'"|' BabylonNative/Apps/Playground/Android/BabylonNative/build.gradle
 
+      - name: Drop redundant shared Hermes libs from APK (Hermes only)
+        if: matrix.engine == 'hermes'
+        run: |
+          # JsRuntimeHost statically links Static Hermes into
+          # libBabylonNativeJNI.so (via the hermesvm_a umbrella archive), and
+          # the app only ever System.loadLibrary("BabylonNativeJNI") — verified
+          # via readelf: libBabylonNativeJNI.so has NO DT_NEEDED entry for any
+          # libhermes*.so. But Hermes's own CMake still builds its shared
+          # library variants (libhermesvm.so ~3 MB, libhermesvmlean.so ~1.9 MB,
+          # libshermes_console.so) as separate targets, and AGP sweeps every
+          # .so in the build output into the APK's lib/<abi>/ slot. Those
+          # shared libs are never loaded — pure dead weight that roughly
+          # doubled the reported "complete" size (7 MB -> 13 MB).
+          #
+          # Exclude them from packaging so the APK reflects the actual
+          # statically-linked Hermes footprint. The existing jniLibs block
+          # already has a pickFirsts line; append an excludes line after it.
+          gradle=BabylonNative/Apps/Playground/Android/app/build.gradle
+          sed -i "/pickFirsts += \['lib\/\*\/libv8android.so'/a\\            excludes += ['lib/*/libhermesvm.so', 'lib/*/libhermesvmlean.so', 'lib/*/libshermes_console.so']" "$gradle"
+          echo "----- jniLibs packaging block after injection -----"
+          sed -n '/packaging {/,/^    }/p' "$gradle"
+
       - name: Map matrix graphics → BN GRAPHICS_API
         id: gfx
         run: |
