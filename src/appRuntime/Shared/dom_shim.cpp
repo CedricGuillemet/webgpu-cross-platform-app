@@ -4,6 +4,7 @@
 #include "http_fetcher.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -375,6 +376,79 @@ JsValueRef makeResponseObject(const std::shared_ptr<ResponseData>& data) {
     auto* closure = new Closure{data};
     JsValueRef extObj = nullptr;
     JsCreateExternalObject(closure, [](void* p){ delete static_cast<Closure*>(p); }, &extObj);
+    // IMPORTANT: keep the external object (and thus the ResponseData bytes) alive
+    // for as long as the Response is reachable. arrayBuffer()/text()/json()/blob()
+    // capture `closure` by raw pointer; without anchoring extObj to the Response,
+    // GC can collect it mid-flight (e.g. while a large sibling asset loads),
+    // freeing the bytes and yielding a use-after-free (garbage sizes/contents).
+    cx::Host::setProperty(r, "__data", extObj);
+
+    // headers: a minimal Headers-like object with get()/has()/forEach(). Some
+    // bundles (e.g. fetch download-progress wrappers) call
+    // `response.headers.get("content-type")` / `content-length`; without this
+    // they crash with "Unable to get property 'get' of undefined". We synthesize
+    // content-type from the URL extension and content-length from the payload.
+    {
+        // content-type from extension.
+        std::string ct = "application/octet-stream";
+        const std::string& u = data->url;
+        auto endsWith = [&](const char* ext) {
+            size_t n = std::strlen(ext);
+            return u.size() >= n && _stricmp(u.c_str() + (u.size() - n), ext) == 0;
+        };
+        if (endsWith(".json")) ct = "application/json";
+        else if (endsWith(".js") || endsWith(".mjs")) ct = "text/javascript";
+        else if (endsWith(".wasm")) ct = "application/wasm";
+        else if (endsWith(".glb")) ct = "model/gltf-binary";
+        else if (endsWith(".gltf")) ct = "model/gltf+json";
+        else if (endsWith(".png")) ct = "image/png";
+        else if (endsWith(".jpg") || endsWith(".jpeg")) ct = "image/jpeg";
+        else if (endsWith(".webp")) ct = "image/webp";
+        else if (endsWith(".ktx") || endsWith(".ktx2")) ct = "image/ktx2";
+        else if (endsWith(".html")) ct = "text/html";
+        else if (endsWith(".css")) ct = "text/css";
+        else if (endsWith(".txt")) ct = "text/plain";
+
+        struct HClosure { std::string contentType; std::string contentLength; };
+        auto* hc = new HClosure{ct, std::to_string(data->bytes.size())};
+
+        JsValueRef headers = cx::Host::makeObject();
+        auto getFn = +[](JsValueRef, bool, JsValueRef* a, unsigned short argc, void* state) -> JsValueRef {
+            auto* h = static_cast<HClosure*>(state);
+            if (argc < 2) return cx::Host::getNull();
+            std::string key = cx::Host::toUtf8(a[1]);
+            for (auto& c : key) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+            if (key == "content-type") return cx::Host::fromUtf8(h->contentType);
+            if (key == "content-length") return cx::Host::fromUtf8(h->contentLength);
+            return cx::Host::getNull();
+        };
+        auto hasFn = +[](JsValueRef, bool, JsValueRef* a, unsigned short argc, void* state) -> JsValueRef {
+            if (argc < 2) return cx::Host::fromBool(false);
+            std::string key = cx::Host::toUtf8(a[1]);
+            for (auto& c : key) c = static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+            return cx::Host::fromBool(key == "content-type" || key == "content-length");
+        };
+        auto forEachFn = +[](JsValueRef, bool, JsValueRef* a, unsigned short argc, void* state) -> JsValueRef {
+            auto* h = static_cast<HClosure*>(state);
+            if (argc < 2) return cx::Host::getUndefined();
+            JsValueRef cb = a[1];
+            auto call = [&](const char* k, const std::string& v) {
+                JsValueRef args[3] = { cx::Host::getUndefined(), cx::Host::fromUtf8(v), cx::Host::fromUtf8(k) };
+                JsValueRef res = nullptr; JsCallFunction(cb, args, 3, &res);
+            };
+            call("content-type", h->contentType);
+            call("content-length", h->contentLength);
+            return cx::Host::getUndefined();
+        };
+        // Tie the HClosure lifetime to the headers object via an external object.
+        JsValueRef hExt = nullptr;
+        JsCreateExternalObject(hc, [](void* p){ delete static_cast<HClosure*>(p); }, &hExt);
+        cx::Host::setProperty(headers, "__hc", hExt);
+        cx::Host::setFunction(headers, "get", getFn, hc);
+        cx::Host::setFunction(headers, "has", hasFn, hc);
+        cx::Host::setFunction(headers, "forEach", forEachFn, hc);
+        cx::Host::setProperty(r, "headers", headers);
+    }
 
     // arrayBuffer() returns Promise<ArrayBuffer> — uses an external buffer so
     // we don't duplicate large payloads inside ChakraCore's heap.
