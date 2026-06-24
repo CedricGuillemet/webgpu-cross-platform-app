@@ -389,12 +389,20 @@ JsValueRef makeResponseObject(const std::shared_ptr<ResponseData>& data) {
     // they crash with "Unable to get property 'get' of undefined". We synthesize
     // content-type from the URL extension and content-length from the payload.
     {
-        // content-type from extension.
+        // content-type from extension (case-insensitive, portable).
         std::string ct = "application/octet-stream";
         const std::string& u = data->url;
         auto endsWith = [&](const char* ext) {
             size_t n = std::strlen(ext);
-            return u.size() >= n && _stricmp(u.c_str() + (u.size() - n), ext) == 0;
+            if (u.size() < n) return false;
+            const char* tail = u.c_str() + (u.size() - n);
+            for (size_t i = 0; i < n; ++i) {
+                if (std::tolower(static_cast<unsigned char>(tail[i])) !=
+                    std::tolower(static_cast<unsigned char>(ext[i]))) {
+                    return false;
+                }
+            }
+            return true;
         };
         if (endsWith(".json")) ct = "application/json";
         else if (endsWith(".js") || endsWith(".mjs")) ct = "text/javascript";
