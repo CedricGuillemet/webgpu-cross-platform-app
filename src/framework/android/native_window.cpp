@@ -7,7 +7,7 @@ namespace native_window {
 Window::Window() = default;
 Window::~Window() { destroy(); }
 
-bool Window::create(int width, int height, const std::string& /*title*/) {
+bool Window::create(int width, int height, const std::string& /*title*/, bool /*visible*/) {
     // No-op: the Java side owns the actual Surface. We just stash the
     // requested size so getClientSize() has a sensible default until the
     // surface arrives.

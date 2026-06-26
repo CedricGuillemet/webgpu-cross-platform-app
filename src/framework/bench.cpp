@@ -106,14 +106,15 @@ FrameStats FrameTimer::finish() const {
     return s;
 }
 
-void FrameTimer::printBenchLine(const std::string& sceneName) const {
+void FrameTimer::printBenchLine(const std::string& sceneName, double renderCpuMs) const {
     const FrameStats s = finish();
     // Single line, machine-readable. Keys are stable; numeric formatting is
-    // %.3f for sub-millisecond precision without trailing noise. cpu_ms and
-    // mem_peak_bytes report total process CPU time and peak working set so
-    // the bench harness can compare CPU cost and memory across engines.
+    // %.3f for sub-millisecond precision without trailing noise. cpu_ms is the
+    // total process CPU (includes startup); render_cpu_ms is the CPU consumed
+    // strictly across the render loop (1st frame start -> last frame end).
+    // mem_peak_bytes is the peak working set.
     std::fprintf(stdout,
-        "BENCH scene=%s frames=%d wall_ms=%.3f min_ms=%.3f avg_ms=%.3f max_ms=%.3f p95_ms=%.3f cpu_ms=%.3f mem_peak_bytes=%llu\n",
+        "BENCH scene=%s frames=%d wall_ms=%.3f min_ms=%.3f avg_ms=%.3f max_ms=%.3f p95_ms=%.3f cpu_ms=%.3f render_cpu_ms=%.3f mem_peak_bytes=%llu\n",
         sceneName.c_str(),
         s.frameCount,
         s.wallMs,
@@ -122,6 +123,7 @@ void FrameTimer::printBenchLine(const std::string& sceneName) const {
         s.maxMs,
         s.p95Ms,
         processCpuMillis(),
+        renderCpuMs,
         static_cast<unsigned long long>(peakWorkingSetBytes()));
     std::fflush(stdout);
 }

@@ -29,7 +29,7 @@ public:
     // SurfaceView on the Java side). The JNI bridge calls attachSurface()
     // with a strong reference to the ANativeWindow obtained from the
     // SurfaceHolder.
-    bool create(int width, int height, const std::string& title);
+    bool create(int width, int height, const std::string& title, bool visible = true);
     void destroy();
 
     // Called by JNI when the SurfaceView's surface is (re)created.

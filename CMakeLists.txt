@@ -23,6 +23,7 @@ if(NOT GRAPHICS_API STREQUAL "D3D12" AND NOT GRAPHICS_API STREQUAL "D3D11"
   message(FATAL_ERROR "GRAPHICS_API must be D3D12, D3D11, Vulkan, OpenGL, OpenGLES or Metal, got: ${GRAPHICS_API}")
 endif()
 message(STATUS "Graphics API: ${GRAPHICS_API}")
+string(TOLOWER "${GRAPHICS_API}" GRAPHICS_API_LOWER)
 
 # ---- Global size-reducing flags ----
 if(NOT CMAKE_BUILD_TYPE)
@@ -382,6 +383,9 @@ if(ANDROID)
                          -Wl,--exclude-libs,ALL>)
 else()
   add_executable(app ${APP_SOURCES})
+  # Encode the Dawn backend in the executable name (e.g. app-d3d12, app-d3d11)
+  # so multiple backend builds are distinguishable side by side.
+  set_target_properties(app PROPERTIES OUTPUT_NAME "app-${GRAPHICS_API_LOWER}")
   if(APPLE)
     set_target_properties(app PROPERTIES
       MACOSX_BUNDLE FALSE

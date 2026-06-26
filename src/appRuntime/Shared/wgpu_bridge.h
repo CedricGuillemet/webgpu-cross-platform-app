@@ -35,4 +35,9 @@ void requestScreenshot(const std::string& outPath);
 // meaningful benchmark timings. Must be called before the first configure.
 void setNoVsync(bool noVsync);
 
+// Release all Dawn objects in a controlled order. Call after JS execution has
+// stopped and before destroying the native window, so the backend (notably
+// D3D11) doesn't tear down its swapchain after the HWND is gone.
+void shutdown();
+
 } // namespace wgpu_bridge

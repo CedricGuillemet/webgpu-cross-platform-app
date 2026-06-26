@@ -24,7 +24,7 @@
 
 import { spawn } from "node:child_process";
 import { readFile, writeFile, stat, readdir, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { resolve, dirname, basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platform, arch } from "node:process";
@@ -122,12 +122,23 @@ async function readCMakeCache(buildDir) {
 }
 
 function pickDawnTestExe(buildDir) {
-    // After our bench wiring, the exe sits at <build>/app.exe (single-config
-    // CMake -G "Ninja") or <build>/Release/app.exe (multi-config VS).
-    const candidates = platform === "win32"
-        ? [join(buildDir, "app.exe"), join(buildDir, "Release", "app.exe")]
-        : [join(buildDir, "app"),     join(buildDir, "Release", "app")];
-    for (const c of candidates) if (existsSync(c)) return c;
+    // The exe sits at <build>/<name>(.exe) (single-config CMake -G "Ninja") or
+    // <build>/Release/<name>(.exe) (multi-config VS). The executable name is
+    // either the legacy "app" or backend-suffixed "app-<api>" (e.g. app-d3d12).
+    const isWin = platform === "win32";
+    const ext = isWin ? ".exe" : "";
+    const dirs = [buildDir, join(buildDir, "Release")];
+    // Prefer an exact "app" match, then any backend-suffixed "app-*".
+    for (const d of dirs) {
+        const exact = join(d, "app" + ext);
+        if (existsSync(exact)) return exact;
+    }
+    for (const d of dirs) {
+        if (!existsSync(d)) continue;
+        const hit = readdirSync(d).find((f) =>
+            isWin ? /^app(-[a-z0-9]+)?\.exe$/i.test(f) : /^app(-[a-z0-9]+)?$/i.test(f));
+        if (hit) return join(d, hit);
+    }
     return null;
 }
 

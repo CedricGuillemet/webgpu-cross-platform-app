@@ -51,9 +51,11 @@ public:
     FrameStats finish() const;
 
     // Emit a single line of the form:
-    //   BENCH scene=<name> frames=<N> wall_ms=<X> min_ms=<X> avg_ms=<X> max_ms=<X> p95_ms=<X> cpu_ms=<X> mem_peak_bytes=<N>
+    //   BENCH scene=<name> frames=<N> wall_ms=<X> min_ms=<X> avg_ms=<X> max_ms=<X> p95_ms=<X> cpu_ms=<X> render_cpu_ms=<X> mem_peak_bytes=<N>
     // to stdout. Designed to be parsed by tools/bench/run-bench.mjs.
-    void printBenchLine(const std::string& sceneName) const;
+    // `renderCpuMs` is the process CPU consumed strictly across the render loop
+    // (1st frame start -> last frame end); pass 0 if unavailable.
+    void printBenchLine(const std::string& sceneName, double renderCpuMs = 0.0) const;
 
 private:
     int                 m_warmupFrames = 1;

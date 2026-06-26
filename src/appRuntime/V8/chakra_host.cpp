@@ -162,8 +162,11 @@ Host::~Host() { shutdown(); }
 
 bool Host::initialize() {
     if (!s_initialized) {
-        // Force-disable JIT to avoid issues on stripped CPUs (and to avoid
-        // having to ship snapshot_blob.bin etc.).
+        // JIT is enabled (Sparkplug baseline + TurboFan). The crash that
+        // previously forced --jitless was NOT a V8 JIT bug: the host failed to
+        // keep the isolate entered on the executing thread (see the persistent
+        // isolate_->Enter() below), so JIT code crashed accessing thread-local
+        // isolate state. With the isolate kept entered, JIT runs correctly.
         const char* flags = "--no-wasm-async-compilation --no-expose-wasm";
         V8::SetFlagsFromString(flags, (int)strlen(flags));
         s_platform = platform::NewDefaultPlatform();
@@ -184,8 +187,17 @@ bool Host::initialize() {
 
     cc::setIsolate(isolate_);
 
+    // Enter the isolate PERSISTENTLY (not just inside this scope) and keep it
+    // entered for the host's lifetime — mirroring how the context below is kept
+    // entered. JIT-compiled JS (Sparkplug/TurboFan) accesses thread-local
+    // isolate state (e.g. main_thread_local_heap) and requires the isolate to be
+    // entered on the executing thread; the interpreter tolerates a non-entered
+    // isolate but JIT code crashes (access violation) without this. The
+    // render-loop path runs JS via JsCallFunction, which does not open its own
+    // Isolate::Scope, so the isolate must already be entered here. This matches
+    // JsRuntimeHost, which keeps an Isolate::Scope alive for the whole run.
+    isolate_->Enter();
     {
-        Isolate::Scope is(isolate_);
         HandleScope hs(isolate_);
         Local<Context> ctx = Context::New(isolate_);
         ctx->Enter();
@@ -202,7 +214,6 @@ void Host::shutdown() {
     if (isolate_) {
         pumpMicrotasks();
         {
-            Isolate::Scope is(isolate_);
             HandleScope hs(isolate_);
             if (contextGlobal_) {
                 Local<Context> ctx = contextGlobal_->Get(isolate_);
@@ -211,6 +222,7 @@ void Host::shutdown() {
         }
         if (contextGlobal_) { delete contextGlobal_; contextGlobal_ = nullptr; }
         contextHandle_ = nullptr;
+        isolate_->Exit();   // balance the persistent Enter() from initialize()
         isolate_->Dispose();
         isolate_ = nullptr;
     }

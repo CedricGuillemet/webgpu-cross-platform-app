@@ -27,7 +27,7 @@ public:
     Window();
     ~Window();
 
-    bool create(int width, int height, const std::string& title);
+    bool create(int width, int height, const std::string& title, bool visible = true);
     void destroy();
     bool pumpEvents();
 

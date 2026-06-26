@@ -15,7 +15,7 @@ constexpr const wchar_t* kClassName = L"DawnTestHostWindow";
 Window::Window() {}
 Window::~Window() { destroy(); }
 
-bool Window::create(int width, int height, const std::string& title) {
+bool Window::create(int width, int height, const std::string& title, bool visible) {
     hinstance_ = ::GetModuleHandleW(nullptr);
 
     WNDCLASSEXW wc{};
@@ -52,7 +52,7 @@ bool Window::create(int width, int height, const std::string& title) {
         return false;
     }
     hwnd_ = hwnd;
-    ::ShowWindow(hwnd, SW_SHOW);
+    ::ShowWindow(hwnd, visible ? SW_SHOW : SW_HIDE);
     ::UpdateWindow(hwnd);
     return true;
 }

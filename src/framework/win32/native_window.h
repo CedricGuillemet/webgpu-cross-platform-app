@@ -25,7 +25,7 @@ public:
     Window();
     ~Window();
 
-    bool create(int width, int height, const std::string& title);
+    bool create(int width, int height, const std::string& title, bool visible = true);
     void destroy();
 
     // Drain the queued Win32 messages. Returns false when the window has been

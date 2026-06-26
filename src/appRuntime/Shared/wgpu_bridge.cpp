@@ -74,6 +74,11 @@ struct State {
         void* ptr;
         size_t size;
         size_t offset;
+        // The JS ArrayBuffer handed to script for this mapping. On engines whose
+        // ArrayBuffers cannot alias external (Dawn-mapped) memory — notably the
+        // V8 sandbox — this is a *copy*, so its bytes must be flushed back into
+        // `ptr` on unmap. Held with a JsAddRef for the duration of the mapping.
+        JsValueRef jsAb = nullptr;
     };
     std::unordered_map<uint32_t, BufferMap> bufferMaps;
 };
@@ -287,6 +292,22 @@ WGPU_OP(gpu_requestAdapter, "gpu.requestAdapter") {
     g_state.instance.WaitAny(f, UINT64_MAX);
 
     if (!adapter) return Host::resolvedPromise(Host::getNull());
+    {
+        wgpu::AdapterInfo info{};
+        adapter.GetInfo(&info);
+        const char* bt = "unknown";
+        switch (info.backendType) {
+            case wgpu::BackendType::D3D11:    bt = "D3D11";    break;
+            case wgpu::BackendType::D3D12:    bt = "D3D12";    break;
+            case wgpu::BackendType::Vulkan:   bt = "Vulkan";   break;
+            case wgpu::BackendType::Metal:    bt = "Metal";    break;
+            case wgpu::BackendType::OpenGL:   bt = "OpenGL";   break;
+            case wgpu::BackendType::OpenGLES: bt = "OpenGLES"; break;
+            default: break;
+        }
+        std::fprintf(stderr, "[wgpu] adapter backend: %s (%.*s)\n",
+                     bt, (int)info.device.length, info.device.data);
+    }
     uint32_t h = g_state.adapters.add(std::move(adapter));
     return Host::resolvedPromise(wrap("GPUAdapter", h));
 }
@@ -997,18 +1018,41 @@ WGPU_OP(buffer_getMappedRange, "buffer.getMappedRange") {
     uint64_t size = (argc > 1 && !Host::isUndefined(args[1])) ? (uint64_t)Host::getDouble(args[1], 0) : (b->GetSize() - offset);
     void* ptr = b->GetMappedRange(offset, (size_t)size);
     if (!ptr) return Host::getUndefined();
-    // Wrap as an external ArrayBuffer so writes go straight into Dawn-mapped memory.
+    // Wrap as an external ArrayBuffer so writes go straight into Dawn-mapped
+    // memory. On engines that cannot alias external memory (V8 sandbox) this is
+    // a detached copy; buffer_unmap flushes it back into `ptr`.
     JsValueRef ab = nullptr;
     JsCreateExternalArrayBuffer(ptr, (unsigned int)size, nullptr, nullptr, &ab);
-    g_state.bufferMaps[h] = { ptr, (size_t)size, (size_t)offset };
+    // Release any previous mapping ref for this buffer before overwriting.
+    auto prev = g_state.bufferMaps.find(h);
+    if (prev != g_state.bufferMaps.end() && prev->second.jsAb)
+        JsRelease(prev->second.jsAb, nullptr);
+    if (ab) JsAddRef(ab, nullptr);
+    g_state.bufferMaps[h] = { ptr, (size_t)size, (size_t)offset, ab };
     return ab;
 }
 
 WGPU_OP(buffer_unmap, "buffer.unmap") {
     uint32_t h = toHandle(self);
     wgpu::Buffer* b = g_state.buffers.get(h);
+    auto it = g_state.bufferMaps.find(h);
+    if (it != g_state.bufferMaps.end()) {
+        // Flush JS-side writes back into the Dawn mapping. When the JS
+        // ArrayBuffer already aliases `ptr` (engines without a sandbox) the
+        // source and destination match and the copy is skipped.
+        if (it->second.jsAb) {
+            unsigned char* src = nullptr; unsigned int len = 0;
+            if (JsGetArrayBufferStorage(it->second.jsAb, &src, &len) == JsNoError
+                && src && src != it->second.ptr) {
+                size_t n = static_cast<size_t>(len) < it->second.size
+                               ? static_cast<size_t>(len) : it->second.size;
+                std::memcpy(it->second.ptr, src, n);
+            }
+            JsRelease(it->second.jsAb, nullptr);
+        }
+        g_state.bufferMaps.erase(it);
+    }
     if (b) b->Unmap();
-    g_state.bufferMaps.erase(h);
     return Host::getUndefined();
 }
 
@@ -1631,6 +1675,43 @@ void requestScreenshot(const std::string& outPath) {
 
 void setNoVsync(bool noVsync) {
     g_state.noVsync = noVsync;
+}
+
+void shutdown() {
+    // Release all Dawn objects in a controlled order while the OS window and
+    // device are still valid. Otherwise the global g_state is torn down at
+    // static-destruction time (after the HWND is destroyed and the CRT/V8 have
+    // shut down), which crashes the D3D11 backend's swapchain teardown. Called
+    // from main() after JS execution has stopped and before window.destroy().
+    if (g_state.instance) g_state.instance.ProcessEvents();
+    g_state.bufferMaps.clear();
+    if (g_state.surface && g_state.surfaceConfigured) {
+        g_state.surface.Unconfigure();
+        g_state.surfaceConfigured = false;
+    }
+    // Children before parents.
+    g_state.querySets.map.clear();
+    g_state.renderBundles.map.clear();
+    g_state.renderBundleEncoders.map.clear();
+    g_state.commandBuffers.map.clear();
+    g_state.computePassEncoders.map.clear();
+    g_state.renderPassEncoders.map.clear();
+    g_state.commandEncoders.map.clear();
+    g_state.computePipelines.map.clear();
+    g_state.renderPipelines.map.clear();
+    g_state.pipelineLayouts.map.clear();
+    g_state.bindGroups.map.clear();
+    g_state.bindGroupLayouts.map.clear();
+    g_state.shaderModules.map.clear();
+    g_state.samplers.map.clear();
+    g_state.textureViews.map.clear();
+    g_state.textures.map.clear();
+    g_state.buffers.map.clear();
+    g_state.queues.map.clear();
+    g_state.devices.map.clear();
+    g_state.adapters.map.clear();
+    g_state.surface = nullptr;
+    g_state.instance = nullptr;
 }
 
 } // namespace wgpu_bridge

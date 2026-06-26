@@ -30,8 +30,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr int kInitialWidth = 1024;
-constexpr int kInitialHeight = 768;
+constexpr int kInitialWidth = 640;
+constexpr int kInitialHeight = 400;
 
 cx::Host* g_host = nullptr;
 
@@ -76,8 +76,8 @@ struct Args {
     int maxFrames = 0;            // 0 = no limit
     bool exitOnReady = false;     // exit when canvas.dataset.ready == "true"
     bool noWindow = false;        // hide the window (offscreen-ish)
-    int width = 0;                // 0 = use kInitialWidth (1024)
-    int height = 0;               // 0 = use kInitialHeight (768)
+    int width = 0;                // 0 = use kInitialWidth (640)
+    int height = 0;               // 0 = use kInitialHeight (400)
     std::string screenshotPath;   // capture PNG after data-ready and before exit
     int screenshotDelayFrames = 2;// how many extra frames after ready before capture
     int screenshotFrame = -1;     // capture PNG at this exact rendered frame (>0); independent of ready
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
     int requestedW = cli.width  > 0 ? cli.width  : kInitialWidth;
     int requestedH = cli.height > 0 ? cli.height : kInitialHeight;
     native_window::Window window;
-    if (!window.create(requestedW, requestedH, "Babylon Lite + Dawn")) {
+    if (!window.create(requestedW, requestedH, "Babylon Lite + Dawn", !cli.noWindow)) {
         std::fprintf(stderr, "[main] window.create failed\n");
         return 1;
     }
@@ -306,6 +306,17 @@ int main(int argc, char** argv) {
     int readyAtFrame = -1;          // first frame where data-ready was seen
     bool screenshotRequested = false;
     double tStart = monotonicMs();
+    // CPU time consumed strictly across the render loop (1st frame start ->
+    // last frame end), so it excludes process/engine/Dawn startup. The total
+    // process CPU (cpu_ms) still includes startup for reference.
+    double cpuStartMs = bench::processCpuMillis();
+    // Wall-clock span spent rendering the loaded scene: start = beginning of the
+    // first frame rendered AFTER everything is loaded (data-ready), end = end of
+    // the last rendered frame. This excludes process/engine startup AND the
+    // asset-load / scene-build frames.
+    double renderSpanStartMs = -1.0;  // set on first fully-loaded frame
+    double lastFrameEndMs = 0.0;      // end timestamp of the most recent frame
+    bool sceneLoaded = false;         // data-ready seen at end of a prior frame
     // Bench timer captures per-frame deltas after a 1-frame warmup. The
     // collector lives on the stack so its dtor cannot run before the BENCH
     // line is emitted at the end of main.
@@ -314,6 +325,8 @@ int main(int argc, char** argv) {
     while (window.pumpEvents()) {
         timer.startFrame();
         double t = monotonicMs();
+        // First frame rendered with everything loaded -> start the render span.
+        if (sceneLoaded && renderSpanStartMs < 0.0) renderSpanStartMs = t;
         dom_shim::runAnimationFrame(host, t);
         host.pumpMicrotasks();
         worker_shim::pumpIncoming(host);
@@ -328,8 +341,12 @@ int main(int argc, char** argv) {
         }
         wgpu_bridge::tick();
         timer.endFrame();
+        lastFrameEndMs = monotonicMs();  // end of this frame's render work
 
         ++frameNo;
+        // Once the scene reports data-ready, the NEXT frame is the first one
+        // rendered with everything loaded (see renderSpanStartMs above).
+        if (!sceneLoaded && checkSceneOk() == 1) sceneLoaded = true;
         if (frameNo == 1 || frameNo == 60 || frameNo == 300) {
             std::fprintf(stderr, "[main] frame %d (t=%.1fs)\n", frameNo, (monotonicMs() - tStart) / 1000.0);
         }
@@ -391,23 +408,38 @@ int main(int argc, char** argv) {
     }
 
     std::fprintf(stderr, "[main] shutting down (rendered %d frames, exit=%d)\n", frameNo, exitCode);
+    double renderCpuMs = bench::processCpuMillis() - cpuStartMs;
     {
-        // Always log time + memory at exit so non-bench runs still report it.
-        double wallMs = monotonicMs() - tStart;
-        double cpuMs = bench::processCpuMillis();
+        // End-of-run summary: ONLY the wall-clock render span (first fully-loaded
+        // frame -> end of last frame, i.e. excluding startup + asset load) and
+        // the peak working set. If the scene never reported data-ready, fall back
+        // to the whole render loop.
+        double renderEndMs = (lastFrameEndMs > 0.0) ? lastFrameEndMs : monotonicMs();
+        double renderStart = (renderSpanStartMs >= 0.0) ? renderSpanStartMs : tStart;
+        double renderMs = renderEndMs - renderStart;
         uint64_t peakBytes = bench::peakWorkingSetBytes();
-        std::fprintf(stderr,
-            "[main] frames=%d wall_ms=%.1f cpu_ms=%.1f mem_peak_bytes=%llu (%.1f MB)\n",
-            frameNo, wallMs, cpuMs,
-            static_cast<unsigned long long>(peakBytes),
-            static_cast<double>(peakBytes) / (1024.0 * 1024.0));
+        std::fprintf(stderr, "[main] render_ms=%.1f mem_peak_bytes=%llu\n",
+                     renderMs, static_cast<unsigned long long>(peakBytes));
     }
     if (cli.bench) {
-        timer.printBenchLine(sceneName);
+        timer.printBenchLine(sceneName, renderCpuMs);
     }
     worker_shim::shutdownAll();
     host.shutdown();
+    wgpu_bridge::shutdown();   // release Dawn objects while the window is valid
     window.destroy();
     image_decoder::shutdown();
+
+    // All resources we own have been released above. Skip C/C++ static-destructor
+    // and atexit teardown: the Dawn D3D11 backend's static globals (and d3d11.dll
+    // unload) crash during process-exit teardown on Windows even though rendering
+    // and our cleanup completed cleanly. Flush our output, then terminate the
+    // process directly so the benchmark exit code is correct. (D3D12 is
+    // unaffected by this and exits fine either way.)
+    std::fflush(stdout);
+    std::fflush(stderr);
+#if defined(_WIN32)
+    ::ExitProcess(static_cast<UINT>(exitCode));
+#endif
     return exitCode;
 }
